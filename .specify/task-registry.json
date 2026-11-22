@@ -1,8 +1,8 @@
 {
   "missions": {},
-  "next_completion": 9,
+  "next_completion": 10,
   "next_mission": 1,
-  "next_tor": 9,
+  "next_tor": 10,
   "tasks": {
     "TOR001": {
       "completion": 1,
@@ -131,6 +131,22 @@
       "record": ".specify/quick-tasks/TOR008.md",
       "status": "complete",
       "title": "Rebrand Android as Sistrum V0.1.0"
+    },
+    "TOR009": {
+      "completion": 9,
+      "evidence": {
+        "checks": "DevDebug instrumentation Kotlin compilation; Bash and Python syntax; Git whitespace",
+        "result": "PASS",
+        "reviewer": "tor_review",
+        "round": 2
+      },
+      "final": false,
+      "kind": "TOR",
+      "mission": null,
+      "nonce": "2630e7dd9b5244599ff91ce3f8554d36",
+      "record": ".specify/quick-tasks/TOR009.md",
+      "status": "complete",
+      "title": "Port Media3 M1 playback test setup"
     }
   },
   "version": 1

@@ -120,6 +120,8 @@ dependencies {
     testImplementation(libs.kotlin.testJunit)
     testImplementation(libs.kotlinx.coroutines.test)
     testImplementation(libs.room.testing)
+    androidTestImplementation(libs.media3.exoplayer)
+    androidTestImplementation(libs.media3.common)
     androidTestImplementation(libs.androidx.testExt.junit)
     androidTestImplementation(libs.compose.uiTestJunit4)
     androidTestImplementation(libs.androidx.espresso.core)
