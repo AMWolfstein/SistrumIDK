@@ -1,5 +1,6 @@
 package com.amwolfstein.sistrum.ui.screens
 
+import androidx.annotation.StringRes
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.core.tween
 import androidx.compose.animation.fadeIn
@@ -35,6 +36,7 @@ import com.amwolfstein.sistrum.ui.components.SistrumTrackSlider
 import com.amwolfstein.sistrum.ui.theme.LocalSistrumColors
 import com.amwolfstein.sistrum.player.EqualizerFrequenciesHz
 import com.amwolfstein.sistrum.player.EqualizerSettings
+import com.amwolfstein.sistrum.player.media3.LimiterState
 import com.amwolfstein.sistrum.player.normalizeEqGain
 
 @Composable
@@ -183,10 +185,23 @@ internal fun EqualizerContent(
     }
 }
 
+/**
+ * The note shown under "Prevent clipping", or null when there is nothing to report: no session has
+ * reported yet, or the limiter is available and under our control.
+ */
+@StringRes
+internal fun limiterNoteRes(state: LimiterState?): Int? = when {
+    state == null -> null
+    !state.available -> R.string.playback_limiter_unavailable_note
+    !state.controlled -> R.string.playback_limiter_not_controlled_note
+    else -> null
+}
+
 @Composable
 internal fun VolumeNormalizationContent(
     normalizationAvailable: Boolean,
     normalization: com.amwolfstein.sistrum.player.NormalizationSettings,
+    limiterState: LimiterState? = null,
     onNormalizationChanged: (com.amwolfstein.sistrum.player.NormalizationSettings) -> Unit,
     modifier: Modifier = Modifier,
 ) {
@@ -220,6 +235,14 @@ internal fun VolumeNormalizationContent(
                     onValueSelected = { onNormalizationChanged(normalization.copy(mode = it)) },
                 )
             }
+        }
+        limiterNoteRes(limiterState)?.let { noteRes ->
+            Text(
+                text = stringResource(noteRes),
+                modifier = Modifier.padding(horizontal = 16.dp),
+                style = MaterialTheme.typography.bodySmall,
+                color = com.amwolfstein.sistrum.ui.theme.LocalSistrumColors.current.textMuted,
+            )
         }
         AnimatedVisibility(
             visible = normalization.enabled && normalizationAvailable,

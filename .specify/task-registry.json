@@ -1,8 +1,8 @@
 {
   "missions": {},
-  "next_completion": 13,
+  "next_completion": 14,
   "next_mission": 1,
-  "next_tor": 13,
+  "next_tor": 14,
   "tasks": {
     "TOR001": {
       "completion": 1,
@@ -195,6 +195,22 @@
       "record": ".specify/quick-tasks/TOR012.md",
       "status": "complete",
       "title": "Port Media3 M4 decoder registry and scanning"
+    },
+    "TOR013": {
+      "completion": 13,
+      "evidence": {
+        "checks": "DevDebug host and instrumentation Kotlin compilation; Bash syntax; Git whitespace",
+        "result": "PASS",
+        "reviewer": "tor_review",
+        "round": 2
+      },
+      "final": false,
+      "kind": "TOR",
+      "mission": null,
+      "nonce": "9c6487d5a1e84578aa2b57f3330ead71",
+      "record": ".specify/quick-tasks/TOR013.md",
+      "status": "complete",
+      "title": "Port Media3 M5 float DSP and shared limiter"
     }
   },
   "version": 1

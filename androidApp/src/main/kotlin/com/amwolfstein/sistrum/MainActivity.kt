@@ -58,6 +58,7 @@ import com.amwolfstein.sistrum.player.AndroidPlaybackRuntime
 import com.amwolfstein.sistrum.player.AndroidPlaybackSession
 import com.amwolfstein.sistrum.player.PlaybackService
 import com.amwolfstein.sistrum.player.PlaybackState
+import com.amwolfstein.sistrum.player.media3.LimiterStatus
 import com.amwolfstein.sistrum.lastfm.AndroidLastFmRuntime
 import com.amwolfstein.sistrum.lastfm.LastFmService
 import com.amwolfstein.sistrum.lastfm.isLastFmAuthCallback
@@ -252,6 +253,7 @@ class MainActivity : ComponentActivity() {
             }
             // Avoid clearing a valid preference while Room is still loading the active manifest.
             val normalizationAvailable by LocalLibraryRuntime.libraryStore().analysisAvailable.collectAsStateWithLifecycle(initialValue = true)
+            val limiterState by LimiterStatus.state.collectAsStateWithLifecycle()
             LaunchedEffect(normalizationAvailable) {
                 if (!normalizationAvailable) normalizationPreferences.disable()
             }
@@ -449,6 +451,7 @@ class MainActivity : ComponentActivity() {
                     onKeepScreenOnForLyricsChanged = { enabled -> preferenceScope.launch { playbackPreferences.setKeepScreenOnForLyrics(enabled) } },
                     normalizationAvailable = normalizationAvailable,
                     normalization = normalizationSettings,
+                    limiterState = limiterState,
                     onNormalizationChanged = { settings -> preferenceScope.launch { normalizationPreferences.update { settings } } },
                     equalizer = equalizerSettings,
                     onEqualizerEnabledChanged = { enabled -> preferenceScope.launch { equalizerPreferences.setEnabled(enabled) } },

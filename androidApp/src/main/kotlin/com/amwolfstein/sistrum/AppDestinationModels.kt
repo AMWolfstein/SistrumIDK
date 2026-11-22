@@ -13,6 +13,7 @@ import com.amwolfstein.sistrum.player.NormalizationSettings
 import com.amwolfstein.sistrum.player.PlaybackQueueSnapshot
 import com.amwolfstein.sistrum.player.PlaybackState
 import com.amwolfstein.sistrum.player.RepeatMode
+import com.amwolfstein.sistrum.player.media3.LimiterState
 import com.amwolfstein.sistrum.sync.LibraryPlaylist
 import com.amwolfstein.sistrum.sync.LibraryTrack
 import com.amwolfstein.sistrum.ui.screens.AlbumDetailsUiState
@@ -172,6 +173,7 @@ internal data class SettingsDestinationModel(
     val onKeepScreenOnForLyricsChanged: (Boolean) -> Unit = {},
     val normalizationAvailable: Boolean = false,
     val normalization: NormalizationSettings = NormalizationSettings(),
+    val limiterState: LimiterState? = null,
     val onNormalizationChanged: (NormalizationSettings) -> Unit = {},
     val equalizer: EqualizerSettings = EqualizerSettings(),
     val onEqualizerEnabledChanged: (Boolean) -> Unit = {},
