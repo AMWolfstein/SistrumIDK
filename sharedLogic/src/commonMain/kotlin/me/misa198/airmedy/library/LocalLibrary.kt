@@ -4,7 +4,7 @@ import kotlinx.serialization.json.JsonObject
 import kotlinx.serialization.json.buildJsonArray
 import kotlinx.serialization.json.buildJsonObject
 import kotlinx.serialization.json.put
-import me.misa198.airmedy.sync.LibrarySyncProtocol
+import me.misa198.airmedy.sync.LibraryJson
 
 /**
  * A locally scanned library, produced by a platform media scanner and written
@@ -122,7 +122,7 @@ object LocalLibraryJson {
         })
     }
 
-    fun trackDocumentJson(track: LocalTrack): String = LibrarySyncProtocol.json.encodeToString(trackDocument(track))
+    fun trackDocumentJson(track: LocalTrack): String = LibraryJson.json.encodeToString(trackDocument(track))
 }
 
 private inline fun <T : LocalNamedRef> List<T>.forEachValid(block: (T) -> Unit) {

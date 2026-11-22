@@ -69,7 +69,7 @@ import me.misa198.airmedy.ui.screens.VolumeNormalizationContent
 import me.misa198.airmedy.ui.screens.SongTransitionContent
 import me.misa198.airmedy.ui.screens.EqualizerContent
 import me.misa198.airmedy.lastfm.LastFmStatus
-import me.misa198.airmedy.sync.AndroidSyncRuntime
+import me.misa198.airmedy.sync.LocalLibraryRuntime
 import me.misa198.airmedy.sync.stageArtistArtwork
 import me.misa198.airmedy.ui.theme.LocalAirmedyColors
 
@@ -202,7 +202,7 @@ internal fun AppDestinationContent(
                         uri,
                     )
                 }
-                AndroidSyncRuntime.syncStore().stageArtistArtwork(artwork)
+                LocalLibraryRuntime.libraryStore().stageArtistArtwork(artwork)
             }
         }
     }

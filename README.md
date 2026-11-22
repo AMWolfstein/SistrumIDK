@@ -1,6 +1,6 @@
 # Airmedy Mobile
 
-Android-first Kotlin Multiplatform mobile app for Airmedy. The application is
+Android app for Airmedy. The application is
 currently independent from the desktop app; it does not share the desktop
 database, Wails bindings, or Remote API.
 
@@ -11,8 +11,6 @@ database, Wails bindings, or Remote API.
   floating navigation to use true backdrop blur.
 - Android compiles and targets API 37 (Android 17).
 - `sharedLogic` is the future cross-platform business-logic module.
-- iOS is intentionally frozen. Do not modify `iosApp` or iOS targets unless a
-  task explicitly enables iOS work.
 
 See [AGENTS.md](AGENTS.md) for the mandatory engineering rules and cleanup
 sequence.
@@ -40,8 +38,7 @@ standard page transition; switching destination stacks changes the title and
 content together while the floating navigation remains in place.
 
 `sharedLogic` must remain UI- and platform-neutral. Android implements its ports
-inside `androidApp`. When iOS work is authorized, it will have native SwiftUI and
-its own adapters while using the same shared business contracts.
+inside `androidApp`.
 
 The mobile app is standalone and never pairs with the desktop app. Its music
 library is built by a device-local MediaStore scan instead of pulling desktop
@@ -186,7 +183,7 @@ See [release discovery](../releases/README.md) for the manifest contract and the
 
 ### FFmpeg player build
 
-Android playback uses FFmpeg directly for local synced audio: FFmpeg demuxes and
+Android playback uses FFmpeg directly for local audio: FFmpeg demuxes and
 decodes every enabled music format, then the native player sends float PCM to
 AAudio. It does not use a Media3 or platform-decoder fallback. All Android app
 variants require `scripts/build-ffmpeg-android.sh arm64-v8a` to have run
@@ -256,17 +253,8 @@ days and daily origin-tagged aggregates (keyed by `sourceDeviceId`) are
 retained for all-time totals. Recording is local-only: there is no exchange, and
 the tag is the install's stable `DeviceIdentity`.
 
-## Playlist reconciliation
+## Local playlists
 
-Playlist edits are queued locally in Room as mutations (`CREATE`, `UPDATE`,
-`DELETE`, `ADD_TRACK`, `REMOVE_TRACK`, `MOVE_TRACK`, `SET_ARTWORK`,
-`REMOVE_ARTWORK`, `SET_FAVORITE`). Each pending mutation is applied to the
-projected local library immediately and tracked through `pending` /
-`awaiting_sync` states in `playlist_mutations`. A playlist whose queue still
-carries an unacknowledged mutation is marked `syncFailed` on its row; the flag
-clears once the queue is flushed. Artwork for `SET_ARTWORK` is staged in Room
-with its SHA-256, MIME type, and byte size, and cached below `filesDir`.
-
-The former desktop upload adapter (`AndroidPlaylistReconciliationTransport`) is
-retained compilable for its host test but is not constructed at runtime: there
-is no desktop endpoint to reconcile with, so playlist mutations stay local.
+Playlist edits are stored locally in Room and applied to the current playlist
+view immediately. Artwork is stored in app-private files. Existing stored edits
+and library snapshots remain readable, including after an app upgrade.

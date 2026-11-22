@@ -5,7 +5,7 @@ import kotlinx.serialization.json.JsonObject
 import kotlinx.serialization.json.jsonArray
 import kotlinx.serialization.json.jsonObject
 import kotlinx.serialization.json.jsonPrimitive
-import me.misa198.airmedy.sync.LibrarySyncProtocol
+import me.misa198.airmedy.sync.LibraryJson
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertNull
@@ -141,7 +141,7 @@ class LocalLibraryTest {
         assertEquals(1, artists?.size)
         assertEquals("Valid", artists?.first()?.jsonObject?.string("name"))
 
-        val roundTrip = LibrarySyncProtocol.json.parseToJsonElement(LocalLibraryJson.trackDocumentJson(sampleTrack())).jsonObject
+        val roundTrip = LibraryJson.json.parseToJsonElement(LocalLibraryJson.trackDocumentJson(sampleTrack())).jsonObject
         assertEquals("local:42", roundTrip.string("id"))
         assertEquals("Sunrise", roundTrip.string("title"))
         assertTrue(document.array("album_artists").orEmpty().isEmpty())

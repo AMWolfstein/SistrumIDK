@@ -38,7 +38,7 @@ import me.misa198.airmedy.R
 import me.misa198.airmedy.player.PlaybackQueueSnapshot
 import me.misa198.airmedy.sync.LibraryTrack
 import me.misa198.airmedy.sync.LibraryPlaylist
-import me.misa198.airmedy.sync.LibrarySyncProtocol
+import me.misa198.airmedy.sync.LibraryJson
 import me.misa198.airmedy.sync.metadataObject
 import me.misa198.airmedy.ui.screens.isFavorite
 import me.misa198.airmedy.ui.theme.LocalAirmedyColors
@@ -374,7 +374,7 @@ private fun PlaylistPickerCheckbox(checked: Boolean, modifier: Modifier = Modifi
 
 internal fun playlistIsEditable(playlist: LibraryPlaylist): Boolean {
     if (playlist.id == "favorites") return false
-    val root = runCatching { LibrarySyncProtocol.json.parseToJsonElement(playlist.metadataJson) as? JsonObject }.getOrNull()
+    val root = runCatching { LibraryJson.json.parseToJsonElement(playlist.metadataJson) as? JsonObject }.getOrNull()
     val value = (root?.get("playlist") as? JsonObject ?: root)?.get("is_smart") as? JsonPrimitive
     return value?.contentOrNull != "true"
 }

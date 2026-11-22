@@ -2,7 +2,7 @@ package me.misa198.airmedy.sync
 
 /**
  * User-staged artist artwork, stored under the app's local directory.
- * Purely local: unlike playlist artwork it is never synced to the desktop.
+ * Stored in app-private files.
  */
 data class StagedArtistArtwork(
     val artistId: String,

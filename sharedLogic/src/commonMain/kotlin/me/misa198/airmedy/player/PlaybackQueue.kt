@@ -6,7 +6,7 @@ import kotlinx.serialization.Serializable
 /** Maximum number of distinct tracks retained by an active playback queue. */
 const val MaxPlaybackQueueSize = 1_000
 
-/** Platform-neutral queue and repeat rules shared by Android and future iOS adapters. */
+/** Queue and repeat rules shared by Android playback components. */
 @Serializable
 enum class RepeatMode { Off, One, All }
 

@@ -22,7 +22,7 @@ import kotlinx.serialization.json.JsonPrimitive
 import kotlinx.serialization.json.contentOrNull
 import me.misa198.airmedy.sync.AndroidLibrarySyncStore
 import me.misa198.airmedy.sync.LibraryPlaylist
-import me.misa198.airmedy.sync.LibrarySyncProtocol
+import me.misa198.airmedy.sync.LibraryJson
 import me.misa198.airmedy.sync.LibraryTrack
 import me.misa198.airmedy.sync.PlaylistMutation
 import me.misa198.airmedy.sync.PlaylistMutationOperation
@@ -203,7 +203,7 @@ internal fun playlistManualArtworkPath(
 ): String? = playlistArtworkKey(playlist.metadataJson)?.let(artworkPaths::get)
 
 private fun playlistArtworkKey(metadataJson: String): String? = runCatching {
-    val root = LibrarySyncProtocol.json.parseToJsonElement(metadataJson) as? JsonObject
+    val root = LibraryJson.json.parseToJsonElement(metadataJson) as? JsonObject
     val playlist = root?.get("playlist") as? JsonObject ?: root
     (playlist?.get("artwork_key") as? JsonPrimitive)?.contentOrNull
 }.getOrNull()?.takeIf { it.isNotBlank() }

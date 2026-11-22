@@ -29,7 +29,7 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import me.misa198.airmedy.R
-import me.misa198.airmedy.sync.AndroidSyncRuntime
+import me.misa198.airmedy.sync.LocalLibraryRuntime
 import me.misa198.airmedy.sync.LocalLibraryScanResult
 import me.misa198.airmedy.sync.MediaStoreLibraryScanner
 import me.misa198.airmedy.ui.components.AirmedyPillButton
@@ -152,7 +152,7 @@ private suspend fun performScan(context: Context): LibraryScanUiState? = withCon
             artworkDir = File(context.filesDir, "artwork"),
         )
         val result: LocalLibraryScanResult = scanner.scan()
-        AndroidSyncRuntime.syncStore().writeLocalLibrary(
+        LocalLibraryRuntime.libraryStore().writeLocalLibrary(
             snapshot = result.snapshot,
             audioRows = result.audio,
             artworkRows = result.artwork,

@@ -4,13 +4,8 @@ import android.content.Context
 
 /**
  * Process-lifetime holder for the local Room library store.
- *
- * Originally this object owned the desktop-sync runtime (MQTT handoff, foreground
- * data-sync service, progress notifications). With desktop sync removed it only
- * owns the local data layer that the MediaStore scanner, playback, lyrics, and
- * listening trackers all consume.
  */
-internal object AndroidSyncRuntime {
+internal object LocalLibraryRuntime {
     private lateinit var store: AndroidLibrarySyncStore
     private lateinit var appContext: Context
 
@@ -20,5 +15,5 @@ internal object AndroidSyncRuntime {
         store = AndroidLibrarySyncStore(SyncDatabase.create(appContext), appContext.filesDir)
     }
 
-    internal fun syncStore(): AndroidLibrarySyncStore = store
+    internal fun libraryStore(): AndroidLibrarySyncStore = store
 }

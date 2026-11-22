@@ -52,7 +52,7 @@ import android.view.KeyEvent
 import me.misa198.airmedy.settings.ThemeMode
 import me.misa198.airmedy.settings.ThemePreferences
 import me.misa198.airmedy.device.DeviceIdentity
-import me.misa198.airmedy.sync.AndroidSyncRuntime
+import me.misa198.airmedy.sync.LocalLibraryRuntime
 import me.misa198.airmedy.player.AndroidPlaybackRuntime
 import me.misa198.airmedy.player.AndroidPlaybackSession
 import me.misa198.airmedy.player.PlaybackService
@@ -103,61 +103,61 @@ class MainActivity : ComponentActivity() {
         MainViewModel.Factory(ThemePreferences(applicationContext))
     }
     private val tracksViewModel: LibraryTracksViewModel by viewModels {
-        LibraryTracksViewModel.Factory(AndroidSyncRuntime.syncStore(), AndroidPlaybackRuntime.controller())
+        LibraryTracksViewModel.Factory(LocalLibraryRuntime.libraryStore(), AndroidPlaybackRuntime.controller())
     }
     private val insightViewModel: InsightViewModel by viewModels {
         InsightViewModel.Factory(
-            AndroidSyncRuntime.syncStore(),
+            LocalLibraryRuntime.libraryStore(),
             flow { emit(DeviceIdentity(applicationContext).id()) },
             AndroidPlaybackRuntime.controller(),
         )
     }
     private val artistsViewModel: LibraryArtistsViewModel by viewModels {
-        LibraryArtistsViewModel.Factory(AndroidSyncRuntime.syncStore())
+        LibraryArtistsViewModel.Factory(LocalLibraryRuntime.libraryStore())
     }
     private val albumsViewModel: LibraryAlbumsViewModel by viewModels {
         LibraryAlbumsViewModel.Factory(
-            AndroidSyncRuntime.syncStore(),
+            LocalLibraryRuntime.libraryStore(),
             AndroidPlaybackRuntime.controller(),
             LibraryAlbumsLayoutPreferences(applicationContext),
         )
     }
     private val genresViewModel: LibraryGenresViewModel by viewModels {
-        LibraryGenresViewModel.Factory(AndroidSyncRuntime.syncStore())
+        LibraryGenresViewModel.Factory(LocalLibraryRuntime.libraryStore())
     }
     private val composersViewModel: LibraryComposersViewModel by viewModels {
-        LibraryComposersViewModel.Factory(AndroidSyncRuntime.syncStore())
+        LibraryComposersViewModel.Factory(LocalLibraryRuntime.libraryStore())
     }
     private val playlistsViewModel: LibraryPlaylistsViewModel by viewModels {
-        LibraryPlaylistsViewModel.Factory(applicationContext, AndroidSyncRuntime.syncStore())
+        LibraryPlaylistsViewModel.Factory(applicationContext, LocalLibraryRuntime.libraryStore())
     }
     private val searchViewModel: LibrarySearchViewModel by viewModels {
-        LibrarySearchViewModel.Factory(AndroidSyncRuntime.syncStore())
+        LibrarySearchViewModel.Factory(LocalLibraryRuntime.libraryStore())
     }
     private val albumDetailsViewModel: AlbumDetailsViewModel by viewModels {
-        AlbumDetailsViewModel.Factory(AndroidSyncRuntime.syncStore(), AndroidPlaybackRuntime.controller())
+        AlbumDetailsViewModel.Factory(LocalLibraryRuntime.libraryStore(), AndroidPlaybackRuntime.controller())
     }
     private val playlistDetailsViewModel: PlaylistDetailsViewModel by viewModels {
-        PlaylistDetailsViewModel.Factory(AndroidSyncRuntime.syncStore(), AndroidPlaybackRuntime.controller())
+        PlaylistDetailsViewModel.Factory(LocalLibraryRuntime.libraryStore(), AndroidPlaybackRuntime.controller())
     }
     private val artistDetailsViewModel: ArtistDetailsViewModel by viewModels {
-        ArtistDetailsViewModel.Factory(AndroidSyncRuntime.syncStore(), AndroidPlaybackRuntime.controller())
+        ArtistDetailsViewModel.Factory(LocalLibraryRuntime.libraryStore(), AndroidPlaybackRuntime.controller())
     }
     private val genreDetailsViewModel: GenreDetailsViewModel by viewModels {
-        GenreDetailsViewModel.Factory(AndroidSyncRuntime.syncStore(), AndroidPlaybackRuntime.controller())
+        GenreDetailsViewModel.Factory(LocalLibraryRuntime.libraryStore(), AndroidPlaybackRuntime.controller())
     }
     private val composerDetailsViewModel: ComposerDetailsViewModel by viewModels {
-        ComposerDetailsViewModel.Factory(AndroidSyncRuntime.syncStore(), AndroidPlaybackRuntime.controller())
+        ComposerDetailsViewModel.Factory(LocalLibraryRuntime.libraryStore(), AndroidPlaybackRuntime.controller())
     }
 
     override fun onCreate(savedInstanceState: Bundle?) {
         enableEdgeToEdge()
         super.onCreate(savedInstanceState)
         updateRequestedOrientation(resources.configuration)
-        AndroidSyncRuntime.initialize(applicationContext)
-        lastFm = AndroidLastFmRuntime.initialize(applicationContext, AndroidSyncRuntime.syncStore())
+        LocalLibraryRuntime.initialize(applicationContext)
+        lastFm = AndroidLastFmRuntime.initialize(applicationContext, LocalLibraryRuntime.libraryStore())
         handleLastFmIntent(intent)
-        AndroidPlaybackRuntime.initialize(applicationContext, AndroidSyncRuntime.syncStore())
+        AndroidPlaybackRuntime.initialize(applicationContext, LocalLibraryRuntime.libraryStore())
         // Start the service once per app process so it can rebuild the last
         // private playback session before Compose observes its StateFlows.
         startService(Intent(this, PlaybackService::class.java))
@@ -190,9 +190,9 @@ class MainActivity : ComponentActivity() {
             val lastFmStatus by lastFm.status.collectAsStateWithLifecycle()
             val activePage = uiState.currentPage
             val activeDestination = uiState.selectedDestination
-            val allTracks by AndroidSyncRuntime.syncStore().tracks.collectAsStateWithLifecycle(initialValue = emptyList())
-            val moodRadioEligibleTrackIds by AndroidSyncRuntime.syncStore().moodRadioEligibleTrackIds.collectAsStateWithLifecycle(initialValue = emptySet())
-            val allPlaylists by AndroidSyncRuntime.syncStore().playlists.collectAsStateWithLifecycle(initialValue = emptyList())
+            val allTracks by LocalLibraryRuntime.libraryStore().tracks.collectAsStateWithLifecycle(initialValue = emptyList())
+            val moodRadioEligibleTrackIds by LocalLibraryRuntime.libraryStore().moodRadioEligibleTrackIds.collectAsStateWithLifecycle(initialValue = emptySet())
+            val allPlaylists by LocalLibraryRuntime.libraryStore().playlists.collectAsStateWithLifecycle(initialValue = emptyList())
             val homeUiState by if (activeDestination == AppDestination.Home && activePage == AppStackPage.Root) {
                 tracksViewModel.homeUiState.collectAsStateWithLifecycle()
             } else {
@@ -225,7 +225,7 @@ class MainActivity : ComponentActivity() {
             val normalizationPreferences = remember { me.misa198.airmedy.player.NormalizationPreferences(applicationContext) }
             val equalizerPreferences = remember { me.misa198.airmedy.player.EqualizerPreferences(applicationContext) }
             val lyricsPreferences = remember { LyricsPreferences(applicationContext) }
-            val lyricsService = remember { AndroidLyricsService(AndroidSyncRuntime.syncStore()) }
+            val lyricsService = remember { AndroidLyricsService(LocalLibraryRuntime.libraryStore()) }
             val preferenceScope = rememberCoroutineScope()
             val crossfadeSettings by playbackPreferences.settings.collectAsStateWithLifecycle(
                 initialValue = me.misa198.airmedy.player.CrossfadeSettings(0, 4, true),
@@ -244,7 +244,7 @@ class MainActivity : ComponentActivity() {
                 romanizationViewModel.setAllowed(lyricsSettings.romanizationEnabled)
             }
             // Avoid clearing a valid preference while Room is still loading the active manifest.
-            val normalizationAvailable by AndroidSyncRuntime.syncStore().analysisAvailable.collectAsStateWithLifecycle(initialValue = true)
+            val normalizationAvailable by LocalLibraryRuntime.libraryStore().analysisAvailable.collectAsStateWithLifecycle(initialValue = true)
             LaunchedEffect(normalizationAvailable) {
                 if (!normalizationAvailable) normalizationPreferences.disable()
             }
@@ -259,7 +259,7 @@ class MainActivity : ComponentActivity() {
                 else -> null
             }
             val providerLyricsFlow = remember(lyricsTrackId) {
-                lyricsTrackId?.let(AndroidSyncRuntime.syncStore()::providerLyrics) ?: flowOf(null)
+                lyricsTrackId?.let(LocalLibraryRuntime.libraryStore()::providerLyrics) ?: flowOf(null)
             }
             val providerLyrics by providerLyricsFlow.collectAsStateWithLifecycle(initialValue = null)
             var manualLyricsOverride by remember { mutableStateOf<ManualLyricsOverride?>(null) }
@@ -361,7 +361,7 @@ class MainActivity : ComponentActivity() {
                         onAddToQueue = playbackController::append,
                         onAddToFavorites = { trackIds ->
                             preferenceScope.launch {
-                                trackIds.forEach { trackId -> AndroidSyncRuntime.syncStore().setFavorite(trackId, true) }
+                                trackIds.forEach { trackId -> LocalLibraryRuntime.libraryStore().setFavorite(trackId, true) }
                             }
                         },
                     ),
@@ -463,7 +463,7 @@ class MainActivity : ComponentActivity() {
                 onRomanizationToggle = romanizationViewModel::toggle,
                 onSearchLyrics = { track, title, artist -> lyricsService.search(track.id, title, artist, lyricsSettings) },
                 onLyricsSelected = { trackId, lyric ->
-                    AndroidSyncRuntime.syncStore().saveProviderLyrics(trackId, lyric.content, lyric.source)
+                    LocalLibraryRuntime.libraryStore().saveProviderLyrics(trackId, lyric.content, lyric.source)
                     if (trackId == lyricsTrackId) manualLyricsOverride = ManualLyricsOverride(trackId, lyric.content)
                 },
                 artworkCrossfade = artworkCrossfade,
@@ -489,7 +489,7 @@ class MainActivity : ComponentActivity() {
                 onRepeatModeChange = playbackController::setRepeatMode,
                 onFavoriteToggle = { trackId, favorite ->
                     preferenceScope.launch {
-                        AndroidSyncRuntime.syncStore().setFavorite(trackId, favorite)
+                        LocalLibraryRuntime.libraryStore().setFavorite(trackId, favorite)
                         lastFm.setLoved(trackId, favorite)
                     }
                 },

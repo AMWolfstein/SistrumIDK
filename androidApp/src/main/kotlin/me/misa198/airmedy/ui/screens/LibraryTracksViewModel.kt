@@ -115,10 +115,6 @@ internal class LibraryTracksViewModel(
         filterQueryFlow.value = query
     }
 
-    fun setSortOrder(order: SortOrder) {
-        sortOrderFlow.value = order
-    }
-
     fun toggleSortOrder() {
         sortOrderFlow.value = if (sortOrderFlow.value == SortOrder.Ascending) {
             SortOrder.Descending

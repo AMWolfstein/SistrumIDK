@@ -1,7 +1,7 @@
 # Android Player
 
 This catalog maps Android playback ownership, command flow, and the invariants
-that must remain true. It does not describe the desktop or iOS player.
+that must remain true.
 
 ## Architecture boundary
 
@@ -27,7 +27,7 @@ to `androidApp`. UI must neither access the decoder nor mutate the queue itself.
 | `PlaybackController` | Android-only UI API; converts commands into service intents and exposes read-only state/queue flows. |
 | `PlaybackService` | Sole owner of playback lifecycle, serialized queue mutation, audio focus, media session, notification, and session restoration. |
 | `PlaybackQueue` | Shared queue state machine that operates only on unique track IDs. |
-| `PlaybackItemResolver` | Resolves a synced track ID to its local file immediately before native loading. |
+| `PlaybackItemResolver` | Resolves a library track ID to its local file immediately before native loading. |
 | `AndroidPlaybackRuntime` | Kotlin JNI adapter; contains no queue policy. |
 | `FfmpegDecoder` / `ffmpeg_player.cpp` | Native decoding and mixing: FFmpeg demuxes/decodes and AAudio renders float PCM. |
 | `PlaybackSessionStore` | Private DataStore persistence for the queue snapshot and position. |
@@ -153,13 +153,12 @@ Before requesting audio focus or starting native playback, the service promotes
 itself to `mediaPlayback` foreground status. Keep this ordering: Android 17
 requires a foreground service with while-in-use capabilities for background
 audio. Start playback from the visible app or a system-recognized user action;
-never auto-play during restoration or a background sync.
+never auto-play during restoration.
 
 ## Session restoration
 
 The private DataStore session contains a `PlaybackQueueSnapshot` and position.
-It is never synchronized with desktop. When the service starts without a
-queue-replacing command it:
+When the service starts without a queue-replacing command, it:
 
 1. Reads the session, drops track IDs no longer available locally, and validates
    the snapshot.

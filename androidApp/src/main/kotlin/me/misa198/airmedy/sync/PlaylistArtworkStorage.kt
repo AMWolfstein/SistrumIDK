@@ -9,7 +9,7 @@ import java.security.MessageDigest
 import me.misa198.airmedy.sync.StagedArtistArtwork
 import me.misa198.airmedy.sync.StagedPlaylistArtwork
 
-/** Converts picker content into the one format accepted by playlist reconciliation. */
+/** Converts picker content into an app-private playlist cover. */
 internal fun stagePlaylistArtwork(contentResolver: ContentResolver, filesDir: File, uri: Uri): StagedPlaylistArtwork {
     val bounds = BitmapFactory.Options().apply { inJustDecodeBounds = true }
     val boundsStream = contentResolver.openInputStream(uri) ?: error("Unable to open playlist artwork")

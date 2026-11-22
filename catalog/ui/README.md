@@ -1,8 +1,7 @@
 # Android Compose UI
 
 This catalog records the Android UI boundaries and contracts in `androidApp`.
-Mobile does not share Vue, Tailwind, or UI code with desktop; iOS remains frozen
-scaffolding.
+The app uses native Android Compose UI.
 
 ## Ownership and data flow
 
@@ -102,24 +101,10 @@ device/emulator authorization to run; compiling their APK remains host-only.
 screen height. Its title/body region scrolls while the action buttons remain
 outside that region, so long release notes do not hide the actions.
 
-### Local network permission
+### Local library permission
 
-Android 17+ Sync Settings shows a themed permission card before pairing or LAN
-connections are available. The host owns the Activity Result permission request,
-persists whether a request has been made, offers app settings after permanent
-denial, and refreshes permission state on resume. The UI never requests LAN
-access at startup; offline playback remains available. The scanner/add action
-is gated by permission, including a restored scanner destination.
-
-`SyncViewModel` gates saved-route MQTT, mDNS, pairing and incoming sync and
-reconciliation requests. Revocation cancels pairing/reconciliation, disconnects
-MQTT, stops discovery and asks the host to cancel the foreground sync service;
-it never clears the binding or local library. Granting access attempts the saved
-route once and resumes discovery only under the existing visible-screen rules.
-The sync runtime and service also check permission before accepting a transfer.
-`LocalNetworkAccessTest` and `SyncViewModelTest` cover permission states and
-network lifecycle on the host. `SyncContentTest` covers retry/settings actions
-and card removal in Light/Dark; its APK can be built without running a device.
+Settings > Scan requests audio access before scanning device music into Room.
+Android 13 and newer use the audio-specific media permission.
 
 ### Theme tokens
 
@@ -166,17 +151,16 @@ than hard-coded bottom padding.
 | Insight | `InsightContent`, `InsightViewModel` | Derived listening/library analytics; filters and periods stay in the ViewModel. |
 | Library | `LibraryContent` and `Library*Content/ViewModel` | Virtualized lists; sort, filter, and page state belong to the ViewModel. |
 | Details | `Album/Artist/Genre/Composer/PlaylistDetailsContent` | ID selection is in `AppUiState`; playback builds its queue through the ViewModel/controller. |
-| Settings | `SettingsContent`, `AppearanceContent`, playback/sync/integration screens | Preferences and Android adapters are in the host/ViewModel, not shared UI. Integration persists LRCLIB/KuGou switches and a lyrics-source preference: desktop sync is the default; auto-fetch prefers Android provider cache and falls back to desktop. |
+| Settings | `SettingsContent`, `AppearanceContent`, playback, scan and integration screens | Preferences and Android adapters are in the host/ViewModel, not shared UI. Lyrics settings control embedded lyrics, LRCLIB and KuGou. |
 | Player | `MiniPlayer`, `FullScreenPlayer`, Queue/Lyrics panels | Render `PlaybackModel`; all mutations use playback actions. |
 
-Mood Radio is enabled only by the active sync manifest's
+Mood Radio is enabled only by the active library snapshot's
 `library_analysis_enabled` flag. A disabled replacement snapshot ends the
 in-memory radio session and stops refills without changing the current queue.
 The fullscreen track menu exposes Start Mood Radio only for tracks whose active
 analysis includes energy, danceability, brightness, and tempo.
 
-Playlist, favorite, and sync UI must not infer data from a desktop local database.
-They read the Android mirror/state exposed by adapters. Context menus receive
+Playlist and favorite UI read local Room data through adapters. Context menus receive
 action callbacks; they do not mutate Room or the queue themselves.
 Favorites use the rounded star glyph throughout the player, playlist artwork
 fallbacks, and track/album menus; the player star is filled only when selected. The track menu uses a star with
@@ -186,15 +170,8 @@ composes the minus with the bundled star because the font has no star-minus glyp
 Only normal playlist detail menus expose a reorder mode; playlist list menus
 omit it. Its grips emit one
 `MOVE_TRACK` mutation when a drag ends; the Android optimistic projection
-renders the resulting order while desktop reconciliation confirms it. Favorites
+renders the resulting order immediately. Favorites
 and smart playlists do not expose manual reordering.
-
-While a replacement sync plan is staging, playlist details continue to render
-the local playlist projection. That projection is removed only after the new
-plan activates, when its synced replacement is already available.
-
-The Sync settings page provides a single ActionList FAQ row and, when the active snapshot enables library analysis, its library-analysis percentage. It emits
-`AppIntent.OpenExternalUrl`; the Android host owns opening the browser.
 
 ## Shared composables
 
@@ -211,10 +188,7 @@ system. Reuse the existing primitive before making another component:
 | Modal/menu | `AirmedyBottomSheet`, `AirmedyDialog`, `AnchoredPopupMenu`, context menus |
 | Artwork and status | `DetailHero`, `DiscCard`, `AirmedyPlayingIndicator`, `MaterialSymbol` |
 
-`AirmedyDialog` supports both confirmations and one-action alerts. The app
-shell renders the transient insufficient-storage sync failure above every
-destination from `AndroidSyncState.Failed`; its Close callback resets the
-runtime state to `Idle`, and the failure is never persisted.
+`AirmedyDialog` supports both confirmations and one-action alerts.
 
 Settings card groups use a consistent 12dp gap between adjacent cards.
 `ActionList` also reserves 12dp between row titles and custom trailing content,
@@ -609,7 +583,7 @@ long placeholders and duration values at increased font scale.
 Selecting
 a candidate saves the Android provider cache. If that track is playing, the
 shell uses the selection for the current playback session only; later plays
-continue to follow the configured Desktop sync or Auto fetch preference.
+use the enabled lyric sources and their local cache.
 
 ## Tests and safe changes
 

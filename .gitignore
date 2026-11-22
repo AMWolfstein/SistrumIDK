@@ -7,7 +7,6 @@
 .kotlin
 .gradle
 **/build/
-xcuserdata
 !src/**/build/
 local.properties
 .idea
@@ -16,12 +15,6 @@ captures
 .externalNativeBuild
 .cxx
 androidApp/src/main/jniLibs/
-*.xcodeproj/*
-!*.xcodeproj/project.pbxproj
-!*.xcodeproj/xcshareddata/
-!*.xcodeproj/project.xcworkspace/
-!*.xcworkspace/contents.xcworkspacedata
-**/xcshareddata/WorkspaceSettings.xcsettings
 node_modules/
 
 # Generated Android and local build artifacts
@@ -32,4 +25,3 @@ node_modules/
 *.aab
 __pycache__/
 *.pyc
-/iosApp/DerivedData/

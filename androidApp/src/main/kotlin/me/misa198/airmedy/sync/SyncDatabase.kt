@@ -38,14 +38,8 @@ import kotlinx.serialization.json.JsonPrimitive
 import kotlinx.serialization.json.contentOrNull
 import kotlinx.serialization.json.jsonObject
 import kotlinx.serialization.json.jsonPrimitive
-import me.misa198.airmedy.sync.LibrarySyncAsset
-import me.misa198.airmedy.sync.LibrarySyncManifest
-import me.misa198.airmedy.sync.LibrarySyncRequest
-import me.misa198.airmedy.sync.LibrarySyncStore
-import me.misa198.airmedy.sync.LibrarySyncProtocol
-import me.misa198.airmedy.sync.PulledAsset
-import me.misa198.airmedy.sync.PlaylistMutationStore
-import me.misa198.airmedy.sync.PlaylistArtworkStagingStore
+import me.misa198.airmedy.sync.LibraryPlanManifest
+import me.misa198.airmedy.sync.LibraryJson
 import me.misa198.airmedy.sync.StagedPlaylistArtwork
 import me.misa198.airmedy.player.TrackAnalysis
 import me.misa198.airmedy.player.ListeningSession
@@ -54,8 +48,6 @@ import me.misa198.airmedy.player.ListeningWrite
 import me.misa198.airmedy.player.PlaybackEndReason
 import me.misa198.airmedy.player.DailyTrackListeningStat
 import me.misa198.airmedy.player.DailyPlaybackAttemptStat
-import me.misa198.airmedy.sync.ListeningSyncSnapshot
-import me.misa198.airmedy.sync.ListeningSyncStore
 import me.misa198.airmedy.lyrics.LyricsTrack
 import me.misa198.airmedy.mood.MoodRadioTrack
 import me.misa198.airmedy.library.LocalLibraryJson
@@ -129,7 +121,7 @@ internal data class PlaylistMutationEntity(
     val state: String = "pending",
 )
 
-/** A playlist created on this device before the desktop returns an authoritative snapshot. */
+/** A playlist created on this device and stored separately from the library snapshot. */
 @Entity(tableName = "local_playlists", primaryKeys = ["playlistId"])
 internal data class LocalPlaylistEntity(
     val playlistId: String,
@@ -142,7 +134,7 @@ internal data class LocalPlaylistEntity(
 @Entity(tableName = "playlist_artwork_staging", primaryKeys = ["sha256"])
 internal data class PlaylistArtworkStagingEntity(val sha256: String, val mime: String, val size: Long, val relativePath: String)
 
-/** Local-only artist artwork staged by the user; never synced to the desktop. */
+/** Artist artwork staged locally by the user. */
 @Entity(tableName = "artist_artwork_staging", primaryKeys = ["artistId"])
 internal data class ArtistArtworkStagingEntity(val artistId: String, val sha256: String, val mime: String, val size: Long, val relativePath: String)
 
@@ -217,13 +209,11 @@ internal interface SyncDao {
     @Insert(onConflict = OnConflictStrategy.REPLACE) suspend fun insertPlan(value: SyncPlanEntity)
     @Insert(onConflict = OnConflictStrategy.REPLACE) suspend fun insertAssets(values: List<SyncAssetEntity>)
     @Insert(onConflict = OnConflictStrategy.REPLACE) suspend fun insertTracks(values: List<SyncTrackEntity>)
-    @Insert(onConflict = OnConflictStrategy.REPLACE) suspend fun insertPlaylists(values: List<SyncPlaylistEntity>)
     @Insert suspend fun insertSearchDocuments(values: List<LibrarySearchDocumentEntity>)
     @Insert(onConflict = OnConflictStrategy.IGNORE) suspend fun insertPlaylistMutation(value: PlaylistMutationEntity)
     @Insert(onConflict = OnConflictStrategy.REPLACE) suspend fun insertLocalPlaylist(value: LocalPlaylistEntity)
     @Insert(onConflict = OnConflictStrategy.REPLACE) suspend fun insertPlaylistArtwork(value: PlaylistArtworkStagingEntity)
     @Insert(onConflict = OnConflictStrategy.REPLACE) suspend fun insertArtistArtwork(value: ArtistArtworkStagingEntity)
-    @Insert(onConflict = OnConflictStrategy.REPLACE) suspend fun insertDocuments(values: List<SyncDocumentEntity>)
     @Insert(onConflict = OnConflictStrategy.REPLACE) suspend fun insertProviderLyric(value: ProviderLyricEntity)
     @Insert(onConflict = OnConflictStrategy.IGNORE) suspend fun insertListeningSession(value: ListeningSessionEntity): Long
     @Insert(onConflict = OnConflictStrategy.IGNORE) suspend fun insertPlaybackAttempt(value: PlaybackAttemptEntity): Long
@@ -243,62 +233,15 @@ internal interface SyncDao {
     @Query("UPDATE sync_tracks SET playCount=playCount+1 WHERE trackId=:trackId AND planId IN (SELECT planId FROM sync_plans WHERE active=1)")
     suspend fun incrementActiveTrackPlayCount(trackId: String)
 
-    @Query("""
-        UPDATE sync_tracks
-        SET playCount = MAX(playCount, COALESCE((
-            SELECT activeTrack.playCount
-            FROM sync_tracks activeTrack
-            INNER JOIN sync_plans activePlan ON activePlan.planId = activeTrack.planId
-            WHERE activePlan.active = 1 AND activeTrack.trackId = sync_tracks.trackId
-        ), 0))
-        WHERE planId = :planId
-    """)
-    suspend fun mergeActiveTrackPlayCounts(planId: String)
-
-    @Query("SELECT * FROM listening_sessions WHERE endedAt>=:since") suspend fun listeningSessionsSince(since: Long): List<ListeningSessionEntity>
-    @Query("SELECT * FROM playback_attempts WHERE endedAt>=:since AND endReason IS NOT NULL") suspend fun playbackAttemptsSince(since: Long): List<PlaybackAttemptEntity>
-    @Query("SELECT * FROM daily_track_listening_stats") suspend fun dailyTrackStats(): List<DailyTrackListeningStatEntity>
-    @Query("SELECT * FROM daily_playback_attempt_stats") suspend fun dailyAttemptStats(): List<DailyPlaybackAttemptStatEntity>
     @Query("SELECT * FROM daily_track_listening_stats") fun observeDailyTrackStats(): Flow<List<DailyTrackListeningStatEntity>>
     @Query("SELECT * FROM daily_playback_attempt_stats") fun observeDailyAttemptStats(): Flow<List<DailyPlaybackAttemptStatEntity>>
     @Query("SELECT trackId, MAX(endedAt) AS lastListenedAt FROM listening_sessions GROUP BY trackId") fun observeLastListenedTracks(): Flow<List<LastListenedTrackRow>>
 
     @Query("DELETE FROM listening_sessions WHERE endedAt<:before") suspend fun deleteOldListeningSessions(before: Long)
     @Query("DELETE FROM playback_attempts WHERE endedAt>0 AND endedAt<:before") suspend fun deleteOldPlaybackAttempts(before: Long)
-    @Query("DELETE FROM listening_sessions") suspend fun deleteListeningSessions()
-    @Query("DELETE FROM playback_attempts") suspend fun deletePlaybackAttempts()
-    @Query("DELETE FROM daily_track_listening_stats") suspend fun deleteDailyTrackStats()
-    @Query("DELETE FROM daily_playback_attempt_stats") suspend fun deleteDailyAttemptStats()
-
-    @Query("INSERT INTO daily_track_listening_stats(sourceDeviceId,localDate,trackId,listenedSeconds,playCount) VALUES(:source,:date,:trackId,:seconds,:plays) ON CONFLICT(sourceDeviceId,localDate,trackId) DO UPDATE SET listenedSeconds=max(listenedSeconds,:seconds), playCount=max(playCount,:plays)")
-    suspend fun mergeDailyTrackStat(source: String, date: String, trackId: String, seconds: Int, plays: Int)
-
-    @Query("INSERT INTO daily_playback_attempt_stats(sourceDeviceId,localDate,attempts,completed,skipped,stopped,listenedSeconds) VALUES(:source,:date,:attempts,:completed,:skipped,:stopped,:seconds) ON CONFLICT(sourceDeviceId,localDate) DO UPDATE SET attempts=max(attempts,:attempts), completed=max(completed,:completed), skipped=max(skipped,:skipped), stopped=max(stopped,:stopped), listenedSeconds=max(listenedSeconds,:seconds)")
-    suspend fun mergeDailyAttemptStat(source: String, date: String, attempts: Int, completed: Int, skipped: Int, stopped: Int, seconds: Int)
-
-    @Query("SELECT * FROM sync_assets WHERE planId = :planId AND assetId = :assetId LIMIT 1")
-    suspend fun asset(planId: String, assetId: String): SyncAssetEntity?
-
-    @Query("SELECT * FROM sync_assets WHERE planId = :planId")
-    suspend fun assets(planId: String): List<SyncAssetEntity>
-
-    @Query("SELECT * FROM sync_assets WHERE relativePath IS NOT NULL")
-    suspend fun committedAssets(): List<SyncAssetEntity>
-
-    @Query("UPDATE sync_assets SET relativePath = :relativePath WHERE planId = :planId AND sha256 = :sha256 AND size = :size")
-    suspend fun setAssetPathsByHash(planId: String, sha256: String, size: Long, relativePath: String)
-
-    @Query("SELECT COUNT(*) FROM sync_assets WHERE planId = :planId AND relativePath IS NULL")
-    suspend fun missingAssetCount(planId: String): Int
-
-    @Query("SELECT assetId FROM sync_assets WHERE planId = :planId ORDER BY assetId")
-    suspend fun assetIds(planId: String): List<String>
 
     @Query("SELECT relativePath FROM sync_assets WHERE planId = :planId AND relativePath IS NOT NULL")
     suspend fun assetPaths(planId: String): List<String>
-
-    @Query("SELECT relativePath FROM sync_assets WHERE planId != :planId AND relativePath IS NOT NULL")
-    suspend fun assetPathsExcept(planId: String): List<String>
 
     @Query("UPDATE sync_plans SET active = 0 WHERE active = 1") suspend fun deactivatePlans()
     @Query("UPDATE sync_plans SET active = 1, state = 'active' WHERE planId = :planId") suspend fun activatePlan(planId: String)
@@ -309,31 +252,16 @@ internal interface SyncDao {
     @Query("DELETE FROM library_search_fts WHERE planId != :planId") suspend fun deleteStaleSearchDocuments(planId: String)
     @Query("DELETE FROM sync_documents WHERE planId != :planId") suspend fun deleteStaleDocuments(planId: String)
     @Query("DELETE FROM provider_lyrics WHERE trackId NOT IN (SELECT trackId FROM sync_tracks WHERE planId = :planId)") suspend fun deleteProviderLyricsNotInPlan(planId: String)
-    @Query("DELETE FROM provider_lyrics") suspend fun deleteProviderLyrics()
     @Query("DELETE FROM sync_plans WHERE planId != :planId") suspend fun deleteStalePlans(planId: String)
-    @Query("DELETE FROM sync_assets WHERE planId = :planId") suspend fun deleteAssets(planId: String)
-    @Query("DELETE FROM sync_tracks WHERE planId = :planId") suspend fun deleteTracks(planId: String)
-    @Query("DELETE FROM sync_playlists WHERE planId = :planId") suspend fun deletePlaylists(planId: String)
     @Query("DELETE FROM library_search_fts WHERE planId = :planId") suspend fun deleteSearchDocuments(planId: String)
-    @Query("DELETE FROM sync_documents WHERE planId = :planId") suspend fun deleteDocuments(planId: String)
-    @Query("DELETE FROM sync_plans WHERE planId = :planId AND active = 0") suspend fun deleteInactivePlan(planId: String)
     @Query("SELECT * FROM playlist_mutations WHERE state = 'pending' ORDER BY updatedAt, mutationId") suspend fun pendingPlaylistMutations(): List<PlaylistMutationEntity>
     @Query("SELECT * FROM playlist_mutations WHERE state IN ('pending', 'awaiting_sync') ORDER BY updatedAt, mutationId") fun observeProjectedPlaylistMutations(): Flow<List<PlaylistMutationEntity>>
-    @Query("UPDATE playlist_mutations SET state = :state WHERE mutationId IN (:mutationIds)") suspend fun setPlaylistMutationState(mutationIds: List<String>, state: String)
-    @Query("DELETE FROM local_playlists WHERE playlistId IN (SELECT playlistId FROM playlist_mutations WHERE state = 'awaiting_sync' AND operation = 'DELETE')") suspend fun deleteAwaitingDeletedLocalPlaylists()
-    @Query("UPDATE playlist_mutations SET state = 'acknowledged' WHERE state = 'awaiting_sync'") suspend fun acknowledgeAwaitingPlaylistMutations()
     @Query("SELECT * FROM local_playlists ORDER BY name COLLATE NOCASE") fun observeLocalPlaylists(): Flow<List<LocalPlaylistEntity>>
-    @Query("UPDATE local_playlists SET syncState = :state WHERE mutationId IN (:mutationIds)") suspend fun setLocalPlaylistSyncState(mutationIds: List<String>, state: String)
-    @Query("DELETE FROM local_playlists WHERE playlistId IN (:playlistIds)") suspend fun deleteLocalPlaylists(playlistIds: List<String>)
-    @Query("SELECT playlistId FROM local_playlists WHERE mutationId IN (:mutationIds)") suspend fun localPlaylistIdsForMutations(mutationIds: List<String>): List<String>
-    @Query("DELETE FROM local_playlists WHERE playlistId IN (SELECT playlistId FROM sync_playlists WHERE planId = :planId)") suspend fun deleteLocalPlaylistsInPlan(planId: String)
     @Query("DELETE FROM local_playlists WHERE playlistId = :playlistId AND syncState = 'failed'") suspend fun deleteFailedLocalPlaylist(playlistId: String): Int
     @Query("DELETE FROM playlist_mutations WHERE playlistId = :playlistId") suspend fun deletePlaylistMutations(playlistId: String)
-    @Query("SELECT * FROM playlist_artwork_staging WHERE sha256 = :sha256 LIMIT 1") suspend fun playlistArtwork(sha256: String): PlaylistArtworkStagingEntity?
     @Query("SELECT * FROM playlist_artwork_staging") fun observePlaylistArtwork(): Flow<List<PlaylistArtworkStagingEntity>>
     @Query("DELETE FROM playlist_artwork_staging WHERE sha256 IN (:hashes)") suspend fun deletePlaylistArtwork(hashes: List<String>)
     @Query("SELECT * FROM artist_artwork_staging") fun observeArtistArtwork(): Flow<List<ArtistArtworkStagingEntity>>
-    @Query("DELETE FROM artist_artwork_staging WHERE artistId IN (:artistIds)") suspend fun deleteArtistArtwork(artistIds: List<String>)
     @Query("""
         SELECT t.trackId AS id,
                t.title AS title,
@@ -479,7 +407,7 @@ data class LibraryTrack(
     val discNumber: Int = 0,
     val trackNumber: Int = 0,
     val syncOrder: Int = 0,
-    /** Canonical lossless TrackDTO JSON from the desktop manifest (desktop path excluded). */
+    /** Track metadata JSON stored with the library snapshot. */
     val metadataJson: String = "{}",
     val artworkPath: String? = null,
     val audioPath: String? = null,
@@ -490,9 +418,9 @@ data class LibraryTrack(
 internal data class LibraryPlaylistRow(val id: String, val name: String, val trackIdsJson: String, val rawJson: String)
 data class LibraryPlaylist(val id: String, val name: String, val trackIds: List<String>, val metadataJson: String, val syncFailed: Boolean = false)
 
-/** Reads non-indexed desktop metadata without requiring a Room schema change. */
+/** Reads track metadata fields that are stored as JSON. */
 fun LibraryTrack.metadataObject(): JsonObject? = runCatching {
-    LibrarySyncProtocol.json.parseToJsonElement(metadataJson) as? JsonObject
+    LibraryJson.json.parseToJsonElement(metadataJson) as? JsonObject
 }.getOrNull()
 
 data class LibraryArtist(
@@ -536,9 +464,9 @@ data class LibraryAnalysisProgress(val analyzedTracks: Int = 0, val totalTracks:
 internal class AndroidLibrarySyncStore(
     private val database: SyncDatabase,
     private val filesDir: File,
-) : LibrarySyncStore, PlaylistMutationStore, PlaylistArtworkStagingStore, ListeningSyncStore {
+) {
     private val dao = database.syncDao()
-    // This store has process lifetime through AndroidSyncRuntime. Sharing avoids one
+    // This store has process lifetime through LocalLibraryRuntime. Sharing avoids one
     // Room query and JSON projection per visible ViewModel.
     private val snapshotScope = CoroutineScope(SupervisorJob() + Dispatchers.Default)
     private val activeTrackRows = dao.observeTracks()
@@ -554,7 +482,7 @@ internal class AndroidLibrarySyncStore(
     val libraryAnalysisEnabled: Flow<Boolean> = dao.observeLibraryAnalysisEnabled().map { it == true }.distinctUntilChanged()
     val moodRadioEligibleTrackIds: Flow<Set<String>> = combine(libraryAnalysisEnabled, dao.observeActiveAnalysisDocuments()) { enabled, documents ->
         if (!enabled) emptySet() else documents.mapNotNull { document ->
-            val value = runCatching { LibrarySyncProtocol.json.parseToJsonElement(document.rawJson).jsonObject }.getOrNull()
+            val value = runCatching { LibraryJson.json.parseToJsonElement(document.rawJson).jsonObject }.getOrNull()
             document.documentKey.takeIf { value != null && listOf("energy", "danceability", "brightness", "tempo").all { key -> value[key]?.jsonPrimitive?.contentOrNull?.toDoubleOrNull() != null } }
         }.toSet()
     }.distinctUntilChanged()
@@ -571,14 +499,14 @@ internal class AndroidLibrarySyncStore(
     suspend fun analysis(trackId: String): TrackAnalysis? = activeAnalyses()[trackId]
 
     suspend fun activeAnalyses(): Map<String, TrackAnalysis> = dao.activeAnalysisDocuments().mapNotNull { document ->
-        val value = runCatching { LibrarySyncProtocol.json.parseToJsonElement(document.rawJson).jsonObject }.getOrNull() ?: return@mapNotNull null
+        val value = runCatching { LibraryJson.json.parseToJsonElement(document.rawJson).jsonObject }.getOrNull() ?: return@mapNotNull null
         val lufs = value["loudness_lufs"]?.jsonPrimitive?.contentOrNull?.toFloatOrNull() ?: return@mapNotNull null
         val peak = value["true_peak"]?.jsonPrimitive?.contentOrNull?.toFloatOrNull() ?: return@mapNotNull null
         document.documentKey to TrackAnalysis(lufs, peak)
     }.toMap()
     suspend fun moodRadioTracks(): List<MoodRadioTrack> {
         val features = dao.activeAnalysisDocuments().associate { document ->
-            val value = runCatching { LibrarySyncProtocol.json.parseToJsonElement(document.rawJson).jsonObject }.getOrDefault(JsonObject(emptyMap()))
+            val value = runCatching { LibraryJson.json.parseToJsonElement(document.rawJson).jsonObject }.getOrDefault(JsonObject(emptyMap()))
             document.documentKey to listOf("energy", "danceability", "brightness", "tempo").map { key -> value[key]?.jsonPrimitive?.contentOrNull?.toDoubleOrNull() }
         }
         return tracks.first().map { track ->
@@ -589,7 +517,7 @@ internal class AndroidLibrarySyncStore(
     }
     val tracks: Flow<List<LibraryTrack>> = combine(activeTrackRows, projectedPlaylistMutations) { rows, pending ->
         val overrides = pending.mapNotNull { row ->
-            runCatching { LibrarySyncProtocol.json.decodeFromString(PlaylistMutationPayload.serializer(), row.payloadJson) }
+            runCatching { LibraryJson.json.decodeFromString(PlaylistMutationPayload.serializer(), row.payloadJson) }
                 .getOrNull()?.takeIf { row.operation == PlaylistMutationOperation.SET_FAVORITE.name }
                 ?.let { it.trackId to it.isFavorite }
         }.toMap()
@@ -611,7 +539,7 @@ internal class AndroidLibrarySyncStore(
                 trackNumber = row.trackNumber,
                 syncOrder = row.syncOrder,
                 metadataJson = overrides[row.id]?.let { favorite ->
-                    val root = runCatching { LibrarySyncProtocol.json.parseToJsonElement(row.rawJson).jsonObject }.getOrDefault(JsonObject(emptyMap()))
+                    val root = runCatching { LibraryJson.json.parseToJsonElement(row.rawJson).jsonObject }.getOrDefault(JsonObject(emptyMap()))
                     JsonObject(root + ("is_favorite" to JsonPrimitive(favorite))).toString()
                 } ?: row.rawJson,
                 artworkPath = row.artworkPath,
@@ -660,7 +588,7 @@ internal class AndroidLibrarySyncStore(
                 row.id,
                 row.name,
                 runCatching {
-                    (LibrarySyncProtocol.json.parseToJsonElement(row.trackIdsJson) as? JsonArray)
+                    (LibraryJson.json.parseToJsonElement(row.trackIdsJson) as? JsonArray)
                         .orEmpty().mapNotNull { (it as? JsonPrimitive)?.contentOrNull }
                 }.getOrDefault(emptyList()),
                 row.rawJson,
@@ -691,12 +619,12 @@ internal class AndroidLibrarySyncStore(
                 mutation.playlistId,
                 mutation.operation.name,
                 mutation.updatedAt,
-                LibrarySyncProtocol.json.encodeToString(PlaylistMutationPayload.serializer(), mutation.payload),
+                LibraryJson.json.encodeToString(PlaylistMutationPayload.serializer(), mutation.payload),
             ),
         )
     }
 
-    /** Applies the desired favorite state optimistically; the durable delta is reconciled on the next desktop Sync. */
+    /** Stores a favorite edit and projects it into the local playlist. */
     suspend fun setFavorite(trackId: String, favorite: Boolean) {
         val mutation = PlaylistMutation(
             mutationId = UUID.randomUUID().toString(),
@@ -717,7 +645,7 @@ internal class AndroidLibrarySyncStore(
         require(mutation.operation == PlaylistMutationOperation.CREATE) { "Expected playlist create mutation" }
         require(mutation.validationError() == null) { mutation.validationError() ?: "Invalid playlist mutation" }
         database.withTransaction {
-            dao.insertPlaylistMutation(PlaylistMutationEntity(mutation.mutationId, mutation.playlistId, mutation.operation.name, mutation.updatedAt, LibrarySyncProtocol.json.encodeToString(PlaylistMutationPayload.serializer(), mutation.payload)))
+            dao.insertPlaylistMutation(PlaylistMutationEntity(mutation.mutationId, mutation.playlistId, mutation.operation.name, mutation.updatedAt, LibraryJson.json.encodeToString(PlaylistMutationPayload.serializer(), mutation.payload)))
             if (artwork != null) {
                 require(!artworkMutationId.isNullOrBlank()) { "Artwork mutation ID is required" }
                 dao.insertPlaylistArtwork(PlaylistArtworkStagingEntity(artwork.sha256, artwork.mime, artwork.size, artwork.relativePath))
@@ -725,12 +653,11 @@ internal class AndroidLibrarySyncStore(
                     mutationId = artworkMutationId,
                     playlistId = mutation.playlistId,
                     operation = me.misa198.airmedy.sync.PlaylistMutationOperation.SET_ARTWORK,
-                    // Desktop applies mutations with a per-playlist LWW watermark.
                     // CREATE must precede SET_ARTWORK even when UUID order differs.
                     updatedAt = mutation.updatedAt + 1,
                     payload = PlaylistMutationPayload(artworkSha256 = artwork.sha256),
                 )
-                dao.insertPlaylistMutation(PlaylistMutationEntity(artworkMutation.mutationId, artworkMutation.playlistId, artworkMutation.operation.name, artworkMutation.updatedAt, LibrarySyncProtocol.json.encodeToString(PlaylistMutationPayload.serializer(), artworkMutation.payload)))
+                dao.insertPlaylistMutation(PlaylistMutationEntity(artworkMutation.mutationId, artworkMutation.playlistId, artworkMutation.operation.name, artworkMutation.updatedAt, LibraryJson.json.encodeToString(PlaylistMutationPayload.serializer(), artworkMutation.payload)))
             }
             dao.insertLocalPlaylist(LocalPlaylistEntity(mutation.playlistId, mutation.payload.name!!.trim(), mutation.mutationId, artworkSha256 = artwork?.sha256))
             initialTrackIds.distinct().filter(String::isNotBlank).forEachIndexed { index, trackId ->
@@ -741,22 +668,12 @@ internal class AndroidLibrarySyncStore(
                     updatedAt = mutation.updatedAt + 2 + index,
                     payload = PlaylistMutationPayload(trackId = trackId),
                 )
-                dao.insertPlaylistMutation(PlaylistMutationEntity(addMutation.mutationId, addMutation.playlistId, addMutation.operation.name, addMutation.updatedAt, LibrarySyncProtocol.json.encodeToString(PlaylistMutationPayload.serializer(), addMutation.payload)))
+                dao.insertPlaylistMutation(PlaylistMutationEntity(addMutation.mutationId, addMutation.playlistId, addMutation.operation.name, addMutation.updatedAt, LibraryJson.json.encodeToString(PlaylistMutationPayload.serializer(), addMutation.payload)))
             }
         }
     }
 
-    suspend fun markLocalPlaylistMutationsFailed(ids: List<String>) {
-        if (ids.isNotEmpty()) dao.setLocalPlaylistSyncState(ids, "failed")
-    }
-
-    suspend fun discardLocalPlaylistsForMutations(ids: List<String>) = database.withTransaction {
-        val playlistIds = dao.localPlaylistIdsForMutations(ids)
-        dao.deleteLocalPlaylists(playlistIds)
-        for (playlistId in playlistIds) dao.deletePlaylistMutations(playlistId)
-    }.also { cleanupAcknowledgedPlaylistArtwork() }
-
-    /** A rejected local-only playlist has no desktop state to delete; discard its failed queue instead. */
+    /** Discards a playlist and its queued edits after a legacy sync failure. */
     suspend fun discardFailedLocalPlaylist(playlistId: String): Boolean = database.withTransaction {
         if (dao.deleteFailedLocalPlaylist(playlistId) == 0) return@withTransaction false
         dao.deletePlaylistMutations(playlistId)
@@ -769,28 +686,10 @@ internal class AndroidLibrarySyncStore(
         dao.insertPlaylistArtwork(PlaylistArtworkStagingEntity(value.sha256, value.mime, value.size, value.relativePath))
     }
 
-    override suspend fun stagedPlaylistArtwork(sha256: String): StagedPlaylistArtwork? = dao.playlistArtwork(sha256)?.let { StagedPlaylistArtwork(it.sha256, it.mime, it.size, it.relativePath) }
-
     suspend fun stageArtistArtwork(value: StagedArtistArtwork) {
         require(value.sha256.matches(Regex("^[0-9a-f]{64}$")) && value.mime in setOf("image/jpeg", "image/png", "image/webp"))
         require(!value.relativePath.startsWith('/') && ".." !in value.relativePath.split('/'))
         dao.insertArtistArtwork(ArtistArtworkStagingEntity(value.artistId, value.sha256, value.mime, value.size, value.relativePath))
-    }
-
-    suspend fun clearArtistArtwork(artistId: String) = dao.deleteArtistArtwork(listOf(artistId))
-
-    override suspend fun pendingPlaylistMutations(): List<PlaylistMutation> = dao.pendingPlaylistMutations().mapNotNull(PlaylistMutationEntity::toPlaylistMutation)
-
-    override suspend fun acknowledgePlaylistMutations(results: List<PlaylistMutationResult>) {
-        if (results.isEmpty()) return
-        database.withTransaction {
-            results.groupBy { it.status.awaitingReplacementSnapshot() }.forEach { (awaitingSnapshot, grouped) ->
-                dao.setPlaylistMutationState(
-                    grouped.map(PlaylistMutationResult::mutationId),
-                    if (awaitingSnapshot) "awaiting_sync" else "acknowledged",
-                )
-            }
-        }
     }
 
     fun providerLyrics(trackId: String): Flow<String?> = dao.observeProviderLyrics(trackId)
@@ -801,107 +700,12 @@ internal class AndroidLibrarySyncStore(
         LyricsTrack(track.title, artist, track.album, metadata?.get("duration")?.jsonPrimitive?.contentOrNull?.toIntOrNull() ?: 0, audioPath = track.audioPath.orEmpty())
     }
 
-    override suspend fun prepare(request: LibrarySyncRequest, manifest: LibrarySyncManifest) {
-        database.withTransaction {
-            val cachedPaths = buildMap {
-                dao.committedAssets().forEach { asset ->
-                    cachedAssetPath(filesDir, asset)?.let { put(asset.sha256 to asset.size, it) }
-                }
-            }
-            dao.insertPlan(SyncPlanEntity(request.planId, request.desktopId, LibrarySyncProtocol.json.encodeToString(LibrarySyncManifest.serializer(), manifest), "staging", false))
-            dao.insertAssets(manifest.assets.orEmpty().map { asset ->
-                val cachedPath = cachedPaths[asset.sha256 to asset.size]
-                SyncAssetEntity(request.planId, asset.id, asset.kind, asset.sha256, asset.size, cachedPath)
-            })
-            val tracks = manifest.tracks.orEmpty().mapIndexedNotNull { index, track -> track.toTrack(request.planId, index) }
-            dao.insertTracks(tracks)
-            dao.mergeActiveTrackPlayCounts(request.planId)
-            val pending = dao.pendingPlaylistMutations().mapNotNull { row -> runCatching {
-                PlaylistMutation(row.mutationId, row.playlistId, PlaylistMutationOperation.valueOf(row.operation), row.updatedAt,
-                    LibrarySyncProtocol.json.decodeFromString(PlaylistMutationPayload.serializer(), row.payloadJson))
-            }.getOrNull() }
-            val playlists = mergePlaylistSnapshot(manifest.playlists.orEmpty(), manifest.scope, pending).mapNotNull { it.toPlaylist(request.planId) }
-            dao.insertPlaylists(playlists)
-            dao.deleteSearchDocuments(request.planId)
-            dao.insertSearchDocuments(searchDocumentsFor(request.planId, tracks, playlists))
-            dao.insertDocuments(manifest.lyrics.entries.map { SyncDocumentEntity(request.planId, "lyric", it.key, it.value.toString()) })
-            dao.insertDocuments(manifest.analysis.entries.map { SyncDocumentEntity(request.planId, "analysis", it.key, it.value.toString()) })
-        }
-    }
-
-    override suspend fun isAssetCommitted(planId: String, asset: LibrarySyncAsset): Boolean =
-        dao.asset(planId, asset.id)?.let {
-            it.sha256 == asset.sha256 && it.size == asset.size && cachedAssetPath(filesDir, it) != null
-        } == true
-
-    override suspend fun cachedAssetContents(): Set<LibrarySyncAssetContent> = dao.committedAssets().mapNotNull { asset ->
-        cachedAssetPath(filesDir, asset)?.let { LibrarySyncAssetContent(asset.sha256, asset.size) }
-    }.toSet()
-
-    override suspend fun stageAsset(planId: String, asset: LibrarySyncAsset, pulled: PulledAsset) {
-        require(pulled.sha256.equals(asset.sha256, ignoreCase = true) && pulled.size == asset.size) { "Invalid downloaded asset" }
-        require(!pulled.relativePath.startsWith('/') && ".." !in pulled.relativePath.split('/')) { "Invalid asset path" }
-        require(File(filesDir, pulled.relativePath).isFile) { "Downloaded asset is missing" }
-        dao.setAssetPathsByHash(planId, asset.sha256, asset.size, pulled.relativePath)
-    }
-
-    override suspend fun activate(planId: String): List<String> = database.withTransaction {
-        check(dao.missingAssetCount(planId) == 0) { "Plan has missing assets" }
-        dao.deactivatePlans()
-        dao.activatePlan(planId)
-        dao.deleteLocalPlaylistsInPlan(planId)
-        dao.deleteAwaitingDeletedLocalPlaylists()
-        dao.acknowledgeAwaitingPlaylistMutations()
-        dao.assetIds(planId)
-    }
-
-    override suspend fun finalize(planId: String) {
-        val (stale, activePaths) = database.withTransaction {
-            val active = dao.assetPaths(planId).toSet()
-            dao.staleAssets(planId).also {
-                dao.deleteStaleAssets(planId)
-                dao.deleteStaleTracks(planId)
-                dao.deleteStalePlaylists(planId)
-                dao.deleteStaleSearchDocuments(planId)
-                dao.deleteStaleDocuments(planId)
-                dao.deleteProviderLyricsNotInPlan(planId)
-                dao.deleteStalePlans(planId)
-            } to active
-        }
-        stale.forEach { asset ->
-            asset.relativePath
-                ?.takeUnless { it in activePaths }
-                ?.let { File(filesDir, it).delete() }
-        }
-        cleanupAcknowledgedPlaylistArtwork()
-    }
-
-    override suspend fun discard(planId: String) {
-        val (assets, referencedPaths) = database.withTransaction {
-            val planAssets = dao.assets(planId)
-            val otherPaths = dao.assetPathsExcept(planId).toSet()
-            dao.deleteAssets(planId)
-            dao.deleteTracks(planId)
-            dao.deletePlaylists(planId)
-            dao.deleteSearchDocuments(planId)
-            dao.deleteDocuments(planId)
-            dao.deleteInactivePlan(planId)
-            planAssets to otherPaths
-        }
-        assets.forEach { asset ->
-            asset.relativePath
-                ?.takeUnless { it in referencedPaths }
-                ?.let { File(filesDir, it).delete() }
-        }
-    }
-
     /**
      * Replaces the active library with a locally scanned [snapshot] in one transaction:
      * a fresh `local-<uuid>` plan is written (assets, tracks, search index), activated,
      * then stale plans/assets/tracks/playlists/search docs plus provider lyrics for
-     * removed tracks are reaped. Desktop activate() side effects are skipped: locally
-     * created playlists and pending favorite mutations survive a rescan because track
-     * ids are MediaStore-stable. Only artwork files owned by this app are deleted.
+     * removed tracks are reaped. Locally created playlists and favorite edits
+     * survive a rescan because track IDs are MediaStore-stable. Only artwork files owned by this app are deleted.
      */
     suspend fun writeLocalLibrary(
         snapshot: LocalLibrarySnapshot,
@@ -911,7 +715,7 @@ internal class AndroidLibrarySyncStore(
         val planId = "local-${UUID.randomUUID()}"
         val artworkKeys = artworkRows.mapTo(mutableSetOf(), LocalScanArtwork::artworkKey)
         val (stale, activePaths) = database.withTransaction {
-            dao.insertPlan(SyncPlanEntity(planId, LocalDesktopId, localLibraryManifest(planId), "staging", false))
+            dao.insertPlan(SyncPlanEntity(planId, LocalLibraryOwnerId, localLibraryManifest(planId), "staging", false))
             val playCounts = dao.trackPlayCounts().associate { it.trackId to it.playCount }
             dao.insertAssets(buildList {
                 audioRows.forEach { (trackId, row) ->
@@ -1010,40 +814,11 @@ internal class AndroidLibrarySyncStore(
         dao.deleteOldPlaybackAttempts(beforeMs)
     }
 
-    override suspend fun listeningSnapshot(reconciliationId: String, sinceMs: Long) = ListeningSyncSnapshot(
-        reconciliationId = reconciliationId,
-        sessions = dao.listeningSessionsSince(sinceMs).map { ListeningSession(it.id, it.sourceDeviceId, it.trackId, it.startedAt, it.endedAt, it.listenedSeconds, it.qualifiedPlay) },
-        attempts = dao.playbackAttemptsSince(sinceMs).map(PlaybackAttemptEntity::toModel),
-        dailyTracks = dao.dailyTrackStats().map { DailyTrackListeningStat(it.sourceDeviceId, it.localDate, it.trackId, it.listenedSeconds, it.playCount) },
-        dailyAttempts = dao.dailyAttemptStats().map { DailyPlaybackAttemptStat(it.sourceDeviceId, it.localDate, it.attempts, it.completed, it.skipped, it.stopped, it.listenedSeconds) },
-    )
-
-    override suspend fun mergeListeningSnapshot(snapshot: ListeningSyncSnapshot) = database.withTransaction {
-        snapshot.sessions.forEach { dao.insertListeningSession(it.toEntity()) }
-        snapshot.attempts.filter { it.endReason != null }.forEach { dao.insertPlaybackAttempt(it.toEntity()) }
-        snapshot.dailyTracks.forEach { dao.mergeDailyTrackStat(it.sourceDeviceId, it.localDate, it.trackId, it.listenedSeconds, it.playCount) }
-        snapshot.dailyAttempts.forEach { dao.mergeDailyAttemptStat(it.sourceDeviceId, it.localDate, it.attempts, it.completed, it.skipped, it.stopped, it.listenedSeconds) }
-    }
-
-    suspend fun clearAll() {
-        val assets = database.withTransaction {
-            val stale = dao.staleAssets("__never_matches__")
-            dao.deleteStaleAssets("__never_matches__"); dao.deleteStaleTracks("__never_matches__"); dao.deleteStalePlaylists("__never_matches__"); dao.deleteStaleSearchDocuments("__never_matches__"); dao.deleteStaleDocuments("__never_matches__"); dao.deleteStalePlans("__never_matches__")
-            dao.deleteListeningSessions()
-            dao.deleteProviderLyrics()
-            dao.deletePlaybackAttempts()
-            dao.deleteDailyTrackStats()
-            dao.deleteDailyAttemptStats()
-            stale
-        }
-        assets.forEach { it.relativePath?.let { path -> File(filesDir, path).delete() } }
-    }
-
     private suspend fun cleanupAcknowledgedPlaylistArtwork() {
         val staged = dao.observePlaylistArtwork().first()
         val unused = unusedPlaylistArtworkHashes(
             staged.map(PlaylistArtworkStagingEntity::sha256),
-            pendingPlaylistMutations(),
+            dao.pendingPlaylistMutations().mapNotNull(PlaylistMutationEntity::toPlaylistMutation),
             dao.observeLocalPlaylists().first().mapNotNull(LocalPlaylistEntity::artworkSha256),
         )
         if (unused.isEmpty()) return
@@ -1052,38 +827,6 @@ internal class AndroidLibrarySyncStore(
         paths.forEach { File(filesDir, it).delete() }
     }
 
-    private fun JsonObject.toTrack(planId: String, syncOrder: Int): SyncTrackEntity? {
-        val id = string("id") ?: return null
-        val playCount = (this["play_count"] as? JsonPrimitive)?.contentOrNull?.toIntOrNull() ?: 0
-        val createdAt = (this["created_at"] as? JsonPrimitive)?.contentOrNull
-            ?: (this["mtime"] as? JsonPrimitive)?.contentOrNull
-            ?: ""
-        return SyncTrackEntity(
-            planId = planId,
-            trackId = id,
-            title = trackDisplayTitle(string("title").orEmpty()),
-            artists = trackDisplayArtists(arrayNames("artists")),
-            album = (this["album"] as? JsonObject)?.string("title") ?: "",
-            albumId = (this["album"] as? JsonObject)?.string("id") ?: "",
-            artworkKey = string("artwork_key"),
-            playCount = playCount,
-            createdAt = createdAt,
-            discNumber = int("disc_number"),
-            trackNumber = int("track_number"),
-            syncOrder = syncOrder,
-            rawJson = toString(),
-        )
-    }
-
-    private fun JsonObject.toPlaylist(planId: String): SyncPlaylistEntity? {
-        val playlist = this["playlist"] as? JsonObject ?: return null
-        val id = playlist.string("id") ?: return null
-        return SyncPlaylistEntity(planId, id, playlist.string("name") ?: "", (this["track_ids"] as? JsonArray)?.toString() ?: "[]", toString())
-    }
-
-    private fun JsonObject.arrayNames(name: String): String = ((this[name] as? JsonArray).orEmpty()).mapNotNull { (it as? JsonObject)?.string("name") }.joinToString(", ")
-
-    private fun JsonObject.int(name: String): Int = (this[name] as? JsonPrimitive)?.contentOrNull?.toIntOrNull() ?: 0
 }
 
 private fun ListeningSession.toEntity() = ListeningSessionEntity(id, sourceDeviceId, trackId, startedAt, endedAt, listenedSeconds, qualifiedPlay)
@@ -1110,61 +853,17 @@ internal fun splitListeningByDate(startedAt: Long, endedAt: Long, seconds: Int):
     return result.ifEmpty { mapOf(localDate(startedAt) to seconds) }
 }
 
-/** Pending deltas overlay the incoming snapshot until desktop sends a terminal acknowledgement. */
-internal fun mergePlaylistSnapshot(snapshot: List<JsonObject>, scope: JsonObject, pending: List<PlaylistMutation>): List<JsonObject> {
-    val allowed: (String) -> Boolean = when (scope.string("kind")) {
-        "all" -> { _: String -> true }
-        "playlists" -> {
-            val ids = (scope["selected_ids"] as? JsonArray).orEmpty().mapNotNull { (it as? JsonPrimitive)?.contentOrNull }.toSet()
-            ({ id: String -> id in ids })
-        }
-        else -> { _: String -> false }
-    }
-    val playlists = linkedMapOf<String, JsonObject>()
-    snapshot.forEach { item -> (item["playlist"] as? JsonObject)?.string("id")?.let { playlists[it] = item } }
-    pending.filter { allowed(it.playlistId) }.forEach { mutation ->
-        val current = playlists[mutation.playlistId]
-        when (mutation.operation) {
-            PlaylistMutationOperation.DELETE -> playlists.remove(mutation.playlistId)
-            PlaylistMutationOperation.CREATE -> if (current == null) playlists[mutation.playlistId] = playlistSnapshot(mutation, emptyList())
-            PlaylistMutationOperation.UPDATE -> if (current != null) playlists[mutation.playlistId] = playlistSnapshot(mutation, trackIds(current), current)
-            PlaylistMutationOperation.ADD_TRACK, PlaylistMutationOperation.REMOVE_TRACK, PlaylistMutationOperation.MOVE_TRACK -> if (current != null) {
-                val ids = trackIds(current).toMutableList(); val track = mutation.payload.trackId ?: return@forEach
-                when (mutation.operation) {
-                    PlaylistMutationOperation.ADD_TRACK -> if (track !in ids) ids.add(track)
-                    PlaylistMutationOperation.REMOVE_TRACK -> ids.remove(track)
-                    PlaylistMutationOperation.MOVE_TRACK -> {
-                        ids.remove(track)
-                        val previous = mutation.payload.previousTrackId
-                        val next = mutation.payload.nextTrackId
-                        val index = next?.let(ids::indexOf)?.takeIf { it >= 0 }
-                            ?: previous?.let(ids::indexOf)?.takeIf { it >= 0 }?.plus(1)
-                            ?: ids.size
-                        ids.add(index.coerceIn(0, ids.size), track)
-                    }
-                    else -> Unit
-                }
-                playlists[mutation.playlistId] = playlistSnapshot(mutation, ids, current)
-            }
-            else -> Unit
-        }
-    }
-    return playlists.values.toList()
-}
-
-private fun trackIds(value: JsonObject): List<String> = ((value["track_ids"] as? JsonArray).orEmpty()).mapNotNull { (it as? JsonPrimitive)?.contentOrNull }
-
 private fun PlaylistMutationEntity.toPlaylistMutation(): PlaylistMutation? = runCatching {
     PlaylistMutation(
         mutationId,
         playlistId,
         PlaylistMutationOperation.valueOf(operation),
         updatedAt,
-        LibrarySyncProtocol.json.decodeFromString(PlaylistMutationPayload.serializer(), payloadJson),
+        LibraryJson.json.decodeFromString(PlaylistMutationPayload.serializer(), payloadJson),
     )
 }.getOrNull()
 
-/** Reflects pending playlist deltas locally until desktop acknowledges them. */
+/** Applies stored playlist edits to the library snapshot. */
 internal fun applyPendingPlaylistMutations(
     playlists: List<LibraryPlaylist>,
     pending: List<PlaylistMutation>,
@@ -1204,31 +903,17 @@ internal fun applyPendingPlaylistMutations(
     return projected.values.toList()
 }
 
-internal fun PlaylistMutationStatus.awaitingReplacementSnapshot() = this in setOf(
-    PlaylistMutationStatus.APPLIED,
-    PlaylistMutationStatus.DUPLICATE,
-)
-
 internal fun unusedPlaylistArtworkHashes(staged: List<String>, pending: List<PlaylistMutation>, localArtwork: List<String>): List<String> {
     val referenced = pending.mapNotNull { it.payload.artworkSha256 }.toSet() + localArtwork
     return staged.filter { it !in referenced }
 }
 
 private fun LibraryPlaylist.withPlaylistArtworkKey(key: String?): String {
-    val root = runCatching { LibrarySyncProtocol.json.parseToJsonElement(metadataJson) as? JsonObject }.getOrNull()
+    val root = runCatching { LibraryJson.json.parseToJsonElement(metadataJson) as? JsonObject }.getOrNull()
         ?: JsonObject(emptyMap())
     val container = (root["playlist"] as? JsonObject)?.toMutableMap() ?: linkedMapOf()
     if (key == null) container.remove("artwork_key") else container["artwork_key"] = JsonPrimitive(key)
-    return LibrarySyncProtocol.json.encodeToString(JsonObject(root.toMutableMap().apply { put("playlist", JsonObject(container)) }))
-}
-
-private fun playlistSnapshot(mutation: PlaylistMutation, tracks: List<String>, current: JsonObject? = null): JsonObject {
-    val playlist = ((current?.get("playlist") as? JsonObject)?.toMutableMap() ?: linkedMapOf()).apply {
-        put("id", JsonPrimitive(mutation.playlistId))
-        mutation.payload.name?.let { put("name", JsonPrimitive(it)) }
-        mutation.payload.description?.let { put("description", JsonPrimitive(it)) }
-    }
-    return JsonObject(linkedMapOf("playlist" to JsonObject(playlist), "track_ids" to JsonArray(tracks.map(::JsonPrimitive))))
+    return LibraryJson.json.encodeToString(JsonObject(root.toMutableMap().apply { put("playlist", JsonObject(container)) }))
 }
 
 internal fun libraryArtistsFrom(
@@ -1237,7 +922,7 @@ internal fun libraryArtistsFrom(
 ): List<LibraryArtist> {
     val artists = linkedMapOf<String, LibraryArtist>()
     tracks.forEach { track ->
-        val root = runCatching { LibrarySyncProtocol.json.parseToJsonElement(track.rawJson) as? JsonObject }.getOrNull()
+        val root = runCatching { LibraryJson.json.parseToJsonElement(track.rawJson) as? JsonObject }.getOrNull()
             ?: return@forEach
         ((root["artists"] as? JsonArray).orEmpty()).forEach { value ->
             val artist = value as? JsonObject ?: return@forEach
@@ -1281,7 +966,7 @@ internal fun libraryAlbumsFrom(
 ): List<LibraryAlbum> {
     val albums = linkedMapOf<String, LibraryAlbum>()
     tracks.forEach { track ->
-        val root = runCatching { LibrarySyncProtocol.json.parseToJsonElement(track.rawJson) as? JsonObject }.getOrNull()
+        val root = runCatching { LibraryJson.json.parseToJsonElement(track.rawJson) as? JsonObject }.getOrNull()
             ?: return@forEach
         val album = root["album"] as? JsonObject ?: return@forEach
         val id = album.string("id")?.takeIf(String::isNotBlank) ?: return@forEach
@@ -1322,7 +1007,7 @@ internal fun libraryGenresFrom(
 ): List<LibraryGenre> {
     val genres = linkedMapOf<String, LibraryGenre>()
     tracks.forEach { track ->
-        val root = runCatching { LibrarySyncProtocol.json.parseToJsonElement(track.rawJson) as? JsonObject }.getOrNull()
+        val root = runCatching { LibraryJson.json.parseToJsonElement(track.rawJson) as? JsonObject }.getOrNull()
             ?: return@forEach
 
         fun addGenre(id: String, rawName: String, sortName: String, createdAt: String) {
@@ -1365,7 +1050,7 @@ internal fun libraryComposersFrom(
     val composers = linkedMapOf<String, LibraryComposer>()
     val composerIdsByName = mutableMapOf<String, String>()
     tracks.forEach { track ->
-        val root = runCatching { LibrarySyncProtocol.json.parseToJsonElement(track.rawJson) as? JsonObject }.getOrNull()
+        val root = runCatching { LibraryJson.json.parseToJsonElement(track.rawJson) as? JsonObject }.getOrNull()
             ?: return@forEach
 
         fun addComposer(rawId: String, rawName: String, sortName: String, artworkKey: String?, createdAt: String) {
@@ -1416,11 +1101,6 @@ internal fun libraryComposersFrom(
     return composers.values.toList()
 }
 
-internal fun cachedAssetPath(filesDir: File, asset: SyncAssetEntity?): String? = asset
-    ?.relativePath
-    ?.takeIf { !it.startsWith('/') && ".." !in it.split('/') }
-    ?.takeIf { File(filesDir, it).isFile }
-
 private fun JsonObject.string(name: String): String? = (this[name] as? JsonPrimitive)?.contentOrNull
 
 private fun JsonObject.int(name: String): Int = (this[name] as? JsonPrimitive)?.contentOrNull?.toIntOrNull() ?: 0
@@ -1434,7 +1114,7 @@ private fun JsonObject.arraySortNames(name: String): String = ((this[name] as? J
     .joinToString(", ")
 
 private fun LibraryTrackRow.metadataObject(): JsonObject? = runCatching {
-    LibrarySyncProtocol.json.parseToJsonElement(rawJson) as? JsonObject
+    LibraryJson.json.parseToJsonElement(rawJson) as? JsonObject
 }.getOrNull()
 
 private fun searchDocumentsFor(
@@ -1448,7 +1128,7 @@ private fun searchDocumentsFor(
         documents[type to id] = LibrarySearchDocumentEntity(planId, type, id, searchIndexText(values.joinToString(" ")))
     }
     tracks.forEach { track ->
-        val root = runCatching { LibrarySyncProtocol.json.parseToJsonElement(track.rawJson).jsonObject }.getOrNull() ?: return@forEach
+        val root = runCatching { LibraryJson.json.parseToJsonElement(track.rawJson).jsonObject }.getOrNull() ?: return@forEach
         add("track", track.trackId, track.title, track.artists, track.album, root.searchMetadataValues("genres", "genre", "raw_genre_names", "raw_genres", "genre_names").joinToString(" "))
         (root["artists"] as? JsonArray).orEmpty().forEach { artist ->
             (artist as? JsonObject)?.let { add("artist", it.string("id").orEmpty(), it.string("name").orEmpty()) }
@@ -1461,7 +1141,7 @@ private fun searchDocumentsFor(
         }
     }
     playlists.forEach { playlist ->
-        val root = runCatching { LibrarySyncProtocol.json.parseToJsonElement(playlist.rawJson).jsonObject }.getOrNull()
+        val root = runCatching { LibraryJson.json.parseToJsonElement(playlist.rawJson).jsonObject }.getOrNull()
         add("playlist", playlist.playlistId, playlist.name, root.searchMetadataValues("description", "playlist").joinToString(" "))
     }
     return documents.values.toList()
@@ -1494,12 +1174,12 @@ internal fun searchFtsMatch(query: String): String? = SearchIndexTokens.findAll(
     .joinToString(" AND ")
     .takeIf(String::isNotEmpty)
 
-private const val LocalDesktopId = "local"
+private const val LocalLibraryOwnerId = "local"
 
 /** Minimal canonical manifest for a locally scanned plan; only the analysis flag is read. */
 private fun localLibraryManifest(planId: String): String {
     val revision = sha256Hex("local-library:$planId")
-    val manifest = LibrarySyncManifest(
+    val manifest = LibraryPlanManifest(
         version = 1,
         planId = planId,
         revision = revision,
@@ -1511,5 +1191,5 @@ private fun localLibraryManifest(planId: String): String {
         assets = null,
         libraryAnalysisEnabled = false,
     )
-    return LibrarySyncProtocol.json.encodeToString(LibrarySyncManifest.serializer(), manifest)
+    return LibraryJson.json.encodeToString(LibraryPlanManifest.serializer(), manifest)
 }

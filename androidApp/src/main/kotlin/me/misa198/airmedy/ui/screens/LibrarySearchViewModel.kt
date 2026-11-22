@@ -27,7 +27,7 @@ import me.misa198.airmedy.sync.LibraryComposer
 import me.misa198.airmedy.sync.LibraryPlaylist
 import me.misa198.airmedy.sync.LibraryTrack
 import me.misa198.airmedy.sync.LibrarySearchCandidate
-import me.misa198.airmedy.sync.LibrarySyncProtocol
+import me.misa198.airmedy.sync.LibraryJson
 import me.misa198.airmedy.sync.metadataObject
 import me.misa198.airmedy.ui.libraryAlphabeticalComparator
 
@@ -129,7 +129,7 @@ private fun trackGenres(track: LibraryTrack): List<String> = track.metadataObjec
 )
 
 private fun playlistDescription(playlist: LibraryPlaylist): String = runCatching {
-    LibrarySyncProtocol.json.parseToJsonElement(playlist.metadataJson) as? JsonObject
+    LibraryJson.json.parseToJsonElement(playlist.metadataJson) as? JsonObject
 }.getOrNull().metadataValues("description", "playlist").joinToString(" ")
 
 private fun JsonObject?.metadataValues(vararg keys: String): List<String> = keys.flatMap { key ->
