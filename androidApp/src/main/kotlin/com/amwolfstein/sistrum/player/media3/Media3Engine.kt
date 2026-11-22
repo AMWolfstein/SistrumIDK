@@ -58,6 +58,7 @@ internal class Media3Engine(
             val mediaId = mediaItem?.mediaId
             val incoming = if (mediaId != null) preloadedByMediaId[mediaId] else null
             if (incoming != null) {
+                currentItem = incoming
                 pendingEvents += EngineEvent.GaplessAdvanced(incoming)
             }
             endedArmed = true
@@ -75,7 +76,10 @@ internal class Media3Engine(
             if (prepared) {
                 val extension = currentItem?.audioPath?.substringAfterLast('.', "") ?: ""
                 val format = player?.audioFormat?.sampleMimeType ?: extension.ifEmpty { "unknown" }
-                pendingEvents += EngineEvent.Error("platform", format, error)
+                val provider = currentItem?.let { item ->
+                    factory.providerRecorder.providerFor(Uri.fromFile(File(item.audioPath)).toString())
+                } ?: "platform"
+                pendingEvents += EngineEvent.Error(provider, format, error)
             }
         }
     }

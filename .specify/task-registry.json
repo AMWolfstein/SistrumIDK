@@ -1,8 +1,8 @@
 {
   "missions": {},
-  "next_completion": 12,
+  "next_completion": 13,
   "next_mission": 1,
-  "next_tor": 12,
+  "next_tor": 13,
   "tasks": {
     "TOR001": {
       "completion": 1,
@@ -179,6 +179,22 @@
       "record": ".specify/quick-tasks/TOR011.md",
       "status": "complete",
       "title": "Port Media3 M3 selectable playback engine"
+    },
+    "TOR012": {
+      "completion": 12,
+      "evidence": {
+        "checks": "DevDebug host and instrumentation Kotlin compilation; Git whitespace",
+        "result": "PASS",
+        "reviewer": "tor_review",
+        "round": 1
+      },
+      "final": false,
+      "kind": "TOR",
+      "mission": null,
+      "nonce": "2d0e3be4562a4f70a662b01da5679ee9",
+      "record": ".specify/quick-tasks/TOR012.md",
+      "status": "complete",
+      "title": "Port Media3 M4 decoder registry and scanning"
     }
   },
   "version": 1

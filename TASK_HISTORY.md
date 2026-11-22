@@ -11,3 +11,4 @@
 - TOR009 — Port Media3 M1 playback test setup
 - TOR010 — Port Media3 M2 playback engine boundary
 - TOR011 — Port Media3 M3 selectable playback engine
+- TOR012 — Port Media3 M4 decoder registry and scanning
