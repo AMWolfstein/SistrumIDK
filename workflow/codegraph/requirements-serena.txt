@@ -1,0 +1,5 @@
+# Optional semantic verifier, separate from application dependencies.
+serena-agent==2.1.0
+mcp==2.2.0
+# Language-server launcher used by Serena.
+uv==0.13.10
