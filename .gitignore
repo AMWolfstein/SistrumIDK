@@ -23,3 +23,13 @@ androidApp/src/main/jniLibs/
 !*.xcworkspace/contents.xcworkspacedata
 **/xcshareddata/WorkspaceSettings.xcsettings
 node_modules/
+
+# Generated Android and local build artifacts
+/androidApp/src/main/res/font/material_symbols_rounded.ttf
+/androidApp/prod/
+/androidApp/staging/
+*.apk
+*.aab
+__pycache__/
+*.pyc
+/iosApp/DerivedData/

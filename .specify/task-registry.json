@@ -1,8 +1,8 @@
 {
   "missions": {},
-  "next_completion": 2,
+  "next_completion": 3,
   "next_mission": 1,
-  "next_tor": 2,
+  "next_tor": 3,
   "tasks": {
     "TOR001": {
       "completion": 1,
@@ -19,6 +19,22 @@
       "record": ".specify/quick-tasks/TOR001.md",
       "status": "complete",
       "title": "Import the upstream Airmedy mobile baseline"
+    },
+    "TOR002": {
+      "completion": 2,
+      "evidence": {
+        "checks": "Bash syntax, mocked host and SDK paths, output and failure handling, Git ignore checks, and independent review passed",
+        "result": "PASS",
+        "reviewer": "tor_review",
+        "round": 1
+      },
+      "final": false,
+      "kind": "TOR",
+      "mission": null,
+      "nonce": "0ccbd75cd1ac45198f1032c673d2720c",
+      "record": ".specify/quick-tasks/TOR002.md",
+      "status": "complete",
+      "title": "Add the Android FFmpeg build helper"
     }
   },
   "version": 1

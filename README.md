@@ -160,7 +160,7 @@ This policy applies throughout the app, including fullscreen playback. Back and 
 
 ## Commands
 
-Run from `mobile/`:
+Run from the repository root after preparing FFmpeg:
 
 ```bash
 ./gradlew :androidApp:assembleDevDebug
@@ -203,12 +203,13 @@ See [release discovery](../releases/README.md) for the manifest contract and the
 Android playback uses FFmpeg directly for local synced audio: FFmpeg demuxes and
 decodes every enabled music format, then the native player sends float PCM to
 AAudio. It does not use a Media3 or platform-decoder fallback. All Android app
-variants require `../scripts/build-ffmpeg-android.sh arm64-v8a` to have run
-first. It downloads the pinned FFmpeg 9.0.2 tarball to a temporary cache and writes generated
+variants require `scripts/build-ffmpeg-android.sh arm64-v8a` to have run
+first. It downloads the pinned FFmpeg 9.0.2 tarball to a temporary build directory and writes generated
 headers and `.so` files below `androidApp/build/` and `androidApp/src/main/jniLibs/`.
 Those artifacts are ignored by Git. The build requires Android NDK 30.0.16248370.
 
-For a manual rebuild, run from the repository root:
+For a manual rebuild on Linux or macOS, set `sdk.dir` in root `local.properties`
+or set `ANDROID_HOME` (or `ANDROID_SDK_ROOT`). Then run from the repository root:
 
 ```bash
 bash scripts/build-ffmpeg-android.sh arm64-v8a
@@ -221,17 +222,7 @@ network protocols. It is LGPL-only: it does not enable GPL or nonfree components
 Release attribution must provide the matching FFmpeg source archive, configure
 line, and any patches.
 
-Or, from the repository root:
-
-```bash
-./mobile/gradlew :androidApp:assembleDevDebug
-./mobile/gradlew :androidApp:assembleProdDebug
-./mobile/gradlew :sharedLogic:testAndroidHostTest
-```
-
-The repository-root `task verify` command covers desktop Go/Vue code only.
-Mobile changes must run the relevant Gradle build and tests above, plus any
-feature-specific Android host or UI test task.
+Use the Gradle commands above after preparing the FFmpeg artifacts.
 
 ## Offline lyric romanization
 
