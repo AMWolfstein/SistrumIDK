@@ -6,6 +6,7 @@ import androidx.datastore.preferences.core.booleanPreferencesKey
 import androidx.datastore.preferences.core.intPreferencesKey
 import androidx.datastore.preferences.preferencesDataStore
 import kotlinx.coroutines.flow.Flow
+import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.flow.map
 
 internal val Context.playbackPreferencesDataStore by preferencesDataStore(name = "playback_preferences")
@@ -33,7 +34,7 @@ internal class PlaybackPreferences(private val context: Context) {
             ),
             blendArtworkDuringCrossfade = preferences[BlendArtworkDuringCrossfadeKey] ?: true,
         )
-    }
+    }.distinctUntilChanged()
 
     val livingArtworkBackground: Flow<Boolean> = context.playbackPreferencesDataStore.data.map {
         it[LivingArtworkBackgroundKey] ?: true

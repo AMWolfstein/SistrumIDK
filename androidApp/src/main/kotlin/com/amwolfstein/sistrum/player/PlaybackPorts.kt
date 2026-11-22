@@ -10,7 +10,7 @@ internal interface NowPlayingPort {
     fun publishNowPlaying(item: PlaybackItem, state: TransportState, positionMs: Long, durationMs: Long, activeQueueItemId: Long)
     fun setTransportState(state: TransportState, positionMs: Long, activeQueueItemId: Long)
     fun deactivate()
-    suspend fun publishQueue(snapshot: PlaybackQueueSnapshot)
+    suspend fun publishQueue(snapshot: PlaybackQueueSnapshot, window: List<QueueWindowEntry>)
     fun showForeground(item: PlaybackItem)
     fun updateNotification(item: PlaybackItem)
     fun stopForeground()
@@ -26,9 +26,12 @@ internal interface ScrobbleSink {
     fun reportPlayback(item: PlaybackItem, positionMs: Long, durationMs: Long)
 }
 
+internal data class SavedPosition(val trackId: String, val positionMs: Long)
+
 internal interface SessionStorePort {
     suspend fun load(): PlaybackSession?
     suspend fun save(session: PlaybackSession)
+    suspend fun savePosition(position: SavedPosition)
     suspend fun clear()
 }
 

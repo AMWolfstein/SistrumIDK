@@ -1,11 +1,15 @@
 package com.amwolfstein.sistrum.player
 
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CompletableDeferred
+import kotlinx.coroutines.CompletableJob
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Job
+import kotlinx.coroutines.currentCoroutineContext
+import kotlinx.coroutines.ensureActive
+import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
-import kotlinx.coroutines.sync.Mutex
-import kotlinx.coroutines.sync.withLock
+import java.io.File
 import com.amwolfstein.sistrum.mood.MoodRadioBatchSize
 import com.amwolfstein.sistrum.mood.MoodRadioRefillThreshold
 import com.amwolfstein.sistrum.mood.selectMoodRadio
@@ -15,6 +19,12 @@ import com.amwolfstein.sistrum.player.engine.PlayerEngine
 
 private const val DuckedFocusGain = 0.2f
 private const val PreviousRestartThresholdMs = 3_000L
+
+/** FR-064: hard cap on synchronous decode-failure skips so a failing queue cannot nest unbounded. */
+private const val MaxConsecutiveDecodeSkips = 20
+
+/** T035a: how often a light, position-only save is queued while playing. */
+internal const val PeriodicPositionSaveIntervalMs = 10_000L
 
 private val PreloadResyncActions = setOf(
     PlaybackService.ActionSetShuffle, PlaybackService.ActionSetRepeat, PlaybackService.ActionPlayNext,
@@ -30,7 +40,7 @@ internal class PlaybackCoordinator(
     private val scope: CoroutineScope,
     val queue: PlaybackQueue,
     private val flows: PlaybackFlows,
-    private val engineFactory: () -> PlayerEngine,
+    private val engineFactory: suspend () -> PlayerEngine,
     private val resolver: PlaybackItemResolver,
     private val library: LibraryPort,
     private val nowPlaying: NowPlayingPort,
@@ -42,12 +52,13 @@ internal class PlaybackCoordinator(
     private val log: PlaybackLog,
     val listeningTracker: ListeningTracker,
     private val nextArtworkCrossfadeId: () -> Long,
+    private val decodeFailures: DecodeFailureSink = DecodeFailureSink { },
 ) {
-    private val commandMutex = Mutex()
     private val restored = CompletableDeferred<Unit>()
     private var moodRadioSeedId: String? = null
     private var moodRadioLastRefillAttempt: Pair<String?, Int>? = null
     private var resumeOnFocusGain = false
+    private var focusHeld = false
 
     private var engine: PlayerEngine? = null
     private var preloadedItem: PlaybackItem? = null
@@ -59,11 +70,260 @@ internal class PlaybackCoordinator(
     private var listeningFadeMaxMs = 0L
     private var normalizationSettings = NormalizationSettings()
     private var equalizerSettings = EqualizerSettings()
+    // FR-092: de-duplicate preference re-emissions. A shared DataStore re-emits every
+    // settings flow on any write, so remember the last applied values and skip repeats.
+    private var appliedPlaybackSettings: Pair<Int, Boolean>? = null
+    private var appliedEqualizerSettings = EqualizerSettings()
     private var isDucked = false
+    private var pendingStart: PendingStart? = null
+    // FR-064: consecutive decode failures within one queue visit; bounds skip-to-next looping.
+    private var consecutiveDecodeFailures = 0
 
-    fun markRestored() { restored.complete(Unit) }
+    // FR-087: media-session queue window cache so a window republish does not re-resolve the library.
+    private var lastQueueWindow: List<Pair<Int, String>> = emptyList()
+    private var queueWindowItems: Map<String, PlaybackItem> = emptyMap()
 
-    suspend fun <T> withCommandLock(block: suspend () -> T): T = commandMutex.withLock { block() }
+    // FR-087: on-demand ordered session saver (no permanent coroutine).
+    private val saveLock = Any()
+    private var pendingSave: PlaybackSession? = null
+    private var pendingPosition: SavedPosition? = null
+    private var saving = false
+    private var drained: CompletableDeferred<Unit>? = null
+
+    // T035a: elapsed timestamp of the last queued full/position save, so the periodic
+    // position saver restarts its 10 s window after any full session save.
+    private var lastSessionSaveElapsedMs: Long = 0L
+
+    private val commandLock = Any()
+    private val commandQueue = ArrayDeque<Command>()
+    private val preRestoreCommands = ArrayDeque<Command>()
+    private var draining = false
+    private var drainerJob: Job? = null
+    private var shutDown = false
+
+    /** Invoked (outside the command lock) each time the drainer exits because the queue became empty. */
+    var onIdle: (() -> Unit)? = null
+
+    init {
+        scope.coroutineContext[Job]?.invokeOnCompletion { cancelAllPending() }
+    }
+
+    private sealed interface Command {
+        class Action(
+            val action: String,
+            val positionMs: Long,
+            val trackIds: List<String>,
+            val startIndex: Int,
+            val enabled: Boolean,
+            val repeat: RepeatMode?,
+            val job: CompletableJob,
+        ) : Command
+
+        class SelectIndex(val index: Long, val job: CompletableJob) : Command
+
+        class Block(val block: suspend () -> Any?, val result: CompletableDeferred<Any?>) : Command
+
+        fun cancel() {
+            when (this) {
+                is Action -> job.cancel()
+                is SelectIndex -> job.cancel()
+                is Block -> result.cancel()
+            }
+        }
+    }
+
+    /** A start whose Playing publication waits for the engine's [EngineEvent.OutputStarted]. */
+    private sealed interface PendingStart {
+        val item: PlaybackItem
+
+        /** A fresh track start (startTracking) or an output-recovery recreate (!startTracking). */
+        data class Fresh(override val item: PlaybackItem, val startTracking: Boolean) : PendingStart
+
+        /** A resume of the already-prepared item. */
+        data class Resume(override val item: PlaybackItem, val resumeListening: Boolean) : PendingStart
+    }
+
+    fun markRestored() {
+        synchronized(commandLock) {
+            // Completed under the lock so no command can overtake the held ones.
+            if (!restored.complete(Unit)) return
+            if (preRestoreCommands.isNotEmpty()) {
+                commandQueue.addAll(preRestoreCommands)
+                preRestoreCommands.clear()
+            }
+            if (!draining && commandQueue.isNotEmpty()) startDrainerLocked()
+        }
+    }
+
+    @Suppress("UNCHECKED_CAST")
+    suspend fun <T> withCommandLock(block: suspend () -> T): T {
+        currentCoroutineContext().ensureActive()
+        val result = CompletableDeferred<Any?>()
+        enqueue(Command.Block({ block() }, result))
+        try {
+            return result.await() as T
+        } catch (cancellation: CancellationException) {
+            result.cancel()
+            throw cancellation
+        }
+    }
+
+    private fun enqueue(command: Command) {
+        synchronized(commandLock) {
+            if (shutDown || scope.coroutineContext[Job]?.isActive == false) {
+                command.cancel()
+                return
+            }
+            if (command is Command.Action || command is Command.SelectIndex) {
+                if (!restored.isCompleted) {
+                    preRestoreCommands.addLast(command)
+                    return
+                }
+            }
+            commandQueue.addLast(command)
+            if (!draining) startDrainerLocked()
+        }
+    }
+
+    /** Starts the single drainer; if the scope is already dead the completion handler cancels everything. */
+    private fun startDrainerLocked() {
+        draining = true
+        val job = scope.launch { drain() }
+        drainerJob = job
+        job.invokeOnCompletion { cause ->
+            if (cause != null) cancelAllPending()
+        }
+    }
+
+    /**
+     * Stops accepting commands and cancels everything queued or in-flight. After it returns the
+     * coordinator no longer runs commands and every subsequent [enqueue] refuses immediately.
+     * Idempotent; safe to call again after it has returned.
+     */
+    suspend fun shutdown() {
+        val drainer = synchronized(commandLock) {
+            shutDown = true
+            commandQueue.forEach { it.cancel() }
+            commandQueue.clear()
+            preRestoreCommands.forEach { it.cancel() }
+            preRestoreCommands.clear()
+            drainerJob?.takeIf { it.isActive }
+        }
+        drainer?.cancel()
+        drainer?.join()
+    }
+
+    private suspend fun drain() {
+        try {
+            while (true) {
+                val command: Command? = synchronized(commandLock) {
+                    var taken: Command? = if (commandQueue.isEmpty()) null else commandQueue.removeFirst()
+                    // FR-087: coalesce a run of consecutive seeks so only the last one reaches the engine.
+                    (taken as? Command.Action)?.takeIf { it.action == PlaybackService.ActionSeek }?.let { seek ->
+                        var current = seek
+                        while (true) {
+                            val next = commandQueue.firstOrNull()
+                            if (next is Command.Action && next.action == PlaybackService.ActionSeek) {
+                                commandQueue.removeFirst()
+                                current.job.complete()
+                                current = next
+                            } else {
+                                break
+                            }
+                        }
+                        taken = current
+                    }
+                    if (taken == null) {
+                        draining = false
+                        null
+                    } else {
+                        taken
+                    }
+                }
+                if (command == null) {
+                    onIdle?.invoke()
+                    return
+                }
+                runCommand(command)
+            }
+        } catch (cancellation: CancellationException) {
+            cancelAllPending()
+            throw cancellation
+        }
+    }
+
+    fun isIdle(): Boolean = synchronized(commandLock) {
+        restored.isCompleted && commandQueue.isEmpty() && preRestoreCommands.isEmpty() && !draining
+    }
+
+    fun isRestored(): Boolean = restored.isCompleted
+
+    private fun cancelAllPending() {
+        synchronized(commandLock) {
+            commandQueue.forEach { it.cancel() }
+            commandQueue.clear()
+            preRestoreCommands.forEach { it.cancel() }
+            preRestoreCommands.clear()
+            draining = false
+        }
+    }
+
+    private suspend fun runCommand(command: Command) {
+        when (command) {
+            is Command.Action -> runJobCommand(command.action, command.job) {
+                handleActionCommand(
+                    command.action,
+                    command.positionMs,
+                    command.trackIds,
+                    command.startIndex,
+                    command.enabled,
+                    command.repeat,
+                )
+            }
+            is Command.SelectIndex -> runJobCommand(PlaybackService.ActionSelect, command.job) {
+                val trackId = queue.snapshot().activeTrackIds.getOrNull(command.index.toInt())
+                if (trackId != null) handleActionCommand(PlaybackService.ActionSelect, trackIds = listOf(trackId))
+            }
+            is Command.Block -> runBlockCommand(command)
+        }
+    }
+
+    private suspend fun runJobCommand(action: String, job: CompletableJob, block: suspend () -> Unit) {
+        try {
+            block()
+            job.complete()
+        } catch (cancellation: CancellationException) {
+            if (!currentCoroutineContext().isActive) {
+                job.cancel()
+                throw cancellation
+            }
+            log.e("Command failed: action=$action error=${cancellation.message}")
+            runCatching { fail(queue.snapshot().currentTrackId, "$action failed: ${cancellation.message}") }
+            job.complete()
+        } catch (error: Throwable) {
+            log.e("Command failed: action=$action error=${error.message}")
+            runCatching { fail(queue.snapshot().currentTrackId, "$action failed: ${error.message}") }
+            job.complete()
+        }
+    }
+
+    private suspend fun runBlockCommand(command: Command.Block) {
+        if (command.result.isCancelled) return
+        val value = try {
+            command.block()
+        } catch (cancellation: CancellationException) {
+            if (!currentCoroutineContext().isActive) {
+                command.result.cancel()
+                throw cancellation
+            }
+            command.result.completeExceptionally(cancellation)
+            return
+        } catch (error: Throwable) {
+            command.result.completeExceptionally(error)
+            return
+        }
+        command.result.complete(value)
+    }
 
     fun dispatch(
         action: String,
@@ -72,57 +332,71 @@ internal class PlaybackCoordinator(
         startIndex: Int = 0,
         enabled: Boolean = false,
         repeat: RepeatMode? = null,
-    ): Job = scope.launch {
-        restored.await()
-        commandMutex.withLock {
-            pollEngineEvents()
-            log.d("Handling action=$action queueSize=${queue.snapshot().activeTrackIds.size}")
-            if (action in MoodRadioStoppingActions) stopMoodRadio()
-            when (action) {
-                PlaybackService.ActionPlay -> handleTransition(runCatching { queue.play(PlaybackRequest(trackIds, startIndex)) }
-                    .getOrElse { QueueTransition.Stop }, PlaybackEndReason.SKIPPED)
-                PlaybackService.ActionShuffle -> handleTransition(runCatching { queue.playShuffled(PlaybackRequest(trackIds, startIndex)) }
-                    .getOrElse { QueueTransition.Stop }, PlaybackEndReason.SKIPPED)
-                PlaybackService.ActionPause -> {
-                    resumeOnFocusGain = false
-                    restoreFocusGain()
-                    pauseCurrent()
-                }
-                PlaybackService.ActionPauseForTransientFocusLoss -> pauseForTransientFocusLoss()
-                PlaybackService.ActionDuck -> duckForFocusLoss()
-                PlaybackService.ActionRestoreFocus -> restoreAfterFocusGain()
-                PlaybackService.ActionResume -> {
-                    resumeOnFocusGain = false
-                    resumeCurrent()
-                }
-                PlaybackService.ActionStop -> stopPlayback()
-                PlaybackService.ActionClearQueue -> handleTransition(queue.clear())
-                PlaybackService.ActionNext -> handleTransition(queue.next(), PlaybackEndReason.SKIPPED, preservePlaybackState = true)
-                PlaybackService.ActionPrevious -> {
-                    if (positionMs() > PreviousRestartThresholdMs) seekCurrent(0L)
-                    else handleTransition(queue.previous(), PlaybackEndReason.SKIPPED, preservePlaybackState = true)
-                }
-                PlaybackService.ActionSeek -> seekCurrent(positionMs)
-                PlaybackService.ActionSetShuffle -> handleTransition(queue.setShuffle(enabled))
-                PlaybackService.ActionSetRepeat -> repeat?.let(queue::setRepeatMode)
-                PlaybackService.ActionPlayNext -> queue.playNext(trackIds)
-                PlaybackService.ActionAppend -> queue.append(trackIds)
-                PlaybackService.ActionStartMoodRadio -> trackIds.firstOrNull()?.let { startMoodRadio(it) }
-                PlaybackService.ActionSelect -> trackIds.firstOrNull()?.let { handleTransition(queue.select(it), PlaybackEndReason.SKIPPED) }
-                PlaybackService.ActionRemove -> trackIds.firstOrNull()?.let { handleTransition(queue.removeFromQueue(it), PlaybackEndReason.SKIPPED) }
-                PlaybackService.ActionReorder -> queue.reorderQueue(trackIds)
-            }
-            if (action in PreloadResyncActions) {
-                // The old source must not remain part of a fade whose queued
-                // successor has just changed.
-                if (isCrossfading()) {
-                    clearArtworkCrossfade()
-                    snapCrossfade()
-                }
-                preloadNext()
-            }
-            publishQueue()
+    ): Job {
+        val job = Job()
+        enqueue(Command.Action(action, positionMs, trackIds, startIndex, enabled, repeat, job))
+        return job
+    }
+
+    private suspend fun handleActionCommand(
+        action: String,
+        positionMs: Long = 0L,
+        trackIds: List<String> = emptyList(),
+        startIndex: Int = 0,
+        enabled: Boolean = false,
+        repeat: RepeatMode? = null,
+    ) {
+        pollEngineEvents()
+        if (action == PlaybackService.ActionPlay || action == PlaybackService.ActionShuffle || action == PlaybackService.ActionSelect) {
+            // FR-064: a fresh user-driven play/select starts a new decode-failure budget.
+            consecutiveDecodeFailures = 0
         }
+        log.d("Handling action=$action queueSize=${queue.snapshot().activeTrackIds.size}")
+        if (action in MoodRadioStoppingActions) stopMoodRadio()
+        when (action) {
+            PlaybackService.ActionPlay -> handleTransition(runCatching { queue.play(PlaybackRequest(trackIds, startIndex)) }
+                .getOrElse { QueueTransition.Stop }, PlaybackEndReason.SKIPPED)
+            PlaybackService.ActionShuffle -> handleTransition(runCatching { queue.playShuffled(PlaybackRequest(trackIds, startIndex)) }
+                .getOrElse { QueueTransition.Stop }, PlaybackEndReason.SKIPPED)
+            PlaybackService.ActionPause -> {
+                resumeOnFocusGain = false
+                restoreFocusGain()
+                pauseCurrent()
+            }
+            PlaybackService.ActionPauseForTransientFocusLoss -> pauseForTransientFocusLoss()
+            PlaybackService.ActionDuck -> duckForFocusLoss()
+            PlaybackService.ActionRestoreFocus -> restoreAfterFocusGain()
+            PlaybackService.ActionResume -> {
+                resumeOnFocusGain = false
+                resumeCurrent()
+            }
+            PlaybackService.ActionStop -> stopPlayback()
+            PlaybackService.ActionClearQueue -> handleTransition(queue.clear())
+            PlaybackService.ActionNext -> handleTransition(queue.next(), PlaybackEndReason.SKIPPED, preservePlaybackState = true)
+            PlaybackService.ActionPrevious -> {
+                if (positionMs() > PreviousRestartThresholdMs) seekCurrent(0L)
+                else handleTransition(queue.previous(), PlaybackEndReason.SKIPPED, preservePlaybackState = true)
+            }
+            PlaybackService.ActionSeek -> seekCurrent(positionMs)
+            PlaybackService.ActionSetShuffle -> handleTransition(queue.setShuffle(enabled))
+            PlaybackService.ActionSetRepeat -> repeat?.let(queue::setRepeatMode)
+            PlaybackService.ActionPlayNext -> queue.playNext(trackIds)
+            PlaybackService.ActionAppend -> queue.append(trackIds)
+            PlaybackService.ActionStartMoodRadio -> trackIds.firstOrNull()?.let { startMoodRadio(it) }
+            PlaybackService.ActionSelect -> trackIds.firstOrNull()?.let { handleTransition(queue.select(it), PlaybackEndReason.SKIPPED) }
+            PlaybackService.ActionRemove -> trackIds.firstOrNull()?.let { handleTransition(queue.removeFromQueue(it), PlaybackEndReason.SKIPPED) }
+            PlaybackService.ActionReorder -> queue.reorderQueue(trackIds)
+        }
+        if (action in PreloadResyncActions) {
+            // The old source must not remain part of a fade whose queued
+            // successor has just changed.
+            if (isCrossfading()) {
+                clearArtworkCrossfade()
+                snapCrossfade()
+            }
+            preloadNext()
+        }
+        publishQueue()
     }
 
     private suspend fun startMoodRadio(seedId: String) {
@@ -161,8 +435,15 @@ internal class PlaybackCoordinator(
 
     internal fun stopMoodRadio() { moodRadioSeedId = null; moodRadioLastRefillAttempt = null; flows.moodRadioActive.value = false }
 
+    /** FR-091: media-session skip-to-queue-item; routed through the serialized command path. */
+    fun selectQueueItem(index: Long): Job {
+        val job = Job()
+        enqueue(Command.SelectIndex(index, job))
+        return job
+    }
+
     private fun pauseForTransientFocusLoss() {
-        resumeOnFocusGain = flows.state.value is PlaybackState.Playing
+        resumeOnFocusGain = flows.state.value is PlaybackState.Playing || pendingStart != null
         restoreFocusGain()
         pauseCurrent()
     }
@@ -175,31 +456,46 @@ internal class PlaybackCoordinator(
     }
 
     internal suspend fun tick() {
-        refreshPlaybackPosition()
-        val playing = flows.state.value as? PlaybackState.Playing
-        if (playing != null) enqueueListening(listeningTracker.tick(
-            playing.positionMs, playing.durationMs, clock.nowMs(), clock.elapsedMs(),
-        ))
-        pollEngineEvents()
-        if (listeningFadeOutgoing != null && engine?.isCrossfading() != true) finishListeningCrossfade()
-        if (engine?.isCrossfading() != true) clearArtworkCrossfade()
-        if (audioOutputDisconnectRequiresRecovery(outputDisconnected)) {
-            recoverAfterOutputDisconnect()
-        } else if (maybeStartCrossfade()) {
+        try {
+            refreshPlaybackPosition()
+            val playing = flows.state.value as? PlaybackState.Playing
+            if (playing != null) {
+                savePeriodicPositionIfDue(playing)
+                enqueueListening(listeningTracker.tick(
+                    playing.positionMs, playing.durationMs, clock.nowMs(), clock.elapsedMs(),
+                ))
+            }
             pollEngineEvents()
-        } else if (endedPending && flows.state.value is PlaybackState.Playing) {
-            endedPending = false
-            handleTransition(queue.next(), PlaybackEndReason.COMPLETED)
-            publishQueue()
+            if (listeningFadeOutgoing != null && engine?.isCrossfading() != true) finishListeningCrossfade()
+            if (engine?.isCrossfading() != true) clearArtworkCrossfade()
+            if (audioOutputDisconnectRequiresRecovery(outputDisconnected)) {
+                recoverAfterOutputDisconnect()
+            } else if (maybeStartCrossfade()) {
+                pollEngineEvents()
+            } else if (endedPending && flows.state.value is PlaybackState.Playing) {
+                endedPending = false
+                handleTransition(queue.next(), PlaybackEndReason.COMPLETED)
+                publishQueue()
+            }
+            if (refillMoodRadioIfNeeded()) publishQueue()
+            // A crossfade occupies both native source slots. Once its
+            // callback retires the outgoing item, populate that slot
+            // with the queue's new immediate successor.
+            if (canPreloadNext(engine?.isCrossfading() == true)) preloadNext()
+        } catch (cancellation: CancellationException) {
+            throw cancellation
+        } catch (error: Throwable) {
+            log.e("Playback tick failed: ${error.message}")
+            runCatching { fail(queue.snapshot().currentTrackId, "tick failed: ${error.message}") }
         }
-        if (refillMoodRadioIfNeeded()) publishQueue()
-        // A crossfade occupies both native source slots. Once its
-        // callback retires the outgoing item, populate that slot
-        // with the queue's new immediate successor.
-        if (canPreloadNext(engine?.isCrossfading() == true)) preloadNext()
     }
 
     internal suspend fun onPlaybackSettings(seconds: Int, blendArtwork: Boolean) {
+        // FR-092: a repeated write re-emits identical values; do not touch flows, artwork
+        // crossfade or the engine unless something that affects playback actually changed.
+        val requested = seconds to blendArtwork
+        if (appliedPlaybackSettings == requested) return
+        appliedPlaybackSettings = requested
         flows.crossfadeSeconds.value = seconds
         flows.blendArtworkDuringCrossfade.value = blendArtwork
         if (!blendArtwork) clearArtworkCrossfade()
@@ -209,7 +505,11 @@ internal class PlaybackCoordinator(
     }
 
     internal fun onEqualizerSettings(settings: EqualizerSettings) {
+        // equalizerSettings is still the source applied to new engines; the applied value
+        // also tracks what the live engine already received so repeats skip setDsp.
         equalizerSettings = settings
+        if (appliedEqualizerSettings == settings) return
+        appliedEqualizerSettings = settings
         engine?.setDsp(settings)
     }
 
@@ -224,7 +524,11 @@ internal class PlaybackCoordinator(
             return
         }
         queue.restore(queueForAvailableTracks(session.queue, availableTrackIds))
-        restoreCurrent(session.positionMs)
+        // The saved position belongs to the saved current track; when restoration had to fall back to
+        // a different (or no) track, start that track from the beginning instead (FR-013).
+        val savedCurrentId = session.queue.activeTrackIds.getOrNull(session.queue.currentIndex)
+        val positionMs = if (savedCurrentId != null && savedCurrentId == queue.snapshot().currentTrackId) session.positionMs else 0L
+        restoreCurrent(positionMs)
     }
 
     internal fun positionMs(): Long = engine?.positionMs() ?: 0L
@@ -237,6 +541,7 @@ internal class PlaybackCoordinator(
         engine?.close()
         outputDisconnected = false
         endedPending = false
+        pendingStart = null
     }
 
     internal suspend fun handleTransition(
@@ -264,10 +569,7 @@ internal class PlaybackCoordinator(
         val item = resolver.resolve(trackId) ?: return fail(trackId, "Audio asset is not available")
         flows.state.value = PlaybackState.Preparing(item)
         nowPlaying.publishNowPlaying(item, TransportState.Buffering, 0L, 0L, activeQueueItemId(queue.snapshot()))
-        // Promote before audio APIs so a user-started session can continue after the UI leaves.
-        nowPlaying.showForeground(item)
-        if (!focus.request()) return fail(trackId, "Audio focus was not granted")
-        restoreFocusGain()
+        if (!startPaused && !requestFocusForStart()) return fail(trackId, "Audio focus was not granted")
         try {
             engine?.close()
             // A normalization lookup can suspend. Do not leave a closed decoder
@@ -275,23 +577,26 @@ internal class PlaybackCoordinator(
             engine = null
             outputDisconnected = false
             endedPending = false
+            pendingStart = null
             val gainDb = normalizationGain(item, queue.peekNext())
             val preparedEngine = engineFactory()
             try {
                 preparedEngine.setDsp(equalizerSettings)
                 preparedEngine.setFocusGain(if (isDucked) DuckedFocusGain else 1f)
                 preparedEngine.prepare(item, ItemGain(gainDb), startPositionMs, startPaused)
+                engine = preparedEngine
                 if (startPaused) {
                     flows.state.value = PlaybackState.Paused(item, preparedEngine.positionMs(), preparedEngine.durationMs())
                     nowPlaying.publishNowPlaying(item, TransportState.Paused, preparedEngine.positionMs(), preparedEngine.durationMs(), activeQueueItemId(queue.snapshot()))
+                    scrobble.startPlayback(item.trackId, preparedEngine.positionMs())
                 } else {
-                    flows.state.value = PlaybackState.Playing(item, preparedEngine.positionMs(), preparedEngine.durationMs())
-                    nowPlaying.publishNowPlaying(item, TransportState.Playing, preparedEngine.positionMs(), preparedEngine.durationMs(), activeQueueItemId(queue.snapshot()))
+                    pendingStart = PendingStart.Fresh(item, startTracking)
+                    pollEngineEvents()
+                    if (engine == null || flows.state.value is PlaybackState.Failed) return
+                    // FR-064: a decode failure during the start may have skipped the queue to a
+                    // successor; do not keep starting the item that was already replaced.
+                    if (engine !== preparedEngine || queue.snapshot().currentTrackId != trackId) return
                 }
-                engine = preparedEngine
-                scrobble.startPlayback(item.trackId, preparedEngine.positionMs())
-                if (!startPaused && startTracking) enqueueListening(listeningTracker.start(item.trackId, preparedEngine.positionMs(), clock.nowMs(), clock.elapsedMs()))
-                if (!startPaused && !startTracking) listeningTracker.resumeAfterInterruption(clock.elapsedMs())
             } catch (error: Throwable) {
                 preparedEngine.close()
                 throw error
@@ -315,20 +620,26 @@ internal class PlaybackCoordinator(
             engine = null
             outputDisconnected = false
             endedPending = false
+            pendingStart = null
             val gain = normalizationGain(item, queue.peekNext())
             val preparedEngine = engineFactory()
-            preparedEngine.setDsp(equalizerSettings)
-            preparedEngine.setFocusGain(if (isDucked) DuckedFocusGain else 1f)
-            preparedEngine.prepare(item, ItemGain(gain), savedPositionMs, startPaused = true)
-            val positionMs = clampSeekPosition(savedPositionMs, preparedEngine.durationMs())
-            engine = preparedEngine
-            flows.state.value = PlaybackState.Paused(item, positionMs, preparedEngine.durationMs())
-            nowPlaying.publishNowPlaying(item, TransportState.Paused, positionMs, preparedEngine.durationMs(), activeQueueItemId(queue.snapshot()))
-            scrobble.startPlayback(item.trackId, positionMs)
-            preloadNext()
-            nowPlaying.showForeground(item)
-            publishQueue()
-            log.d("Restored paused playback id=$trackId positionMs=${engine?.positionMs()}")
+            try {
+                preparedEngine.setDsp(equalizerSettings)
+                preparedEngine.setFocusGain(if (isDucked) DuckedFocusGain else 1f)
+                preparedEngine.prepare(item, ItemGain(gain), savedPositionMs, startPaused = true)
+                val positionMs = clampSeekPosition(savedPositionMs, preparedEngine.durationMs())
+                engine = preparedEngine
+                flows.state.value = PlaybackState.Paused(item, positionMs, preparedEngine.durationMs())
+                nowPlaying.publishNowPlaying(item, TransportState.Paused, positionMs, preparedEngine.durationMs(), activeQueueItemId(queue.snapshot()))
+                scrobble.startPlayback(item.trackId, positionMs)
+                preloadNext()
+                nowPlaying.showForeground(item)
+                publishQueue()
+                log.d("Restored paused playback id=$trackId positionMs=${engine?.positionMs()}")
+            } catch (error: Throwable) {
+                preparedEngine.close()
+                throw error
+            }
         } catch (error: Throwable) {
             log.w("Unable to restore playback id=$trackId; clearing session", error)
             clearRestoredSession()
@@ -340,11 +651,24 @@ internal class PlaybackCoordinator(
         clearArtworkCrossfade()
         engine?.pause()
         enqueueListening(listeningTracker.pause(clock.nowMs(), clock.elapsedMs()))
-        (flows.state.value as? PlaybackState.Playing)?.let { current ->
-            val positionMs = engine?.positionMs() ?: current.positionMs
-            flows.state.value = PlaybackState.Paused(current.item, positionMs, current.durationMs)
-            nowPlaying.publishNowPlaying(current.item, TransportState.Paused, positionMs, current.durationMs, activeQueueItemId(queue.snapshot()))
+        when (val current = flows.state.value) {
+            is PlaybackState.Playing -> {
+                val positionMs = engine?.positionMs() ?: current.positionMs
+                flows.state.value = PlaybackState.Paused(current.item, positionMs, current.durationMs)
+                nowPlaying.publishNowPlaying(current.item, TransportState.Paused, positionMs, current.durationMs, activeQueueItemId(queue.snapshot()))
+            }
+            is PlaybackState.Preparing -> pendingStart?.let { pending ->
+                val positionMs = engine?.positionMs() ?: 0L
+                val durationMs = engine?.durationMs() ?: 0L
+                flows.state.value = PlaybackState.Paused(pending.item, positionMs, durationMs)
+                nowPlaying.publishNowPlaying(pending.item, TransportState.Paused, positionMs, durationMs, activeQueueItemId(queue.snapshot()))
+                if (pending is PendingStart.Fresh && pending.startTracking) {
+                    scrobble.startPlayback(pending.item.trackId, positionMs)
+                }
+            }
+            else -> Unit
         }
+        pendingStart = null
         updateNotification()
     }
 
@@ -356,6 +680,49 @@ internal class PlaybackCoordinator(
     internal fun restoreFocusGain() {
         isDucked = false
         engine?.setFocusGain(1f)
+    }
+
+    /** Requests focus only when audio is about to start; re-requesting keeps an existing duck. */
+    private fun requestFocusForStart(): Boolean {
+        if (!focus.request()) return false
+        if (!focusHeld) {
+            focusHeld = true
+            restoreFocusGain()
+        }
+        return true
+    }
+
+    private fun abandonFocus() {
+        if (focusHeld) {
+            focus.abandon()
+            focusHeld = false
+        }
+    }
+
+    private fun onOutputStarted() {
+        consecutiveDecodeFailures = 0
+        val pending = pendingStart ?: return
+        pendingStart = null
+        val currentEngine = engine ?: return
+        val item = pending.item
+        val positionMs = currentEngine.positionMs()
+        val durationMs = currentEngine.durationMs()
+        flows.state.value = PlaybackState.Playing(item, positionMs, durationMs)
+        nowPlaying.publishNowPlaying(item, TransportState.Playing, positionMs, durationMs, activeQueueItemId(queue.snapshot()))
+        updateNotification()
+        when (pending) {
+            is PendingStart.Fresh -> if (pending.startTracking) {
+                scrobble.startPlayback(item.trackId, positionMs)
+                enqueueListening(listeningTracker.start(item.trackId, positionMs, clock.nowMs(), clock.elapsedMs()))
+            } else {
+                listeningTracker.resumeAfterInterruption(clock.elapsedMs())
+            }
+            is PendingStart.Resume -> if (pending.resumeListening) {
+                listeningTracker.resume(clock.nowMs(), clock.elapsedMs())
+            } else {
+                enqueueListening(listeningTracker.start(item.trackId, positionMs, clock.nowMs(), clock.elapsedMs()))
+            }
+        }
     }
 
     internal suspend fun resumeCurrent() {
@@ -371,25 +738,20 @@ internal class PlaybackCoordinator(
                 engine = null
                 outputDisconnected = false
                 endedPending = false
+                pendingStart = null
             }
             playCurrent(paused?.positionMs ?: 0L)
             return
         }
-        if (!focus.request()) {
+        if (!requestFocusForStart()) {
             fail(paused.item.trackId, "Audio focus was not granted")
             return
         }
-        restoreFocusGain()
         currentEngine.play()
         val positionMs = currentEngine.positionMs()
-        if (listeningTracker.activeTrackId == paused.item.trackId) {
-            listeningTracker.resume(clock.nowMs(), clock.elapsedMs())
-        } else {
-            enqueueListening(listeningTracker.start(paused.item.trackId, positionMs, clock.nowMs(), clock.elapsedMs()))
-        }
-        flows.state.value = PlaybackState.Playing(paused.item, positionMs, paused.durationMs)
-        nowPlaying.publishNowPlaying(paused.item, TransportState.Playing, positionMs, paused.durationMs, activeQueueItemId(queue.snapshot()))
-        updateNotification()
+        pendingStart = PendingStart.Resume(paused.item, listeningTracker.activeTrackId == paused.item.trackId)
+        nowPlaying.publishNowPlaying(paused.item, TransportState.Buffering, positionMs, paused.durationMs, activeQueueItemId(queue.snapshot()))
+        pollEngineEvents()
         log.d("Playback resumed id=${paused.item.trackId} positionMs=$positionMs")
     }
 
@@ -407,11 +769,21 @@ internal class PlaybackCoordinator(
         engine = null
         outputDisconnected = false
         endedPending = false
+        pendingStart = null
         log.w("Audio output changed; recreating stream id=${current.item.trackId} positionMs=$positionMs")
         playCurrent(positionMs, startTracking = false)
     }
 
     internal fun seekCurrent(requestedPositionMs: Long) {
+        val preparing = flows.state.value as? PlaybackState.Preparing
+        if (preparing != null && pendingStart != null) {
+            finishListeningCrossfade()
+            clearArtworkCrossfade()
+            val targetPositionMs = clampSeekPosition(requestedPositionMs, engine?.durationMs() ?: 0L)
+            engine?.seekTo(targetPositionMs) ?: return
+            endedPending = false
+            return
+        }
         val current = flows.state.value
         val item: PlaybackItem
         val durationMs: Long
@@ -446,6 +818,7 @@ internal class PlaybackCoordinator(
     }
 
     internal fun stopPlayback() {
+        resumeOnFocusGain = false
         finishListeningCrossfade()
         enqueueListening(listeningTracker.finish(PlaybackEndReason.STOPPED, clock.nowMs(), clock.elapsedMs()))
         clearArtworkCrossfade()
@@ -453,7 +826,8 @@ internal class PlaybackCoordinator(
         engine?.close(); engine = null; preloadedItem = null
         outputDisconnected = false
         endedPending = false
-        focus.abandon()
+        pendingStart = null
+        abandonFocus()
         flows.state.value = PlaybackState.Idle
         nowPlaying.setTransportState(TransportState.Stopped, 0L, activeQueueItemId(queue.snapshot()))
         nowPlaying.deactivate()
@@ -482,7 +856,8 @@ internal class PlaybackCoordinator(
         engine?.close(); engine = null
         outputDisconnected = false
         endedPending = false
-        focus.abandon()
+        pendingStart = null
+        abandonFocus()
         val positionMs = stoppedCurrentPosition(reason, durationMs)
         flows.state.value = PlaybackState.Paused(item, positionMs, durationMs)
         nowPlaying.publishNowPlaying(item, TransportState.Paused, positionMs, durationMs, activeQueueItemId(queue.snapshot()))
@@ -498,6 +873,8 @@ internal class PlaybackCoordinator(
         engine?.close(); engine = null; preloadedItem = null
         outputDisconnected = false
         endedPending = false
+        pendingStart = null
+        abandonFocus()
         flows.state.value = PlaybackState.Failed(trackId, reason)
         nowPlaying.setTransportState(TransportState.Error, 0L, activeQueueItemId(queue.snapshot()))
         nowPlaying.deactivate()
@@ -507,12 +884,146 @@ internal class PlaybackCoordinator(
     internal suspend fun publishQueue() {
         val snapshot = queue.snapshot()
         flows.queueState.value = snapshot
-        nowPlaying.publishQueue(snapshot)
+        val window = buildQueueWindow(snapshot)
+        val windowIds = window.map { it.index to it.item.trackId }
+        if (windowIds != lastQueueWindow) {
+            nowPlaying.publishQueue(snapshot, window)
+            lastQueueWindow = windowIds
+        }
         updateNowPlayingTransportState()
         // Capture before the asynchronous DataStore write. A later command can
         // close the decoder, but cannot change this immutable session snapshot.
-        val session = currentSession(snapshot)
-        scope.launch { sessionStore.save(session) }
+        queueSessionSave(currentSession(snapshot))
+    }
+
+    /**
+     * FR-087: builds the ≤100-entry window `[currentIndex - 25, currentIndex + 75)` around the
+     * current track, resolving each item through [resolver]. Items already resolved in the last
+     * window are reused; unresolvable ids are skipped and entries that leave the window are dropped.
+     */
+    private suspend fun buildQueueWindow(snapshot: PlaybackQueueSnapshot): List<QueueWindowEntry> {
+        val active = snapshot.activeTrackIds
+        val currentIndex = snapshot.currentIndex
+        val start: Int
+        val end: Int
+        if (currentIndex !in active.indices) {
+            // No current selection: expose the head of the queue like the pre-window publish did.
+            start = 0
+            end = 100.coerceAtMost(active.size)
+        } else {
+            start = (currentIndex - 25).coerceIn(0, active.size)
+            end = (currentIndex + 75).coerceIn(0, active.size)
+        }
+        val items = LinkedHashMap<String, PlaybackItem>()
+        val entries = ArrayList<QueueWindowEntry>(end - start)
+        for (index in start until end) {
+            val id = active[index]
+            val item = queueWindowItems[id] ?: resolver.resolve(id) ?: continue
+            items[id] = item
+            entries += QueueWindowEntry(index, item)
+        }
+        queueWindowItems = items
+        return entries
+    }
+
+    /** T035a: while playing, queue a light position-only save every 10 s since the last save. */
+    private fun savePeriodicPositionIfDue(playing: PlaybackState.Playing) {
+        if (clock.elapsedMs() - lastSessionSaveElapsedMs < PeriodicPositionSaveIntervalMs) return
+        val positionMs = (engine?.positionMs() ?: playing.positionMs).coerceAtLeast(0L)
+        queuePositionSave(SavedPosition(playing.item.trackId, positionMs))
+    }
+
+    private fun queueSessionSave(session: PlaybackSession) {
+        synchronized(saveLock) {
+            pendingSave = session
+            // A full save writes the position store itself and is newer than any queued position.
+            pendingPosition = null
+            lastSessionSaveElapsedMs = clock.elapsedMs()
+            if (!saving) {
+                saving = true
+                scope.launch { saveDrain() }
+            }
+        }
+    }
+
+    private fun queuePositionSave(position: SavedPosition) {
+        synchronized(saveLock) {
+            pendingPosition = position
+            lastSessionSaveElapsedMs = clock.elapsedMs()
+            if (!saving) {
+                saving = true
+                scope.launch { saveDrain() }
+            }
+        }
+    }
+
+    private sealed interface SaveWork {
+        data class Session(val session: PlaybackSession) : SaveWork
+        data class Position(val position: SavedPosition) : SaveWork
+    }
+
+    private suspend fun saveDrain() {
+        try {
+            while (true) {
+                val work = synchronized(saveLock) {
+                    val session = pendingSave
+                    if (session != null) {
+                        pendingSave = null
+                        SaveWork.Session(session)
+                    } else {
+                        val position = pendingPosition
+                        if (position != null) {
+                            pendingPosition = null
+                            SaveWork.Position(position)
+                        } else {
+                            saving = false
+                            drained?.complete(Unit)
+                            drained = null
+                            null
+                        }
+                    }
+                } ?: return
+                try {
+                    when (work) {
+                        is SaveWork.Session -> sessionStore.save(work.session)
+                        is SaveWork.Position -> sessionStore.savePosition(work.position)
+                    }
+                } catch (cancellation: CancellationException) {
+                    throw cancellation
+                } catch (error: Throwable) {
+                    log.e("Session save failed: ${error.message}")
+                }
+            }
+        } catch (cancellation: CancellationException) {
+            synchronized(saveLock) {
+                saving = false
+                drained?.complete(Unit)
+                drained = null
+            }
+            throw cancellation
+        }
+    }
+
+    /** Queues the current session and suspends until the saver has written it (or a newer one). */
+    internal suspend fun saveSessionNow() {
+        val session = currentSession()
+        if (scope.coroutineContext[Job]?.isActive != true) {
+            sessionStore.save(session)
+            return
+        }
+        val waiter = CompletableDeferred<Unit>()
+        synchronized(saveLock) {
+            pendingSave = session
+            pendingPosition = null
+            lastSessionSaveElapsedMs = clock.elapsedMs()
+            drained?.complete(Unit)
+            drained = waiter
+            if (!saving) {
+                saving = true
+                scope.launch { saveDrain() }
+            }
+        }
+        waiter.await()
     }
 
     internal fun currentSession(snapshot: PlaybackQueueSnapshot = queue.snapshot()): PlaybackSession {
@@ -528,9 +1039,12 @@ internal class PlaybackCoordinator(
         engine?.close(); engine = null; preloadedItem = null
         outputDisconnected = false
         endedPending = false
+        pendingStart = null
         queue.clear()
         flows.queueState.value = queue.snapshot()
-        nowPlaying.publishQueue(queue.snapshot())
+        lastQueueWindow = emptyList()
+        queueWindowItems = emptyMap()
+        nowPlaying.publishQueue(queue.snapshot(), emptyList())
         flows.state.value = PlaybackState.Idle
         nowPlaying.setTransportState(TransportState.None, 0L, activeQueueItemId(queue.snapshot()))
         nowPlaying.deactivate()
@@ -565,9 +1079,77 @@ internal class PlaybackCoordinator(
                 is EngineEvent.GaplessAdvanced -> consumeEngineTransition(event)
                 is EngineEvent.TransitionStarted -> consumeEngineTransition(event)
                 EngineEvent.OutputDisconnected -> outputDisconnected = true
-                EngineEvent.Ended -> endedPending = true
-                is EngineEvent.Error -> Unit // handled in T032
+                EngineEvent.Ended -> {
+                    if (pendingStart != null) onOutputStarted()
+                    endedPending = true
+                }
+                EngineEvent.OutputStarted -> onOutputStarted()
+                is EngineEvent.Error -> if (handleEngineError(event)) return
             }
+        }
+    }
+
+    /**
+     * FR-064: a provider decode failure logs the provider and format, reports the normal playback
+     * error to the media session, and skips to the next track. It never retries the same item on
+     * another engine. Returns true when the queue advanced, so the closed engine's remaining events
+     * in the current batch must be dropped.
+     */
+    private suspend fun handleEngineError(event: EngineEvent.Error): Boolean {
+        val failingItem = pendingStart?.item
+            ?: (flows.state.value as? PlaybackState.Playing)?.item
+            ?: (flows.state.value as? PlaybackState.Preparing)?.item
+            ?: (flows.state.value as? PlaybackState.Paused)?.item
+        val failingId = failingItem?.trackId ?: queue.snapshot().currentTrackId
+        log.e(
+            "Decode failure provider=${event.provider} format=${event.format} id=$failingId " +
+                "error=${event.cause.javaClass.simpleName}: ${event.cause.message}",
+        )
+        recordDecodeFailure(failingItem ?: failingId?.let { resolveForLog(it) }, event)
+        val nextId = queue.peekNext()
+        val canSkip = failingId != null && nextId != null && nextId != failingId &&
+            consecutiveDecodeFailures < minOf(queue.snapshot().activeTrackIds.size, MaxConsecutiveDecodeSkips)
+        if (!canSkip) {
+            fail(failingId, "Decode failed (${event.format})")
+            return false
+        }
+        // A restored paused session has no pending start; retain the paused hold across the skip
+        // instead of starting audio. A user resume/fresh start has a pending start and keeps playing.
+        val pausedWithoutPendingResume = flows.state.value is PlaybackState.Paused && pendingStart == null
+        consecutiveDecodeFailures += 1
+        nowPlaying.setTransportState(TransportState.Error, 0L, activeQueueItemId(queue.snapshot()))
+        engine?.close()
+        engine = null
+        preloadedItem = null
+        pendingStart = null
+        handleTransition(queue.next(), PlaybackEndReason.SKIPPED, preservePlaybackState = pausedWithoutPendingResume)
+        publishQueue()
+        return true
+    }
+
+    private suspend fun resolveForLog(trackId: String): PlaybackItem? = try {
+        resolver.resolve(trackId)
+    } catch (cancellation: CancellationException) {
+        throw cancellation
+    } catch (_: Exception) {
+        null
+    }
+
+    /** FR-064a: append to the bounded on-device log; a failing write must never break playback. */
+    private fun recordDecodeFailure(item: PlaybackItem?, event: EngineEvent.Error) {
+        if (item == null) return
+        val audioFile = File(item.audioPath)
+        runCatching {
+            decodeFailures.record(
+                DecodeFailureEntry(
+                    timeMs = clock.nowMs(),
+                    fileName = audioFile.name,
+                    format = audioFile.extension.lowercase().ifEmpty { "unknown" },
+                    codec = event.format,
+                    provider = event.provider,
+                    error = "${event.cause.javaClass.simpleName}: ${event.cause.message}",
+                ),
+            )
         }
     }
 

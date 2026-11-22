@@ -31,6 +31,9 @@ private const val SistrumPatreonUrl = "https://www.patreon.com/c/misa198"
 
 @Composable
 internal fun AboutContent(
+    developerUnlocked: Boolean,
+    onVersionTapped: () -> Unit,
+    onDeveloperSelected: () -> Unit,
     onOpenExternalUrl: (String) -> Unit,
     modifier: Modifier = Modifier,
 ) {
@@ -50,26 +53,41 @@ internal fun AboutContent(
             )
         }
         ActionList(
-            items = listOf(
-                ActionListItem(
-                    labelRes = R.string.about_version,
-                    trailingContent = {
-                        Text(
-                            text = "V${BuildConfig.VERSION_NAME}",
-                            style = MaterialTheme.typography.bodyLarge,
-                            color = colors.textMuted,
-                        )
-                    },
-                ),
-                ActionListItem(
-                    labelRes = R.string.about_github,
-                    onClick = { onOpenExternalUrl(SistrumGithubUrl) },
-                ),
-                ActionListItem(
-                    labelRes = R.string.about_license,
-                    onClick = { onOpenExternalUrl(SistrumLicenseUrl) },
-                ),
-            ),
+            items = buildList {
+                add(
+                    ActionListItem(
+                        labelRes = R.string.about_version,
+                        trailingContent = {
+                            Text(
+                                text = "V${BuildConfig.VERSION_NAME}",
+                                style = MaterialTheme.typography.bodyLarge,
+                                color = colors.textMuted,
+                            )
+                        },
+                        onClick = onVersionTapped,
+                    ),
+                )
+                if (developerUnlocked) {
+                    add(
+                        ActionListItem(
+                            labelRes = R.string.developer_title,
+                            onClick = onDeveloperSelected,
+                        ),
+                    )
+                }
+                add(
+                    ActionListItem(
+                        labelRes = R.string.about_github,
+                        onClick = { onOpenExternalUrl(SistrumGithubUrl) },
+                    ),
+                )
+                add(
+                    ActionListItem(
+                        labelRes = R.string.about_license,
+                        onClick = { onOpenExternalUrl(SistrumLicenseUrl) },
+                    ),
+                )
+            },
             containerStyle = ActionListContainerStyle.Card,
             dividerStyle = ActionListDividerStyle.FullWidth,
         )

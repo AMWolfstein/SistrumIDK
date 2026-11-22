@@ -1,8 +1,8 @@
 {
   "missions": {},
-  "next_completion": 11,
+  "next_completion": 12,
   "next_mission": 1,
-  "next_tor": 11,
+  "next_tor": 12,
   "tasks": {
     "TOR001": {
       "completion": 1,
@@ -163,6 +163,22 @@
       "record": ".specify/quick-tasks/TOR010.md",
       "status": "complete",
       "title": "Port Media3 M2 playback engine boundary"
+    },
+    "TOR011": {
+      "completion": 11,
+      "evidence": {
+        "checks": "DevDebug host and instrumentation Kotlin compilation; Git whitespace",
+        "result": "PASS",
+        "reviewer": "tor_review",
+        "round": 2
+      },
+      "final": false,
+      "kind": "TOR",
+      "mission": null,
+      "nonce": "9ff1a02cbe2c4b6db7dd2801e2613541",
+      "record": ".specify/quick-tasks/TOR011.md",
+      "status": "complete",
+      "title": "Port Media3 M3 selectable playback engine"
     }
   },
   "version": 1

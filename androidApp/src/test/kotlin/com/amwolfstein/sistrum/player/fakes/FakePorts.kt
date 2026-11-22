@@ -1,6 +1,11 @@
 package com.amwolfstein.sistrum.player.fakes
 
 import kotlin.random.Random
+import kotlin.coroutines.CoroutineContext
+import kotlinx.coroutines.CompletableDeferred
+import kotlinx.coroutines.CoroutineDispatcher
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.awaitCancellation
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.test.TestScope
 import com.amwolfstein.sistrum.mood.MoodRadioTrack
@@ -21,7 +26,9 @@ import com.amwolfstein.sistrum.player.PlaybackQueue
 import com.amwolfstein.sistrum.player.PlaybackQueueSnapshot
 import com.amwolfstein.sistrum.player.PlaybackSession
 import com.amwolfstein.sistrum.player.PlaybackState
+import com.amwolfstein.sistrum.player.QueueWindowEntry
 import com.amwolfstein.sistrum.player.RepeatMode
+import com.amwolfstein.sistrum.player.SavedPosition
 import com.amwolfstein.sistrum.player.ScrobbleSink
 import com.amwolfstein.sistrum.player.SessionStorePort
 import com.amwolfstein.sistrum.player.TrackAnalysis
@@ -35,6 +42,7 @@ internal class FakeNowPlaying : NowPlayingPort {
     val published = mutableListOf<Pair<PlaybackItem, TransportState>>()
     val publishedPositions = mutableListOf<Long>()
     val queues = mutableListOf<PlaybackQueueSnapshot>()
+    val windows = mutableListOf<List<QueueWindowEntry>>()
     val foregroundItems = mutableListOf<PlaybackItem>()
     val notifications = mutableListOf<PlaybackItem>()
     var foreground = 0
@@ -62,8 +70,9 @@ internal class FakeNowPlaying : NowPlayingPort {
         deactivated += 1
     }
 
-    override suspend fun publishQueue(snapshot: PlaybackQueueSnapshot) {
+    override suspend fun publishQueue(snapshot: PlaybackQueueSnapshot, window: List<QueueWindowEntry>) {
         queues += snapshot
+        windows += window
     }
 
     override fun showForeground(item: PlaybackItem) {
@@ -124,14 +133,24 @@ internal class FakeScrobble : ScrobbleSink {
 
 internal class FakeSessionStore : SessionStorePort {
     val saved = mutableListOf<PlaybackSession>()
+    val positionSaves = mutableListOf<SavedPosition>()
     var stored: PlaybackSession? = null
     var cleared = 0
+
+    /** When set, [save] and [savePosition] suspend here until it completes (drainer coalescing tests). */
+    var saveGate: CompletableDeferred<Unit>? = null
 
     override suspend fun load(): PlaybackSession? = stored
 
     override suspend fun save(session: PlaybackSession) {
+        saveGate?.await()
         stored = session
         saved += session
+    }
+
+    override suspend fun savePosition(position: SavedPosition) {
+        saveGate?.await()
+        positionSaves += position
     }
 
     override suspend fun clear() {
@@ -185,7 +204,19 @@ internal class FakeLibrary : LibraryPort {
 internal class FakeResolver : PlaybackItemResolver {
     val missing = mutableSetOf<String>()
 
+    /** Number of times [resolve] was invoked; FR-087 asserts no whole-library resolution. */
+    var resolveCalls = 0
+
+    /** When set, [resolve] throws it (FR-084: a throwing resolver during play). */
+    var failWith: Throwable? = null
+
+    /** When true, [resolve] suspends forever until the caller is cancelled (FR-084). */
+    var suspendForever: Boolean = false
+
     override suspend fun resolve(trackId: String): PlaybackItem? {
+        resolveCalls += 1
+        failWith?.let { throw it }
+        if (suspendForever) awaitCancellation()
         if (trackId in missing) return null
         return PlaybackItem(
             trackId = trackId,
@@ -207,6 +238,7 @@ internal class PlaybackCoordinatorHarness(
     val queue: PlaybackQueue = PlaybackQueue(Random(42)),
     durationFor: (PlaybackItem) -> Long = { FakePlayerEngine.DefaultDurationMs },
     markRestoredOnInit: Boolean = true,
+    coordinatorScope: CoroutineScope = scope,
 ) {
     val flows = PlaybackFlows(
         state = MutableStateFlow<PlaybackState>(PlaybackState.Idle),
@@ -232,7 +264,7 @@ internal class PlaybackCoordinatorHarness(
     private var artworkCrossfadeId = 0L
 
     val coordinator = PlaybackCoordinator(
-        scope = scope,
+        scope = coordinatorScope,
         queue = queue,
         flows = flows,
         engineFactory = { engines() },
@@ -281,5 +313,23 @@ internal class PlaybackCoordinatorHarness(
     /** Runs queued tasks without issuing a command; used by the restore-gate test. */
     fun advance() {
         scope.testScheduler.advanceUntilIdle()
+    }
+}
+
+/**
+ * Dispatcher that stores dispatched [Runnable]s and runs them last-in-first-out on demand. Used by
+ * FR-081/FR-084 command-path tests to prove arrival order: with today's per-command `scope.launch`,
+ * two commands run in reverse order here, which the FR-081 tests must reject.
+ */
+internal class ReversingDispatcher : CoroutineDispatcher() {
+    private val pending = ArrayDeque<Runnable>()
+
+    override fun dispatch(context: CoroutineContext, block: Runnable) {
+        pending.addLast(block)
+    }
+
+    /** Runs stored runnables last-in-first-out, repeatedly until none remain. */
+    fun runAll() {
+        while (pending.isNotEmpty()) pending.removeLast().run()
     }
 }

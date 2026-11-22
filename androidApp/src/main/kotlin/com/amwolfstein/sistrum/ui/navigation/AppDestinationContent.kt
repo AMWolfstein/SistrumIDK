@@ -1,5 +1,6 @@
 package com.amwolfstein.sistrum.ui.navigation
 
+import android.os.SystemClock
 import androidx.compose.ui.unit.LayoutDirection
 import androidx.compose.animation.AnimatedContent
 import androidx.compose.animation.EnterTransition
@@ -25,6 +26,8 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.material3.Surface
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.collectAsState
+import androidx.compose.runtime.getValue
 import androidx.compose.runtime.key
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.ui.Modifier
@@ -53,6 +56,9 @@ import com.amwolfstein.sistrum.ui.components.HomeContent
 import com.amwolfstein.sistrum.ui.components.StackPageLayout
 import com.amwolfstein.sistrum.ui.screens.AboutContent
 import com.amwolfstein.sistrum.ui.screens.AppearanceContent
+import com.amwolfstein.sistrum.ui.screens.DecodeFailureLogContent
+import com.amwolfstein.sistrum.ui.screens.DeveloperContent
+import com.amwolfstein.sistrum.ui.screens.DeveloperUnlockCounter
 import com.amwolfstein.sistrum.ui.screens.LibraryContent
 import com.amwolfstein.sistrum.ui.screens.LibraryScanContent
 import com.amwolfstein.sistrum.ui.screens.ScanFilterContent
@@ -72,6 +78,7 @@ import com.amwolfstein.sistrum.ui.screens.SongTransitionContent
 import com.amwolfstein.sistrum.ui.screens.EqualizerContent
 import com.amwolfstein.sistrum.lastfm.LastFmStatus
 import com.amwolfstein.sistrum.sync.LocalLibraryRuntime
+import com.amwolfstein.sistrum.sync.LibraryScanRunner
 import com.amwolfstein.sistrum.sync.stageArtistArtwork
 import com.amwolfstein.sistrum.ui.theme.LocalSistrumColors
 
@@ -80,6 +87,8 @@ import com.amwolfstein.sistrum.ui.screens.LibraryTracksUiState
 import com.amwolfstein.sistrum.ui.screens.HomeUiState
 import com.amwolfstein.sistrum.ui.screens.TrackSortOption
 import com.amwolfstein.sistrum.player.PlaybackQueueSnapshot
+import com.amwolfstein.sistrum.player.engine.EngineKind
+import com.amwolfstein.sistrum.player.engine.EngineSelectionPreferences
 import com.amwolfstein.sistrum.ui.screens.LibraryArtistsContent
 import com.amwolfstein.sistrum.ui.screens.LibraryArtistsUiState
 import com.amwolfstein.sistrum.ui.screens.AlbumSortOption
@@ -484,11 +493,50 @@ internal fun AppDestinationContent(
                                 modifier = settingsPageModifier,
                             )
                             AppStackPage.SettingsLyrics -> LyricsContent(lyricsSettings, onLrclibChanged, onKugouChanged, onEmbeddedChanged, onRomanizationEnabledChanged, onLyricsGlowChanged, settingsPageModifier, onSidecarChanged)
-                            AppStackPage.SettingsAbout -> AboutContent(
+                            AppStackPage.SettingsAbout -> {
+                                val context = LocalContext.current.applicationContext
+                                val preferences = remember { EngineSelectionPreferences(context) }
+                                val developerUnlocked by preferences.developerUnlocked
+                                    .collectAsState(initial = false)
+                                val unlockCounter = remember { DeveloperUnlockCounter() }
+                                val scope = rememberCoroutineScope()
+                                AboutContent(
+                                    developerUnlocked = developerUnlocked,
+                                    onVersionTapped = {
+                                        if (unlockCounter.tap(SystemClock.uptimeMillis())) {
+                                            scope.launch { preferences.setDeveloperUnlocked(true) }
+                                        }
+                                    },
+                                    onDeveloperSelected = {
+                                        onIntent(AppIntent.OpenPage(AppStackPage.SettingsDeveloper))
+                                    },
+                                    modifier = settingsPageModifier,
+                                    onOpenExternalUrl = { url ->
+                                        onIntent(AppIntent.OpenExternalUrl(url))
+                                    },
+                                )
+                            }
+                            AppStackPage.SettingsDeveloper -> {
+                                val context = LocalContext.current.applicationContext
+                                val preferences = remember { EngineSelectionPreferences(context) }
+                                val engine by preferences.engine
+                                    .collectAsState(initial = EngineKind.Native)
+                                val scope = rememberCoroutineScope()
+                                DeveloperContent(
+                                    engine = engine,
+                                    onEngineSelected = { kind ->
+                                        if (kind != engine) {
+                                            scope.launch {
+                                                preferences.setEngine(kind)
+                                                LibraryScanRunner.scanInBackground(context)
+                                            }
+                                        }
+                                    },
+                                    modifier = settingsPageModifier,
+                                )
+                            }
+                            AppStackPage.SettingsDecodeFailures -> DecodeFailureLogContent(
                                 modifier = settingsPageModifier,
-                                onOpenExternalUrl = { url ->
-                                    onIntent(AppIntent.OpenExternalUrl(url))
-                                },
                             )
                             else -> SettingsContent(
                                 modifier = settingsPageModifier,
@@ -506,6 +554,9 @@ internal fun AppDestinationContent(
                                 },
                                 onAboutSelected = {
                                     onIntent(AppIntent.OpenPage(AppStackPage.SettingsAbout))
+                                },
+                                onDecodeFailuresSelected = {
+                                    onIntent(AppIntent.OpenPage(AppStackPage.SettingsDecodeFailures))
                                 },
                             )
                             }
