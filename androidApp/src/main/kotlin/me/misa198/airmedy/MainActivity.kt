@@ -28,8 +28,6 @@ import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
 import androidx.activity.viewModels
-import androidx.activity.result.contract.ActivityResultContracts
-import androidx.core.content.edit
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.lifecycleScope
 import androidx.compose.runtime.Composable
@@ -43,6 +41,7 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.tooling.preview.Preview
+import kotlinx.coroutines.flow.flow
 import kotlinx.coroutines.flow.flowOf
 import kotlinx.coroutines.launch
 import android.os.Handler
@@ -52,24 +51,8 @@ import android.view.WindowInsetsController
 import android.view.KeyEvent
 import me.misa198.airmedy.settings.ThemeMode
 import me.misa198.airmedy.settings.ThemePreferences
-import me.misa198.airmedy.pairing.AndroidPairingClock
-import me.misa198.airmedy.pairing.AndroidPairingIdGenerator
-import me.misa198.airmedy.pairing.HiveMqPairingTransport
-import me.misa198.airmedy.pairing.HiveMqSyncSession
-import me.misa198.airmedy.pairing.MobilePairingUseCase
-import me.misa198.airmedy.pairing.PairingPreferences
-import me.misa198.airmedy.pairing.AndroidTrustedDesktopDiscovery
+import me.misa198.airmedy.device.DeviceIdentity
 import me.misa198.airmedy.sync.AndroidSyncRuntime
-import me.misa198.airmedy.sync.LibrarySyncService
-import me.misa198.airmedy.sync.AndroidPlaylistReconciliationTransport
-import me.misa198.airmedy.sync.PlaylistReconciliationClock
-import me.misa198.airmedy.sync.PlaylistReconciliationCoordinator
-import me.misa198.airmedy.sync.PlaylistReconciliationPublisher
-import me.misa198.airmedy.sync.PlaylistSyncProtocol
-import me.misa198.airmedy.sync.PlaylistReconciliationOutcome
-import me.misa198.airmedy.sync.PlaylistMutationStatus
-import kotlinx.coroutines.sync.Mutex
-import kotlinx.coroutines.sync.withLock
 import me.misa198.airmedy.player.AndroidPlaybackRuntime
 import me.misa198.airmedy.player.AndroidPlaybackSession
 import me.misa198.airmedy.player.PlaybackService
@@ -99,9 +82,6 @@ import me.misa198.airmedy.ui.screens.InsightViewModel
 private data class ManualLyricsOverride(val trackId: String, val content: String)
 
 class MainActivity : ComponentActivity() {
-    private val localNetworkPermission = registerForActivityResult(ActivityResultContracts.RequestPermission()) {
-        syncViewModel.setLocalNetworkAccess(currentLocalNetworkAccess())
-    }
     private val appUpdateViewModel: AppUpdateViewModel by viewModels {
         AppUpdateViewModel.Factory(
             CheckForAppUpdate(
@@ -117,68 +97,10 @@ class MainActivity : ComponentActivity() {
             AndroidRomanizationEngine { applicationContext.assets.open(it) },
         )
     }
-    private val reconciliationMutex = Mutex()
     private lateinit var lastFm: LastFmService
     private var systemMusicVolumeState by mutableFloatStateOf(0f)
     private val viewModel: MainViewModel by viewModels {
         MainViewModel.Factory(ThemePreferences(applicationContext))
-    }
-    private val syncViewModel: SyncViewModel by viewModels {
-        val preferences = PairingPreferences(applicationContext)
-        val syncSession = HiveMqSyncSession()
-        SyncViewModel.Factory(
-            MobilePairingUseCase(
-                identityProvider = preferences,
-                bindingStore = preferences,
-                transport = HiveMqPairingTransport(),
-                clock = AndroidPairingClock,
-                ids = AndroidPairingIdGenerator,
-            ),
-            mqttSession = syncSession,
-            discovery = AndroidTrustedDesktopDiscovery(applicationContext),
-            onSyncRequest = { payload, endpoint, session -> AndroidSyncRuntime.start(applicationContext, payload, endpoint, session) },
-            onPlaylistReconciliationRequest = { payload ->
-                reconciliationMutex.withLock {
-                AndroidSyncRuntime.awaitNoForegroundSync()
-                if (!hasLocalNetworkAccess()) return@withLock
-                preferences.current()?.let { desktop ->
-                    AndroidSyncRuntime.initialize(applicationContext)
-                    val coordinator = PlaylistReconciliationCoordinator(
-                        identityProvider = preferences,
-                        clock = PlaylistReconciliationClock { System.currentTimeMillis() },
-                        store = AndroidSyncRuntime.syncStore(),
-                        transport = AndroidPlaylistReconciliationTransport(
-                            preferences, applicationContext.filesDir, AndroidSyncRuntime.syncStore(),
-                            listening = AndroidSyncRuntime.syncStore(),
-                        ),
-                        publisher = PlaylistReconciliationPublisher { result ->
-                            val mobileId = preferences.identity().id
-                            syncSession.publish(PlaylistSyncProtocol.resultTopic(desktop.desktopId, mobileId), result)
-                        },
-                    )
-                    when (val outcome = coordinator.handle(payload, desktop)) {
-                        is PlaylistReconciliationOutcome.Completed -> {
-                            val rejected = outcome.results.filter { it.status == PlaylistMutationStatus.REJECTED }.map { it.mutationId }
-                            AndroidSyncRuntime.syncStore().markLocalPlaylistMutationsFailed(rejected)
-                            AndroidSyncRuntime.syncStore().discardLocalPlaylistsForMutations(
-                                outcome.results.filter { it.status == PlaylistMutationStatus.SCOPE_CONFLICT }.map { it.mutationId },
-                            )
-                        }
-                        else -> Unit
-                    }
-                }
-                }
-            },
-            onBeforeUnpair = {
-                LibrarySyncService.cancel(applicationContext)
-                AndroidSyncRuntime.clearAll()
-            },
-            lastSyncedAt = preferences.lastSyncedAt,
-            libraryAnalysis = AndroidSyncRuntime.syncStore().analysisProgress,
-            libraryAnalysisEnabled = AndroidSyncRuntime.syncStore().libraryAnalysisEnabled,
-            initialLocalNetworkAccess = currentLocalNetworkAccess(),
-            onLocalNetworkAccessRevoked = { LibrarySyncService.cancel(applicationContext) },
-        )
     }
     private val tracksViewModel: LibraryTracksViewModel by viewModels {
         LibraryTracksViewModel.Factory(AndroidSyncRuntime.syncStore(), AndroidPlaybackRuntime.controller())
@@ -186,7 +108,7 @@ class MainActivity : ComponentActivity() {
     private val insightViewModel: InsightViewModel by viewModels {
         InsightViewModel.Factory(
             AndroidSyncRuntime.syncStore(),
-            PairingPreferences(applicationContext),
+            flow { emit(DeviceIdentity(applicationContext).id()) },
             AndroidPlaybackRuntime.controller(),
         )
     }
@@ -228,33 +150,6 @@ class MainActivity : ComponentActivity() {
         ComposerDetailsViewModel.Factory(AndroidSyncRuntime.syncStore(), AndroidPlaybackRuntime.controller())
     }
 
-    override fun onResume() {
-        super.onResume()
-        syncViewModel.setLocalNetworkAccess(currentLocalNetworkAccess())
-    }
-
-    private fun currentLocalNetworkAccess(): LocalNetworkAccess = localNetworkAccessState(
-        granted = hasLocalNetworkAccess(),
-        requested = getPreferences(MODE_PRIVATE).getBoolean("local_network_requested", false),
-        showRationale = Build.VERSION.SDK_INT >= 37 && shouldShowRequestPermissionRationale(Manifest.permission.ACCESS_LOCAL_NETWORK),
-    )
-
-    private fun requestLocalNetworkAccess() {
-        if (Build.VERSION.SDK_INT < 37) return
-        val access = currentLocalNetworkAccess()
-        syncViewModel.setLocalNetworkAccess(access)
-        when (access) {
-            LocalNetworkAccess.Granted -> Unit
-            LocalNetworkAccess.Required -> {
-                getPreferences(MODE_PRIVATE).edit { putBoolean("local_network_requested", true) }
-                localNetworkPermission.launch(Manifest.permission.ACCESS_LOCAL_NETWORK)
-            }
-            LocalNetworkAccess.Settings -> startActivity(
-                Intent(Settings.ACTION_APPLICATION_DETAILS_SETTINGS, Uri.parse("package:$packageName")),
-            )
-        }
-    }
-
     override fun onCreate(savedInstanceState: Bundle?) {
         enableEdgeToEdge()
         super.onCreate(savedInstanceState)
@@ -293,7 +188,6 @@ class MainActivity : ComponentActivity() {
             val romanization by romanizationViewModel.state.collectAsStateWithLifecycle()
             val uiState by viewModel.uiState.collectAsStateWithLifecycle()
             val lastFmStatus by lastFm.status.collectAsStateWithLifecycle()
-            val syncUiState by syncViewModel.uiState.collectAsStateWithLifecycle()
             val activePage = uiState.currentPage
             val activeDestination = uiState.selectedDestination
             val allTracks by AndroidSyncRuntime.syncStore().tracks.collectAsStateWithLifecycle(initialValue = emptyList())
@@ -364,24 +258,18 @@ class MainActivity : ComponentActivity() {
                 is PlaybackState.Paused -> state.item.trackId
                 else -> null
             }
-            val desktopLyricsFlow = remember(lyricsTrackId) {
-                lyricsTrackId?.let(AndroidSyncRuntime.syncStore()::desktopLyrics) ?: flowOf(null)
-            }
             val providerLyricsFlow = remember(lyricsTrackId) {
                 lyricsTrackId?.let(AndroidSyncRuntime.syncStore()::providerLyrics) ?: flowOf(null)
             }
-            val desktopLyrics by desktopLyricsFlow.collectAsStateWithLifecycle(initialValue = null)
             val providerLyrics by providerLyricsFlow.collectAsStateWithLifecycle(initialValue = null)
             var manualLyricsOverride by remember { mutableStateOf<ManualLyricsOverride?>(null) }
             LaunchedEffect(lyricsTrackId) {
                 if (manualLyricsOverride?.trackId != lyricsTrackId) manualLyricsOverride = null
             }
-            val lyrics = manualLyricsOverride?.takeIf { it.trackId == lyricsTrackId }?.content
-                ?: me.misa198.airmedy.lyrics.preferredLyrics(lyricsSettings.preferredSource, desktopLyrics, providerLyrics)
+            val lyrics = manualLyricsOverride?.takeIf { it.trackId == lyricsTrackId }?.content ?: providerLyrics
             var lyricsLoadingTrackId by remember { mutableStateOf<String?>(null) }
-            LaunchedEffect(lyricsTrackId, desktopLyrics, providerLyrics, lyricsSettings, manualLyricsOverride) {
-                if (lyricsTrackId == null || manualLyricsOverride?.trackId == lyricsTrackId || !providerLyrics.isNullOrBlank() ||
-                    (lyricsSettings.preferredSource == me.misa198.airmedy.lyrics.LyricsSource.Desktop && !desktopLyrics.isNullOrBlank())
+            LaunchedEffect(lyricsTrackId, providerLyrics, lyricsSettings, manualLyricsOverride) {
+                if (lyricsTrackId == null || manualLyricsOverride?.trackId == lyricsTrackId || !providerLyrics.isNullOrBlank()
                 ) return@LaunchedEffect
                 lyricsLoadingTrackId = lyricsTrackId
                 try {
@@ -528,29 +416,17 @@ class MainActivity : ComponentActivity() {
                     ),
                 ),
                 settings = SettingsDestinationModel(
-                    syncState = syncUiState,
-                    onRequestLocalNetworkAccess = ::requestLocalNetworkAccess,
-                    onPairingQrScanned = { raw ->
-                        if (!hasLocalNetworkAccess() || !syncViewModel.acceptsQr(raw)) false else {
-                            syncViewModel.pair(raw)
-                            viewModel.dispatch(AppIntent.NavigateBack)
-                            true
-                        }
-                    },
-                    onUnpair = syncViewModel::unpair,
-                    onSyncScreenVisible = syncViewModel::onSyncScreenVisible,
-                    onSyncScreenHidden = syncViewModel::onSyncScreenHidden,
                     lastFmStatus = lastFmStatus,
                     onLastFmConnect = {
                         lastFm.authorizationUrl()?.let { url -> startActivity(Intent(Intent.ACTION_VIEW, Uri.parse(url))) }
                     },
                     onLastFmDisconnect = { preferenceScope.launch { lastFm.disconnect() } },
                     lyricsSettings = lyricsSettings,
-                    onLyricsSourceChanged = { source -> preferenceScope.launch { lyricsPreferences.setPreferredSource(source) } },
                     onLrclibChanged = { enabled -> preferenceScope.launch { lyricsPreferences.setLrclib(enabled) } },
                     onKugouChanged = { enabled -> preferenceScope.launch { lyricsPreferences.setKugou(enabled) } },
                     onRomanizationEnabledChanged = { enabled -> preferenceScope.launch { lyricsPreferences.setRomanizationEnabled(enabled) } },
                     onLyricsGlowChanged = { enabled -> preferenceScope.launch { lyricsPreferences.setGlowEnabled(enabled) } },
+                    onEmbeddedChanged = { enabled -> preferenceScope.launch { lyricsPreferences.setEmbedded(enabled) } },
                     crossfadeSeconds = crossfadeSettings.seconds,
                     lastEnabledCrossfadeSeconds = crossfadeSettings.lastEnabledSeconds,
                     onCrossfadeSecondsChanged = playbackController::setCrossfadeSeconds,
@@ -641,7 +517,6 @@ class MainActivity : ComponentActivity() {
                     isFullScreenPlayerVisible = visible
                     updateSystemBarAppearance(darkTheme, visible)
                 },
-                onDismissSyncFailure = AndroidSyncRuntime::idle,
             )
         }
     }

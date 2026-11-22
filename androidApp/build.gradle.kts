@@ -102,13 +102,6 @@ dependencies {
     implementation(libs.compose.uiToolingPreview)
     implementation(libs.haze.core)
     implementation(libs.haze.blur)
-    implementation(libs.androidx.camera.camera2)
-    implementation(libs.androidx.camera.lifecycle)
-    implementation(libs.androidx.camera.view)
-    implementation(libs.androidx.camera.mlkit)
-    implementation(libs.mlkit.barcode)
-    implementation(libs.hivemq.mqtt)
-    implementation(libs.eddsa)
     implementation(libs.kotlinx.coroutines.core)
     implementation(libs.kotlinx.serialization.json)
     implementation(libs.room.runtime)
@@ -125,6 +118,7 @@ dependencies {
     ksp(libs.room.compiler)
 
     testImplementation(libs.junit)
+    testImplementation(libs.kotlin.testJunit)
     testImplementation(libs.kotlinx.coroutines.test)
     testImplementation(libs.room.testing)
     androidTestImplementation(libs.androidx.testExt.junit)
@@ -182,7 +176,6 @@ android {
         resources {
             excludes += "/META-INF/{AL2.0,LGPL2.1}"
             excludes += "/META-INF/INDEX.LIST"
-            excludes += "/META-INF/io.netty.versions.properties"
         }
     }
     signingConfigs {

@@ -91,7 +91,8 @@ internal data class PlayerLyricLine(
 
 internal data class PlayerLyricWord(val text: String, val startSeconds: Float, val endSeconds: Float)
 
-private val TimestampedLyricLine = Regex("^\\[(\\d+):([0-5]\\d(?:\\.\\d{1,3})?)\\](.*)$")
+private val LyricTimestamp = Regex("\\[(\\d{1,3}):(\\d{1,2}(?:[.:]\\d{1,3})?)]")
+private val LrcMetadataLine = Regex("^\\s*\\[([a-zA-Z]+)\\s*:\\s*([^]]*)]\\s*$")
 private val InlineTimingTag = Regex("<\\d+:[^<>]*>")
 private val WordTimingTag = Regex("^<(\\d+):([0-5]\\d(?:\\.\\d{1,3})?)>$")
 private val BilingualSeparator = Regex("\\s*\\^\\s*|\\s*/\\s*")
@@ -105,14 +106,34 @@ internal fun lyricsSeekDirection(targetIndex: Int, firstVisibleIndex: Int): Lyri
     if (targetIndex < firstVisibleIndex) LyricsSeekDirection.Backward else LyricsSeekDirection.Forward
 
 internal fun parsePlayerLyrics(content: String): List<PlayerLyricLine> {
-    val lines = content.lineSequence().mapNotNull { rawLine ->
-        val match = TimestampedLyricLine.matchEntire(rawLine)
-        val timestamp = match?.let { it.groupValues[1].toFloat() * 60f + it.groupValues[2].toFloat() }
-        val text = match?.groupValues?.get(3) ?: rawLine
-        if (timestamp != null || text.trim().isNotEmpty()) PlayerLyricLine(text, timestampSeconds = timestamp) else null
+    val offsetSeconds = content.lineSequence()
+        .mapNotNull(LrcMetadataLine::matchEntire)
+        .lastOrNull { it.groupValues[1].equals("offset", ignoreCase = true) }
+        ?.groupValues?.get(2)?.trim()?.toFloatOrNull()?.div(1_000f) ?: 0f
+    val lines = content.lineSequence().flatMap { rawLine ->
+        if (LrcMetadataLine.matches(rawLine)) return@flatMap emptySequence()
+        val matches = LyricTimestamp.findAll(rawLine).toList()
+        if (matches.isEmpty()) return@flatMap if (rawLine.isBlank()) emptySequence() else sequenceOf(PlayerLyricLine(rawLine))
+        val stripped = LyricTimestamp.replace(rawLine, "")
+        // Repeated timestamps or inline markers before the line timestamp carry no word alignment.
+        val text = if (matches.size == 1 && matches.first().range.first == 0) stripped else cleanPlayerLyricText(stripped)
+        matches.asSequence().map { match ->
+            val seconds = match.groupValues[1].toFloat() * 60f + match.groupValues[2].replace(':', '.').toFloat()
+            PlayerLyricLine(text, timestampSeconds = seconds)
+        }
     }.toList()
     return lines.mapIndexed { index, line ->
-        parsePlayerLyricText(line.primary, line.timestampSeconds, lines.getOrNull(index + 1)?.timestampSeconds)
+        val rawStart = line.timestampSeconds
+        val parsed = parsePlayerLyricText(line.primary, rawStart, lines.getOrNull(index + 1)?.timestampSeconds)
+        if (rawStart == null || offsetSeconds == 0f) parsed else parsed.copy(
+            timestampSeconds = (rawStart + offsetSeconds).coerceAtLeast(0f),
+            words = parsed.words?.map { word ->
+                word.copy(
+                    startSeconds = (word.startSeconds + offsetSeconds).coerceAtLeast(0f),
+                    endSeconds = (word.endSeconds + offsetSeconds).coerceAtLeast(0f),
+                )
+            },
+        )
     }
 }
 

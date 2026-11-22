@@ -122,7 +122,7 @@ internal fun LibraryContent(
                     showTrailingDivider = true,
                 )
             }
-    
+
             if (recentTracks.isNotEmpty()) {
                 item {
                     Spacer(modifier = Modifier.height(12.dp))
@@ -141,6 +141,7 @@ internal fun LibraryContent(
                             title = track.title,
                             subtitle = track.artists,
                             artworkPath = track.artworkPath,
+                            audioPath = track.audioPath,
                             fallbackSymbol = MaterialSymbols.MusicNote,
                         )
                     },

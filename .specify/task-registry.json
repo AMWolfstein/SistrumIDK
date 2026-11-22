@@ -1,8 +1,8 @@
 {
   "missions": {},
-  "next_completion": 3,
+  "next_completion": 4,
   "next_mission": 1,
-  "next_tor": 3,
+  "next_tor": 4,
   "tasks": {
     "TOR001": {
       "completion": 1,
@@ -35,6 +35,22 @@
       "record": ".specify/quick-tasks/TOR002.md",
       "status": "complete",
       "title": "Add the Android FFmpeg build helper"
+    },
+    "TOR003": {
+      "completion": 3,
+      "evidence": {
+        "checks": "FFmpeg and Gradle devDebug APK build, APK signature and metadata, and 96 host tests passed",
+        "result": "PASS",
+        "reviewer": "tor_review",
+        "round": 3
+      },
+      "final": false,
+      "kind": "TOR",
+      "mission": null,
+      "nonce": "976e93f63e714b5f8ef48a8b377d79f7",
+      "record": ".specify/quick-tasks/TOR003.md",
+      "status": "complete",
+      "title": "Port the device-local Android library to 1.3.0"
     }
   },
   "version": 1

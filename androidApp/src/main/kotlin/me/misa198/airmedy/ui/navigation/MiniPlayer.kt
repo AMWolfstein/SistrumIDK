@@ -132,7 +132,7 @@ internal fun MiniPlayer(
     val latestOnNextClick by rememberUpdatedState(onNextClick)
     var isTrackContextMenuExpanded by remember(item.trackId) { mutableStateOf(false) }
     val latestOnTrackContextMenuOpen by rememberUpdatedState { isTrackContextMenuExpanded = true }
-    val artwork = rememberArtworkThumbnail(item.artworkPath)
+    val artwork = rememberArtworkThumbnail(item.artworkPath, item.audioPath)
     val density = LocalDensity.current
     val hapticFeedback = LocalHapticFeedback.current
     val configuration = LocalConfiguration.current

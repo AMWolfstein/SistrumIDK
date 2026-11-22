@@ -56,6 +56,7 @@ internal fun LibraryAlbumsContent(
                 title = album.title,
                 subtitle = album.artist.ifBlank { unknownArtist },
                 artworkPath = album.artworkPath,
+                audioPath = album.audioPath,
                 fallbackSymbol = MaterialSymbols.Album,
             )
         }
@@ -182,6 +183,7 @@ internal fun LibraryAlbumsContent(
                     title = album.title,
                     artist = album.artist.ifBlank { stringResource(R.string.album_unknown_artist) },
                     artworkPath = album.artworkPath,
+                    audioPath = album.audioPath,
                     onClick = onAlbumClick?.let { callback -> { callback(album) } },
                     onLongClick = { contextAlbumId = album.id },
                 )
