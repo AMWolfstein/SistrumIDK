@@ -10,12 +10,9 @@
     <string name="destination_settings">Settings</string>
     <string name="insight_library_section">Library</string>
     <string name="insight_listening_section">History</string>
-    <string name="insight_range_7d">7D</string>
-    <string name="insight_range_30d">30D</string>
+    <string name="insight_range_7d">7 Days</string>
+    <string name="insight_range_30d">30 Days</string>
     <string name="insight_range_all">All</string>
-    <string name="insight_all_devices">All devices</string>
-    <string name="insight_this_phone">This phone</string>
-    <string name="insight_other_devices">Other devices</string>
     <string name="insight_library_growth">Library growth</string>
     <string name="insight_audio_quality">Audio quality</string>
     <string name="insight_library_size">Library size</string>
@@ -43,9 +40,18 @@
     <string name="insight_no_top_tracks">No played tracks yet.</string>
     <string name="insight_show_more">Show more</string>
     <string name="insight_show_less">Show less</string>
-    <string name="insight_days_value">%1$d days</string>
-    <string name="insight_plays_value">%1$d plays</string>
-    <string name="insight_attempts_value">%1$d attempts</string>
+    <plurals name="insight_days_value">
+        <item quantity="one">%1$d day</item>
+        <item quantity="other">%1$d days</item>
+    </plurals>
+    <plurals name="insight_plays_value">
+        <item quantity="one">%1$d play</item>
+        <item quantity="other">%1$d plays</item>
+    </plurals>
+    <plurals name="insight_attempts_value">
+        <item quantity="one">%1$d attempt</item>
+        <item quantity="other">%1$d attempts</item>
+    </plurals>
     <string name="insight_percent_value">%1$d%%</string>
     <string name="insight_change_value">%1$+.0f%% from previous period</string>
     <string name="insight_duration_days_hours">%1$d d %2$d hr</string>
@@ -123,7 +129,7 @@
     <string name="bottom_sheet_back">Back</string>
     <string name="create">Create</string>
     <string name="save">Save</string>
-    <string name="playlist_sync_failed">Could not save changes to this playlist</string>
+    <string name="playlist_save_failed">Could not save changes to this playlist</string>
     <string name="playlist_details_title">Playlist</string>
     <string name="playlist_details_empty_title">Playlist unavailable</string>
     <string name="playlist_details_empty_description">No tracks from this playlist are available in your library.</string>
@@ -145,7 +151,10 @@
     <string name="song_transition_title">Song Transition</string>
     <string name="playback_crossfade">Crossfade</string>
     <string name="playback_crossfade_duration">Crossfade duration</string>
-    <string name="playback_crossfade_duration_value">%1$d seconds</string>
+    <plurals name="playback_crossfade_duration_value">
+        <item quantity="one">%1$d second</item>
+        <item quantity="other">%1$d seconds</item>
+    </plurals>
     <string name="playback_crossfade_minimum">1s</string>
     <string name="playback_crossfade_maximum">12s</string>
     <string name="playback_blend_artwork_during_crossfade">Blend artwork and background</string>
@@ -246,6 +255,7 @@
     <string name="track_context_track_info_title">Track info</string>
     <string name="track_info_details">DETAILS</string>
     <string name="track_info_quality_lossy">Lossy</string>
+    <string name="track_explicit">Explicit</string>
     <string name="track_info_quality_lossless">Lossless</string>
     <string name="track_info_quality_hi_res">Hi-Res</string>
     <string name="track_info_quality_dsd">DSD</string>
@@ -371,4 +381,5 @@
     <string name="lyrics_info_title">Lyrics sources</string>
     <string name="lyrics_info_description">Lyrics are fetched automatically from the enabled providers (LRCLIB, KuGou) and cached on the device.</string>
     <string name="scan_found_nothing_library_kept">No music found, so the library was kept. Check your whitelist/blacklist.</string>
+    <string name="playlist_sync_failed">Could not save changes to this playlist</string>
 </resources>

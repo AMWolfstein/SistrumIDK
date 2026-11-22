@@ -12,21 +12,19 @@ import kotlinx.coroutines.flow.MutableSharedFlow
 import kotlinx.coroutines.flow.SharedFlow
 import kotlinx.coroutines.flow.asSharedFlow
 import kotlinx.coroutines.flow.combine
+import kotlinx.coroutines.flow.flowOn
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.withContext
-import kotlinx.serialization.json.JsonObject
-import kotlinx.serialization.json.JsonPrimitive
-import kotlinx.serialization.json.contentOrNull
 import me.misa198.airmedy.sync.AndroidLibrarySyncStore
 import me.misa198.airmedy.sync.LibraryPlaylist
-import me.misa198.airmedy.sync.LibraryJson
 import me.misa198.airmedy.sync.LibraryTrack
 import me.misa198.airmedy.sync.PlaylistMutation
 import me.misa198.airmedy.sync.PlaylistMutationOperation
 import me.misa198.airmedy.sync.PlaylistMutationPayload
+import me.misa198.airmedy.sync.playlistArtworkKey
 import me.misa198.airmedy.sync.stagePlaylistArtwork
 import java.util.UUID
 
@@ -59,9 +57,10 @@ internal class LibraryPlaylistsViewModel(private val context: Context, syncStore
         syncStore.playlists,
         syncStore.tracks,
         syncStore.artworkPaths,
-    ) { playlists, tracks, artworkPaths ->
+        syncStore.favoritesMetadata,
+    ) { playlists, tracks, artworkPaths, favoritesMetadata ->
         val availableTrackIds = tracks.mapTo(mutableSetOf(), LibraryTrack::id)
-        LibraryPlaylistsUiState(isLoaded = true, playlists = playlistsWithFavorites(playlists, tracks).map { playlist ->
+        LibraryPlaylistsUiState(isLoaded = true, playlists = playlistsWithFavorites(playlists, tracks, favoritesMetadata).map { playlist ->
             PlaylistListItem(
                 playlist.id,
                 playlist.name,
@@ -71,35 +70,28 @@ internal class LibraryPlaylistsViewModel(private val context: Context, syncStore
                 playlist.syncFailed,
             )
         })
-    }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), LibraryPlaylistsUiState(isLoaded = false))
+    }.flowOn(Dispatchers.Default).stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), LibraryPlaylistsUiState(isLoaded = false))
 
     fun createPlaylist(rawName: String, artworkUri: Uri? = null, initialTrackIds: List<String> = emptyList()) {
         val name = rawName.trim()
         if (name.isBlank()) return
         viewModelScope.launch {
-            val playlistId = UUID.randomUUID().toString()
-            val stagedArtwork = artworkUri?.let { uri ->
-                try {
-                    withContext(Dispatchers.IO) { stagePlaylistArtwork(context.contentResolver, context.filesDir, uri) }
-                } catch (error: Throwable) {
-                    if (error is CancellationException) throw error
-                    Log.w("LibraryPlaylists", "Ignoring unreadable playlist artwork", error)
-                    null
+            runPlaylistWrite(context) {
+                val playlistId = UUID.randomUUID().toString()
+                syncStore.createLocalPlaylist(
+                    PlaylistMutation(
+                        mutationId = UUID.randomUUID().toString(),
+                        playlistId = playlistId,
+                        operation = PlaylistMutationOperation.CREATE,
+                        updatedAt = System.currentTimeMillis(),
+                        payload = PlaylistMutationPayload(name = name),
+                    ),
+                    initialTrackIds = initialTrackIds,
+                ) {
+                    artworkUri?.let { preparePlaylistArtwork(it) }
                 }
+                _createdPlaylistIds.emit(playlistId)
             }
-            syncStore.createLocalPlaylist(
-                PlaylistMutation(
-                    mutationId = UUID.randomUUID().toString(),
-                    playlistId = playlistId,
-                    operation = PlaylistMutationOperation.CREATE,
-                    updatedAt = System.currentTimeMillis(),
-                    payload = PlaylistMutationPayload(name = name),
-                ),
-                artwork = stagedArtwork,
-                artworkMutationId = stagedArtwork?.let { UUID.randomUUID().toString() },
-                initialTrackIds = initialTrackIds,
-            )
-            _createdPlaylistIds.emit(playlistId)
         }
     }
 
@@ -107,16 +99,18 @@ internal class LibraryPlaylistsViewModel(private val context: Context, syncStore
         if (playlistId == FavoritesPlaylistId) return
         val operation = if (add) PlaylistMutationOperation.ADD_TRACK else PlaylistMutationOperation.REMOVE_TRACK
         viewModelScope.launch {
-            trackIds.distinct().filter(String::isNotBlank).forEach { trackId ->
-                syncStore.queuePlaylistMutation(
-                    PlaylistMutation(
-                        mutationId = UUID.randomUUID().toString(),
-                        playlistId = playlistId,
-                        operation = operation,
-                        updatedAt = System.currentTimeMillis(),
-                        payload = PlaylistMutationPayload(trackId = trackId),
-                    ),
-                )
+            runPlaylistWrite(context) {
+                trackIds.distinct().filter(String::isNotBlank).forEach { trackId ->
+                    syncStore.queuePlaylistMutation(
+                        PlaylistMutation(
+                            mutationId = UUID.randomUUID().toString(),
+                            playlistId = playlistId,
+                            operation = operation,
+                            updatedAt = System.currentTimeMillis(),
+                            payload = PlaylistMutationPayload(trackId = trackId),
+                        ),
+                    )
+                }
             }
         }
     }
@@ -126,54 +120,57 @@ internal class LibraryPlaylistsViewModel(private val context: Context, syncStore
         val canRename = playlistId != FavoritesPlaylistId
         if (canRename && name.isBlank()) return
         viewModelScope.launch {
-            val updatedAt = System.currentTimeMillis()
-            if (canRename) {
-                syncStore.queuePlaylistMutation(
-                    PlaylistMutation(UUID.randomUUID().toString(), playlistId, PlaylistMutationOperation.UPDATE, updatedAt, PlaylistMutationPayload(name = name)),
-                )
-            }
-            artworkUri?.let { uri ->
-                val staged = try {
-                    withContext(Dispatchers.IO) { stagePlaylistArtwork(context.contentResolver, context.filesDir, uri) }
-                } catch (error: Throwable) {
-                    if (error is CancellationException) throw error
-                    Log.w("LibraryPlaylists", "Ignoring unreadable playlist artwork", error)
-                    null
-                }
-                staged?.let {
-                    syncStore.stagePlaylistArtwork(it)
+            runPlaylistWrite(context) {
+                val updatedAt = System.currentTimeMillis()
+                if (canRename) {
                     syncStore.queuePlaylistMutation(
-                        PlaylistMutation(UUID.randomUUID().toString(), playlistId, PlaylistMutationOperation.SET_ARTWORK, updatedAt + 1, PlaylistMutationPayload(artworkSha256 = it.sha256)),
+                        PlaylistMutation(UUID.randomUUID().toString(), playlistId, PlaylistMutationOperation.UPDATE, updatedAt, PlaylistMutationPayload(name = name)),
+                    )
+                }
+                artworkUri?.let { uri ->
+                    syncStore.setPlaylistArtwork(playlistId, updatedAt + 1) { preparePlaylistArtwork(uri) }
+                }
+                if (clearArtwork) {
+                    syncStore.queuePlaylistMutation(
+                        PlaylistMutation(UUID.randomUUID().toString(), playlistId, PlaylistMutationOperation.REMOVE_ARTWORK, updatedAt + 1),
                     )
                 }
             }
-            if (clearArtwork) {
-                syncStore.queuePlaylistMutation(
-                    PlaylistMutation(UUID.randomUUID().toString(), playlistId, PlaylistMutationOperation.REMOVE_ARTWORK, updatedAt + 1),
-                )
-            }
         }
+    }
+
+    private suspend fun preparePlaylistArtwork(uri: Uri) = try {
+        withContext(Dispatchers.IO) { stagePlaylistArtwork(context.contentResolver, context.filesDir, uri) }
+    } catch (error: CancellationException) {
+        throw error
+    } catch (error: Exception) {
+        Log.w("LibraryPlaylists", "Ignoring unreadable playlist artwork", error)
+        null
     }
 
     fun deletePlaylist(playlistId: String) {
         if (playlistId == FavoritesPlaylistId) return
         viewModelScope.launch {
-            if (syncStore.discardFailedLocalPlaylist(playlistId)) return@launch
-            syncStore.queuePlaylistMutation(
-                PlaylistMutation(UUID.randomUUID().toString(), playlistId, PlaylistMutationOperation.DELETE, System.currentTimeMillis()),
-            )
+            runPlaylistWrite(context) {
+                if (syncStore.discardFailedLocalPlaylist(playlistId)) return@runPlaylistWrite
+                syncStore.queuePlaylistMutation(
+                    PlaylistMutation(UUID.randomUUID().toString(), playlistId, PlaylistMutationOperation.DELETE, System.currentTimeMillis()),
+                )
+            }
         }
     }
 }
 
 internal const val FavoritesPlaylistId = "favorites"
 
+/** Favorites has no playlist row; [favoritesMetadata] carries its custom artwork (see AndroidLibrarySyncStore.favoritesMetadata). */
 internal fun playlistsWithFavorites(
     playlists: List<LibraryPlaylist>,
     tracks: List<LibraryTrack> = emptyList(),
+    favoritesMetadata: String = "{}",
 ): List<LibraryPlaylist> {
     val favorites = playlists.firstOrNull { it.id == FavoritesPlaylistId }
-        ?: LibraryPlaylist(FavoritesPlaylistId, "", emptyList(), "{}")
+        ?: LibraryPlaylist(FavoritesPlaylistId, "", emptyList(), favoritesMetadata)
     val derivedFavorites = favorites.copy(trackIds = tracks.filter(LibraryTrack::isFavorite).map(LibraryTrack::id))
     return listOf(derivedFavorites) + playlists.filterNot { it.id == FavoritesPlaylistId }
 }
@@ -201,9 +198,3 @@ internal fun playlistManualArtworkPath(
     playlist: LibraryPlaylist,
     artworkPaths: Map<String, String>,
 ): String? = playlistArtworkKey(playlist.metadataJson)?.let(artworkPaths::get)
-
-private fun playlistArtworkKey(metadataJson: String): String? = runCatching {
-    val root = LibraryJson.json.parseToJsonElement(metadataJson) as? JsonObject
-    val playlist = root?.get("playlist") as? JsonObject ?: root
-    (playlist?.get("artwork_key") as? JsonPrimitive)?.contentOrNull
-}.getOrNull()?.takeIf { it.isNotBlank() }

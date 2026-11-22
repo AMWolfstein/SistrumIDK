@@ -12,6 +12,7 @@ private val KugouKey = booleanPreferencesKey("enable_kugou")
 private val RomanizationKey = booleanPreferencesKey("enable_romanization")
 private val GlowKey = booleanPreferencesKey("lyrics_glow")
 private val EmbeddedKey = booleanPreferencesKey("enable_embedded")
+private val SidecarKey = booleanPreferencesKey("enable_sidecar")
 
 internal data class LyricsSettings(
     val lrclib: Boolean = true,
@@ -19,6 +20,7 @@ internal data class LyricsSettings(
     val romanizationEnabled: Boolean = false,
     val glowEnabled: Boolean = false,
     val embedded: Boolean = true,
+    val sidecar: Boolean = true,
 )
 
 internal class LyricsPreferences(private val context: Context) {
@@ -29,6 +31,7 @@ internal class LyricsPreferences(private val context: Context) {
             romanizationEnabled = it[RomanizationKey] ?: false,
             glowEnabled = it[GlowKey] ?: false,
             embedded = it[EmbeddedKey] ?: true,
+            sidecar = it[SidecarKey] ?: true,
         )
     }
     suspend fun setLrclib(enabled: Boolean) = context.lyricsDataStore.edit { it[LrclibKey] = enabled }
@@ -36,4 +39,5 @@ internal class LyricsPreferences(private val context: Context) {
     suspend fun setRomanizationEnabled(enabled: Boolean) = context.lyricsDataStore.edit { it[RomanizationKey] = enabled }
     suspend fun setGlowEnabled(enabled: Boolean) = context.lyricsDataStore.edit { it[GlowKey] = enabled }
     suspend fun setEmbedded(enabled: Boolean) = context.lyricsDataStore.edit { it[EmbeddedKey] = enabled }
+    suspend fun setSidecar(enabled: Boolean) = context.lyricsDataStore.edit { it[SidecarKey] = enabled }
 }

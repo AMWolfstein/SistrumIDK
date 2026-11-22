@@ -10,12 +10,9 @@
     <string name="destination_settings">Impostazioni</string>
     <string name="insight_library_section">Libreria</string>
     <string name="insight_listening_section">Cronologia</string>
-    <string name="insight_range_7d">7G</string>
-    <string name="insight_range_30d">30G</string>
+    <string name="insight_range_7d">7 giorni</string>
+    <string name="insight_range_30d">30 giorni</string>
     <string name="insight_range_all">Tutto</string>
-    <string name="insight_all_devices">Tutti i dispositivi</string>
-    <string name="insight_this_phone">Questo telefono</string>
-    <string name="insight_other_devices">Altri dispositivi</string>
     <string name="insight_library_growth">Crescita libreria</string>
     <string name="insight_audio_quality">Qualità audio</string>
     <string name="insight_library_size">Dimensioni libreria</string>
@@ -43,9 +40,21 @@
     <string name="insight_no_top_tracks">Nessun brano riprodotto finora.</string>
     <string name="insight_show_more">Mostra altro</string>
     <string name="insight_show_less">Mostra meno</string>
-    <string name="insight_days_value">%1$d giorni</string>
-    <string name="insight_plays_value">%1$d riproduzioni</string>
-    <string name="insight_attempts_value">%1$d tentativi</string>
+    <plurals name="insight_days_value">
+        <item quantity="one">%1$d giorni</item>
+        <item quantity="many">%1$d giorni</item>
+        <item quantity="other">%1$d giorni</item>
+    </plurals>
+    <plurals name="insight_plays_value">
+        <item quantity="one">%1$d riproduzioni</item>
+        <item quantity="many">%1$d riproduzioni</item>
+        <item quantity="other">%1$d riproduzioni</item>
+    </plurals>
+    <plurals name="insight_attempts_value">
+        <item quantity="one">%1$d tentativi</item>
+        <item quantity="many">%1$d tentativi</item>
+        <item quantity="other">%1$d tentativi</item>
+    </plurals>
     <string name="insight_percent_value">%1$d%%</string>
     <string name="insight_change_value">%1$+.0f%% rispetto al periodo precedente</string>
     <string name="insight_duration_days_hours">%1$d g %2$d h</string>
@@ -123,7 +132,7 @@
     <string name="bottom_sheet_back">Indietro</string>
     <string name="create">Crea</string>
     <string name="save">Salva</string>
-    <string name="playlist_sync_failed">Impossibile salvare le modifiche a questa playlist</string>
+    <string name="playlist_save_failed">Impossibile salvare le modifiche a questa playlist</string>
     <string name="playlist_details_title">Playlist</string>
     <string name="playlist_details_empty_title">Playlist non disponibile</string>
     <string name="playlist_details_empty_description">Nessun brano di questa playlist è disponibile nella tua libreria.</string>
@@ -145,7 +154,11 @@
     <string name="song_transition_title">Transizione brani</string>
     <string name="playback_crossfade">Dissolvenza incrociata</string>
     <string name="playback_crossfade_duration">Durata dissolvenza incrociata</string>
-    <string name="playback_crossfade_duration_value">%1$d secondi</string>
+    <plurals name="playback_crossfade_duration_value">
+        <item quantity="one">%1$d secondi</item>
+        <item quantity="many">%1$d secondi</item>
+        <item quantity="other">%1$d secondi</item>
+    </plurals>
     <string name="playback_crossfade_minimum">1s</string>
     <string name="playback_crossfade_maximum">12s</string>
     <string name="playback_blend_artwork_during_crossfade">Sfuma copertina e sfondo</string>
@@ -246,6 +259,7 @@
     <string name="track_context_track_info_title">Informazioni brano</string>
     <string name="track_info_details">DETTAGLI</string>
     <string name="track_info_quality_lossy">Lossy</string>
+    <string name="track_explicit">Esplicito</string>
     <string name="track_info_quality_lossless">Lossless</string>
     <string name="track_info_quality_hi_res">Hi-Res</string>
     <string name="track_info_quality_dsd">DSD</string>
@@ -371,4 +385,5 @@
     <string name="lyrics_info_title">Fonti dei testi</string>
     <string name="lyrics_info_description">I testi vengono recuperati automaticamente dai provider abilitati (LRCLIB, KuGou) e salvati nella cache del dispositivo.</string>
     <string name="scan_found_nothing_library_kept">Nessuna musica trovata, libreria invariata. Controlla whitelist/blacklist.</string>
+    <string name="playlist_sync_failed">Impossibile salvare le modifiche a questa playlist</string>
 </resources>

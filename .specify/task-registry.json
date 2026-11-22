@@ -1,8 +1,8 @@
 {
   "missions": {},
-  "next_completion": 7,
+  "next_completion": 8,
   "next_mission": 1,
-  "next_tor": 7,
+  "next_tor": 8,
   "tasks": {
     "TOR001": {
       "completion": 1,
@@ -99,6 +99,22 @@
       "record": ".specify/quick-tasks/TOR006.md",
       "status": "complete",
       "title": "Port selected SistrumKotlin fixes and Android features"
+    },
+    "TOR007": {
+      "completion": 7,
+      "evidence": {
+        "checks": "DevDebug assets merged; Android host 438/438 and shared host 41/41 passed; instrumentation compiled; Room schema and migrations, translations, shell syntax and diff checked",
+        "result": "PASS",
+        "reviewer": "tor_review",
+        "round": 3
+      },
+      "final": false,
+      "kind": "TOR",
+      "mission": null,
+      "nonce": "69ffeee6e5a5447691301c0296118260",
+      "record": ".specify/quick-tasks/TOR007.md",
+      "status": "complete",
+      "title": "Port SistrumKotlin Android features and localization"
     }
   },
   "version": 1

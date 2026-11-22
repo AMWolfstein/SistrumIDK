@@ -49,6 +49,7 @@ import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
+import androidx.compose.ui.platform.LocalLayoutDirection
 import androidx.compose.ui.platform.LocalViewConfiguration
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.foundation.layout.WindowInsets
@@ -184,6 +185,7 @@ internal fun FullScreenPlayer(
     val durationMs = playbackState.durationMsOrZero()
     val displayedDurationMs = durationMs.takeIf { it > 0L } ?: metadataDurationMs
     val isPreparing = playbackState is PlaybackState.Preparing
+    val layoutDirection = LocalLayoutDirection.current
     val isPlaying = playbackState is PlaybackState.Playing
     val canNavigatePrevious = queue.canNavigatePrevious()
     val canNavigateNext = queue.canNavigateNext()
@@ -305,7 +307,7 @@ internal fun FullScreenPlayer(
                     displayedHorizontalSwipeOffset = displayedHorizontalSwipeOffset,
                     hazeState = glassHazeState,
                     compact = compact,
-                    animateMarquee = isPlaying,
+                    isPlaying = isPlaying,
                     showMore = layoutMode != PlayerLayoutMode.Square,
                     isFavorite = isFavorite,
                     onFavoriteToggle = onFavoriteToggle,

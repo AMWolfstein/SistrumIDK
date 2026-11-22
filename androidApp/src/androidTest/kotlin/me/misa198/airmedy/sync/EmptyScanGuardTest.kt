@@ -3,7 +3,6 @@ package me.misa198.airmedy.sync
 import androidx.room.Room
 import androidx.test.platform.app.InstrumentationRegistry
 import java.io.File
-import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.runBlocking
 import me.misa198.airmedy.library.LocalAlbumRef
 import me.misa198.airmedy.library.LocalArtistRef
@@ -38,7 +37,7 @@ class EmptyScanGuardTest {
         filesDir.deleteRecursively()
     }
 
-    private val artworkKey = "album-a"
+    private val artworkKey = albumArtworkKey("a")
     private val coverPath = "artwork/a.jpg"
 
     private fun snapshot(vararg ids: String): LocalLibrarySnapshot {
@@ -70,7 +69,7 @@ class EmptyScanGuardTest {
         assertFalse("an empty scan must not replace a non-empty library", store.writeLocalLibrary(snapshot(), emptyMap(), emptyList()))
         assertEquals("existing tracks are kept", 3, activeTrackCount())
         assertTrue("existing album cover file is kept", File(filesDir, coverPath).exists())
-        assertEquals(setOf("t1", "t2", "t3"), store.tracks.first().map { it.id }.toSet())
+        assertEquals(setOf("t1", "t2", "t3"), database.syncDao().activeTrackScanState().map { it.trackId }.toSet())
     }
 
     @Test fun nonEmptyRescanStillReplacesTheLibrary() = runBlocking {

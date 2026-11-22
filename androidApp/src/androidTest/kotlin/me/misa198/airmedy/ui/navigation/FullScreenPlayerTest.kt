@@ -283,6 +283,37 @@ class FullScreenPlayerTest {
     }
 
     @Test
+    fun explicitBadgeShowsOnlyForExplicitTracks() {
+        var track by mutableStateOf(
+            LibraryTrack(id = item.trackId, title = item.title, artists = item.artist, metadataJson = "{\"format\":\"flac\",\"explicit\":true}"),
+        )
+        composeTestRule.setContent {
+            AirmedyTheme(themeMode = ThemeMode.Dark) {
+                FullScreenPlayer(
+                    visible = true,
+                    dragProgress = 0f,
+                    isDragging = false,
+                    openingFromMiniPlayerSwipe = false,
+                    playbackState = PlaybackState.Playing(item, 0L, 120_000L),
+                    queueTracks = listOf(track),
+                    volume = 0.5f,
+                    onSeek = {}, onVolumeChange = {}, onPrevious = {}, onPlayPause = {}, onNext = {},
+                    onOpenMediaOutputSwitcher = {}, onDismiss = {},
+                )
+            }
+        }
+
+        // The badge sits inline after the title, and TalkBack reads it as part of the title.
+        composeTestRule.onNodeWithTag(FullScreenPlayerExplicitBadgeTestTag, useUnmergedTree = true).assertExists()
+        composeTestRule.onNodeWithText("${item.title} Explicit").assertExists()
+
+        composeTestRule.runOnIdle { track = track.copy(metadataJson = "{\"format\":\"flac\"}") }
+        composeTestRule.onAllNodesWithTag(FullScreenPlayerExplicitBadgeTestTag, useUnmergedTree = true).assertCountEquals(0)
+        composeTestRule.onAllNodesWithText("Explicit", substring = true).assertCountEquals(0)
+        composeTestRule.onNodeWithText(item.title).assertExists()
+    }
+
+    @Test
     fun qualityDialogKeepsPhoneWidthInBothThemes() {
         var theme by mutableStateOf(ThemeMode.Light)
         var density = 1f
@@ -362,7 +393,8 @@ class FullScreenPlayerTest {
         composeTestRule.runOnIdle {
             track = track.copy(metadataJson = "{\"format\":\"mp3\"}")
         }
-        composeTestRule.onAllNodesWithTag(FullScreenPlayerQualityBadgeTestTag).assertCountEquals(0)
+        composeTestRule.onNodeWithTag(FullScreenPlayerQualityBadgeTestTag).assertExists()
+        composeTestRule.onNodeWithText("Lossy").assertExists()
         assertEquals(
             elapsedTimeBounds.left,
             composeTestRule.onNodeWithTag(FullScreenPlayerElapsedTimeTestTag).fetchSemanticsNode().boundsInRoot.left,

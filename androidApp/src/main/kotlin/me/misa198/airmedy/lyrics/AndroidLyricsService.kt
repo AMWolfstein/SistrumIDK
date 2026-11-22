@@ -48,6 +48,7 @@ internal class AndroidLyricsService(
     /** In priority order: local sources first, then the network providers. */
     private val providers: List<LyricsProvider> = listOf(
         EmbeddedLyricsProvider(),
+        SidecarLyricsProvider(),
         LrclibLyricsProvider(),
         KugouLyricsProvider()
     ),
@@ -115,6 +116,32 @@ internal class EmbeddedLyricsProvider : LyricsProvider() {
             ?.takeIf(String::isNotEmpty) ?: return@withContext null
         FetchedLyric(content, if (SyncedLrc.containsMatchIn(content)) "embedded-synced" else "embedded-plain")
     }
+    override suspend fun search(title: String, artist: String, duration: Int): List<LyricsSearchResult> = emptyList()
+}
+
+/**
+ * Reads lyrics from a sibling file next to the audio file: `<basename>.lrc` (checked
+ * first, since it's usually LRC-timestamped synced text) then `<basename>.txt`.
+ * Always local, so it is tried right after the embedded-tag provider, ahead of any
+ * external fetch.
+ */
+internal class SidecarLyricsProvider : LyricsProvider() {
+    override fun enabled(settings: LyricsSettings) = settings.sidecar
+    override suspend fun fetch(track: LyricsTrack): FetchedLyric? = withContext(Dispatchers.IO) {
+        if (track.audioPath.isBlank()) return@withContext null
+        val audioFile = java.io.File(track.audioPath)
+        val base = audioFile.parentFile?.let { parent -> java.io.File(parent, audioFile.nameWithoutExtension) }
+            ?: return@withContext null
+        sidecarLyric(java.io.File(base.path + ".lrc"), "sidecar-lrc")
+            ?: sidecarLyric(java.io.File(base.path + ".txt"), "sidecar-txt")
+    }
+
+    private fun sidecarLyric(file: java.io.File, source: String): FetchedLyric? {
+        if (!file.isFile) return null
+        val content = runCatching { file.readText() }.getOrNull()?.trim()?.takeIf(String::isNotEmpty) ?: return null
+        return FetchedLyric(content, source)
+    }
+
     override suspend fun search(title: String, artist: String, duration: Int): List<LyricsSearchResult> = emptyList()
 }
 

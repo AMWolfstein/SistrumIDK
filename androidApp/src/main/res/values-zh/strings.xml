@@ -13,9 +13,6 @@
     <string name="insight_range_7d">7天</string>
     <string name="insight_range_30d">30天</string>
     <string name="insight_range_all">全部</string>
-    <string name="insight_all_devices">所有设备</string>
-    <string name="insight_this_phone">此手机</string>
-    <string name="insight_other_devices">其他设备</string>
     <string name="insight_library_growth">媒体库增长</string>
     <string name="insight_audio_quality">音质分布</string>
     <string name="insight_library_size">媒体库大小</string>
@@ -43,9 +40,15 @@
     <string name="insight_no_top_tracks">暂无曲目播放记录。</string>
     <string name="insight_show_more">展开更多</string>
     <string name="insight_show_less">收起</string>
-    <string name="insight_days_value">%1$d 天</string>
-    <string name="insight_plays_value">%1$d 次播放</string>
-    <string name="insight_attempts_value">%1$d 次尝试</string>
+    <plurals name="insight_days_value">
+        <item quantity="other">%1$d 天</item>
+    </plurals>
+    <plurals name="insight_plays_value">
+        <item quantity="other">%1$d 次播放</item>
+    </plurals>
+    <plurals name="insight_attempts_value">
+        <item quantity="other">%1$d 次尝试</item>
+    </plurals>
     <string name="insight_percent_value">%1$d%%</string>
     <string name="insight_change_value">较上一周期 %1$+.0f%%</string>
     <string name="insight_duration_days_hours">%1$d 天 %2$d 小时</string>
@@ -123,7 +126,7 @@
     <string name="bottom_sheet_back">返回</string>
     <string name="create">创建</string>
     <string name="save">保存</string>
-    <string name="playlist_sync_failed">无法保存此播放列表的更改</string>
+    <string name="playlist_save_failed">无法保存此播放列表的更改</string>
     <string name="playlist_details_title">播放列表</string>
     <string name="playlist_details_empty_title">播放列表不可用</string>
     <string name="playlist_details_empty_description">此播放列表中没有任何歌曲存在于您的音乐库中。</string>
@@ -144,7 +147,9 @@
     <string name="song_transition_title">曲目过渡</string>
     <string name="playback_crossfade">交叉渐变</string>
     <string name="playback_crossfade_duration">渐变时长</string>
-    <string name="playback_crossfade_duration_value">%1$d 秒</string>
+    <plurals name="playback_crossfade_duration_value">
+        <item quantity="other">%1$d 秒</item>
+    </plurals>
     <string name="playback_crossfade_minimum">1 秒</string>
     <string name="playback_crossfade_maximum">12 秒</string>
     <string name="playback_blend_artwork_during_crossfade">渐变时融合封面与背景</string>
@@ -245,6 +250,7 @@
     <string name="track_context_track_info_title">曲目信息</string>
     <string name="track_info_details">详细信息</string>
     <string name="track_info_quality_lossy">有损</string>
+    <string name="track_explicit">含露骨内容</string>
     <string name="track_info_quality_lossless">无损</string>
     <string name="track_info_quality_hi_res">Hi-Res 高解析</string>
     <string name="track_info_quality_dsd">DSD</string>
@@ -363,4 +369,5 @@
     <string name="lyrics_info_title">歌词数据源</string>
     <string name="lyrics_info_description">歌词会从已启用的来源（LRCLIB、KuGou）自动获取并保存在设备上。</string>
     <string name="scan_found_nothing_library_kept">未找到音乐，资料库保持不变。请检查白名单/黑名单。</string>
+    <string name="playlist_sync_failed">无法保存此播放列表的更改</string>
 </resources>

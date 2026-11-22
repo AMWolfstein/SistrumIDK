@@ -13,9 +13,6 @@
     <string name="insight_range_7d">7 วัน</string>
     <string name="insight_range_30d">30 วัน</string>
     <string name="insight_range_all">ทั้งหมด</string>
-    <string name="insight_all_devices">อุปกรณ์ทั้งหมด</string>
-    <string name="insight_this_phone">โทรศัพท์นี้</string>
-    <string name="insight_other_devices">อุปกรณ์อื่น ๆ</string>
     <string name="insight_library_growth">การเติบโตของคลังเพลง</string>
     <string name="insight_audio_quality">คุณภาพเสียง</string>
     <string name="insight_library_size">ขนาดคลังเพลง</string>
@@ -43,9 +40,15 @@
     <string name="insight_no_top_tracks">ยังไม่มีเพลงที่เล่น</string>
     <string name="insight_show_more">แสดงเพิ่มเติม</string>
     <string name="insight_show_less">แสดงน้อยลง</string>
-    <string name="insight_days_value">%1$d วัน</string>
-    <string name="insight_plays_value">เล่น %1$d ครั้ง</string>
-    <string name="insight_attempts_value">%1$d ครั้ง</string>
+    <plurals name="insight_days_value">
+        <item quantity="other">%1$d วัน</item>
+    </plurals>
+    <plurals name="insight_plays_value">
+        <item quantity="other">เล่น %1$d ครั้ง</item>
+    </plurals>
+    <plurals name="insight_attempts_value">
+        <item quantity="other">%1$d ครั้ง</item>
+    </plurals>
     <string name="insight_percent_value">%1$d%%</string>
     <string name="insight_change_value">%1$+.0f%% จากช่วงก่อนหน้า</string>
     <string name="insight_duration_days_hours">%1$d ว %2$d ชม</string>
@@ -123,7 +126,7 @@
     <string name="bottom_sheet_back">กลับ</string>
     <string name="create">สร้าง</string>
     <string name="save">บันทึก</string>
-    <string name="playlist_sync_failed">ไม่สามารถบันทึกการเปลี่ยนแปลงเพลย์ลิสต์นี้ได้</string>
+    <string name="playlist_save_failed">ไม่สามารถบันทึกการเปลี่ยนแปลงเพลย์ลิสต์นี้ได้</string>
     <string name="playlist_details_title">เพลย์ลิสต์</string>
     <string name="playlist_details_empty_title">เพลย์ลิสต์ไม่พร้อมใช้งาน</string>
     <string name="playlist_details_empty_description">ไม่มีเพลงใดในเพลย์ลิสต์นี้อยู่ในคลังของคุณ</string>
@@ -144,7 +147,9 @@
     <string name="song_transition_title">การเปลี่ยนเพลง</string>
     <string name="playback_crossfade">ครอสเฟด</string>
     <string name="playback_crossfade_duration">ระยะเวลาครอสเฟด</string>
-    <string name="playback_crossfade_duration_value">%1$d วินาที</string>
+    <plurals name="playback_crossfade_duration_value">
+        <item quantity="other">%1$d วินาที</item>
+    </plurals>
     <string name="playback_crossfade_minimum">1 วินาที</string>
     <string name="playback_crossfade_maximum">12 วินาที</string>
     <string name="playback_blend_artwork_during_crossfade">ผสมผสานภาพหน้าปกและพื้นหลัง</string>
@@ -245,6 +250,7 @@
     <string name="track_context_track_info_title">ข้อมูลแทร็ก</string>
     <string name="track_info_details">รายละเอียด</string>
     <string name="track_info_quality_lossy">Lossy</string>
+    <string name="track_explicit">เนื้อหาไม่เหมาะสม</string>
     <string name="track_info_quality_lossless">Lossless</string>
     <string name="track_info_quality_hi_res">Hi-Res</string>
     <string name="track_info_quality_dsd">DSD</string>
@@ -363,4 +369,5 @@
     <string name="lyrics_info_title">แหล่งข้อมูลเนื้อเพลง</string>
     <string name="lyrics_info_description">เนื้อเพลงจะถูกดึงโดยอัตโนมัติจากผู้ให้บริการที่เปิดใช้งาน (LRCLIB, KuGou) และบันทึกไว้ในอุปกรณ์</string>
     <string name="scan_found_nothing_library_kept">ไม่พบเพลง คลังเพลงจึงไม่เปลี่ยนแปลง โปรดตรวจสอบรายการอนุญาต/บล็อก</string>
+    <string name="playlist_sync_failed">ไม่สามารถบันทึกการเปลี่ยนแปลงเพลย์ลิสต์นี้ได้</string>
 </resources>

@@ -1,5 +1,12 @@
 package me.misa198.airmedy.ui.navigation
 
+import androidx.compose.ui.text.style.TextAlign
+import androidx.compose.ui.text.style.TextDirection
+import kotlinx.coroutines.flow.transformLatest
+import kotlinx.coroutines.flow.distinctUntilChanged
+import kotlinx.coroutines.flow.Flow
+import kotlinx.coroutines.delay
+import kotlinx.coroutines.ExperimentalCoroutinesApi
 import android.provider.Settings
 import androidx.compose.animation.core.Animatable
 import androidx.compose.animation.core.FastOutSlowInEasing
@@ -163,6 +170,29 @@ internal fun displayedLyricsPositionMs(playbackPositionMs: Long, pendingSeekPosi
 /** Programmatic lyric positioning must not be interpreted as manual browsing. */
 internal fun shouldEnterLyricsBrowseMode(isUserDragging: Boolean, isFollowingSelectedLine: Boolean = false): Boolean =
     isUserDragging && !isFollowingSelectedLine
+
+/** How long manual browsing may sit idle before the lyrics glide back to the current line. */
+internal const val LyricsBrowseIdleTimeoutMs = 4_000L
+internal const val BrowseLyricOpacity = 0.55f
+
+internal fun syncedLyricOpacity(distance: Int, focusMode: Boolean): Float = when {
+    distance == 0 -> 1f
+    !focusMode -> BrowseLyricOpacity
+    distance == 1 -> 0.25f
+    distance == 2 -> 0.15f
+    else -> 0.10f
+}
+
+/**
+ * Returns once [scrolling] has stayed false for [idleMillis]. Any new scroll activity
+ * restarts the countdown, so browsing only ends after a genuine pause.
+ */
+@OptIn(ExperimentalCoroutinesApi::class)
+internal suspend fun awaitLyricsBrowseIdle(scrolling: Flow<Boolean>, idleMillis: Long = LyricsBrowseIdleTimeoutMs) {
+    scrolling.distinctUntilChanged()
+        .transformLatest { active -> if (!active) { delay(idleMillis); emit(Unit) } }
+        .first()
+}
 
 /** Small finger drift on a lyric row is still a seek, not a manual browse. */
 internal fun shouldSeekFromLyricTap(dragDistancePx: Float, tapSlopPx: Float): Boolean = dragDistancePx <= tapSlopPx
@@ -385,6 +415,7 @@ private fun SyncedLyricsList(
     var hasPositionedInitialLine by rememberSaveable(lines) { mutableStateOf(false) }
     var previousActiveIndex by rememberSaveable(lines) { mutableStateOf<Int?>(null) }
     var isBrowsing by rememberSaveable(lines) { mutableStateOf(false) }
+    var returningFromBrowse by remember(lines) { mutableStateOf(false) }
     var selectedLineIndex by rememberSaveable(lines) { mutableStateOf<Int?>(null) }
     var activeIndexWhenLineSelected by rememberSaveable(lines) { mutableStateOf<Int?>(null) }
     var selectedLineAnimationComplete by rememberSaveable(lines) { mutableStateOf(false) }
@@ -426,6 +457,12 @@ private fun SyncedLyricsList(
     }
     LaunchedEffect(isUserDragging, isFollowingSelectedLine) {
         if (shouldEnterLyricsBrowseMode(isUserDragging, isFollowingSelectedLine)) isBrowsing = true
+    }
+    LaunchedEffect(isBrowsing) {
+        if (!isBrowsing) return@LaunchedEffect
+        awaitLyricsBrowseIdle(snapshotFlow { isUserDragging || listState.isScrollInProgress })
+        returningFromBrowse = true
+        isBrowsing = false
     }
     suspend fun previousLineOffset(activeLineIndex: Int): Int {
         val previousIndex = (activeLineIndex - 1).coerceAtLeast(0)
@@ -526,6 +563,11 @@ private fun SyncedLyricsList(
     }
     LaunchedEffect(lines, activeIndex, isBrowsing, selectedLineIndex, returnedToForeground) {
         if (activeIndex < 0 || isBrowsing || selectedLineIndex != null) return@LaunchedEffect
+        if (returningFromBrowse) {
+            returningFromBrowse = false
+            animateToActiveLine(activeIndex)
+            return@LaunchedEffect
+        }
         if (!hasPositionedInitialLine) {
             positionInitialLine(activeIndex)
             hasPositionedInitialLine = true
@@ -566,7 +608,7 @@ private fun SyncedLyricsList(
                 ),
                 secondary = secondary.getOrNull(index) ?: line.secondary,
                 distance = if (activeIndex >= 0) kotlin.math.abs(index - activeIndex) else Int.MAX_VALUE,
-                karaokePositionSeconds = if (!isBrowsing && index == activeIndex) displayedPositionMs / 1_000f else null,
+                karaokePositionSeconds = if (index == activeIndex) displayedPositionMs / 1_000f else null,
                 onClick = {
                     isBrowsing = false
                     activeIndexWhenLineSelected = activeIndex
@@ -603,14 +645,7 @@ private fun SyncedLyricRow(
     // cannot dispatch through the callback captured for an earlier track.
     val latestOnClick = rememberUpdatedState(onClick)
     val enhanced = line.words != null
-    val targetOpacity = if (!focusMode) {
-        1f
-    } else when (distance) {
-        0 -> 1f
-        1 -> 0.25f
-        2 -> 0.15f
-        else -> 0.10f
-    }
+    val targetOpacity = syncedLyricOpacity(distance, focusMode)
     val targetBlur = if (focusMode) syncedLyricBlurRadius(distance) else 0.dp
     val animatedBlur by animateDpAsState(targetBlur, tween(LyricsMotionDurationMs, easing = FastOutSlowInEasing), label = "synced-lyric-blur")
     val scale by animateFloatAsState(syncedLyricScale(distance, focusMode, enhanced), tween(LyricsMotionDurationMs, easing = FastOutSlowInEasing), label = "synced-lyric-scale")
@@ -675,8 +710,8 @@ private fun SyncedLyricRow(
             Text(
                 text = it,
                 color = colors.foregroundSubtle.copy(alpha = syncedLyricOpacity(targetOpacity)),
-                style = MaterialTheme.typography.bodyLarge,
-                modifier = Modifier.padding(top = 4.dp),
+                style = MaterialTheme.typography.bodyLarge.copy(textDirection = TextDirection.Content, textAlign = TextAlign.Start),
+                modifier = Modifier.fillMaxWidth().padding(top = 4.dp),
                 onTextLayout = { layout ->
                     onTrailingLineHeightChanged((layout.getLineBottom(layout.lineCount - 1) - layout.getLineTop(layout.lineCount - 1)).roundToInt())
                 },
@@ -733,7 +768,8 @@ private fun KaraokeLyricText(
         Text(
             text = line.primary,
             color = color.copy(alpha = syncedLyricOpacity(targetOpacity)),
-            style = MaterialTheme.typography.headlineSmall,
+            style = MaterialTheme.typography.headlineSmall.copy(textDirection = TextDirection.Content, textAlign = TextAlign.Start),
+            modifier = Modifier.fillMaxWidth(),
             fontWeight = FontWeight.Bold,
             onTextLayout = onTextLayout,
         )
@@ -873,9 +909,9 @@ private fun PlainLyricsList(
                 fadeInSpec = null, fadeOutSpec = null,
                 placementSpec = if (animateSecondaryChanges) tween(LyricsMotionDurationMs, easing = FastOutSlowInEasing) else null,
             ).fillMaxWidth().padding(vertical = 8.dp)) {
-                Text(text = line.primary, color = colors.onPrimary, style = MaterialTheme.typography.bodyLarge)
+                Text(text = line.primary, color = colors.onPrimary, style = MaterialTheme.typography.bodyLarge.copy(textDirection = TextDirection.Content, textAlign = TextAlign.Start), modifier = Modifier.fillMaxWidth())
                 (secondary.getOrNull(index) ?: line.secondary)?.let {
-                    Text(text = it, color = colors.foregroundSubtle, style = MaterialTheme.typography.bodyMedium, modifier = Modifier.padding(top = 2.dp))
+                    Text(text = it, color = colors.foregroundSubtle, style = MaterialTheme.typography.bodyMedium.copy(textDirection = TextDirection.Content, textAlign = TextAlign.Start), modifier = Modifier.fillMaxWidth().padding(top = 2.dp))
                 }
             }
         }

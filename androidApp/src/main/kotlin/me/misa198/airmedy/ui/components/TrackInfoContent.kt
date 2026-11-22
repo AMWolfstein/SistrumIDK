@@ -93,13 +93,15 @@ internal fun trackAudioQuality(track: LibraryTrack): TrackAudioQuality {
     val bitDepth = metadata.int("bit_depth")
     val sampleRate = metadata.long("sample_rate")
 
-    if (format in setOf("mp3", "aac", "ogg", "opus")) return TrackAudioQuality.Lossy
+    // Canonical names come from the scanner's audioFormatOf. "mpeg", "x-wav" and "alac"
+    // are the raw MIME-derived names stored before it, kept until the next rescan.
+    if (format in setOf("mp3", "mpeg", "aac", "ogg", "opus")) return TrackAudioQuality.Lossy
     if (format in setOf("dsf", "dff")) return TrackAudioQuality.Dsd
     if (format in setOf("m4a", "mp4")) {
         if (codec.isBlank()) return TrackAudioQuality.Unknown
-        if (codec != "alac") return TrackAudioQuality.Lossy
+        if (codec !in setOf("alac", "flac")) return TrackAudioQuality.Lossy
     }
-    if (format in setOf("flac", "wav", "aiff", "ape", "wv", "m4a", "mp4")) {
+    if (format in setOf("flac", "wav", "x-wav", "aiff", "alac", "ape", "wv", "m4a", "mp4")) {
         return if (bitDepth > 16 || (sampleRate ?: 0) > 48_000) TrackAudioQuality.HiRes else TrackAudioQuality.Lossless
     }
     return TrackAudioQuality.Unknown
@@ -165,7 +167,7 @@ private fun trackNumberText(number: Long?, total: Long?): String = when {
 
 internal fun formatTrackDuration(seconds: Long?): String {
     if (seconds == null || seconds <= 0) return ""
-    return "%d:%02d".format(seconds / 60, seconds % 60)
+    return formatDisplay("%d:%02d", seconds / 60, seconds % 60)
 }
 
 internal fun trackInfoMaxContentHeight(availableHeight: Dp, topInset: Dp): Dp =
@@ -177,7 +179,7 @@ internal fun formatFileSize(bytes: Long): String {
     var size = bytes.toDouble()
     var unit = 0
     while (size >= 1024 && unit < units.lastIndex) { size /= 1024; unit++ }
-    return "%.1f %s".format(size, units[unit])
+    return formatDisplay("%.1f %s", size, units[unit])
 }
 
 private fun formatSampleRate(hertz: Long): String = if (hertz % 1000 == 0L) {
@@ -228,7 +230,7 @@ internal fun TrackInfoContent(track: LibraryTrack, modifier: Modifier = Modifier
             items(details, key = { it.labelRes }) { detail ->
                 Row(Modifier.fillMaxWidth().padding(horizontal = 24.dp, vertical = 9.dp), horizontalArrangement = Arrangement.spacedBy(16.dp), verticalAlignment = Alignment.Top) {
                     Text(stringResource(detail.labelRes), Modifier.weight(0.42f), style = MaterialTheme.typography.bodySmall, color = colors.textMuted)
-                    Text(detail.value, Modifier.weight(0.58f), style = MaterialTheme.typography.bodyMedium.copy(fontWeight = FontWeight.SemiBold), color = colors.textMain, textAlign = TextAlign.End)
+                    Text(detail.value, Modifier.weight(0.58f), style = MaterialTheme.typography.bodyMedium.copy(fontWeight = FontWeight.SemiBold), color = colors.textMain, textAlign = layoutEndTextAlign())
                 }
             }
         }

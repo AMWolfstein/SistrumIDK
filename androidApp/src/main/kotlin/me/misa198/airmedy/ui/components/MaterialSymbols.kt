@@ -11,6 +11,7 @@ import androidx.compose.ui.graphics.ClipOp
 import androidx.compose.ui.graphics.StrokeCap
 import androidx.compose.ui.graphics.drawscope.clipRect
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.semantics.clearAndSetSemantics
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.text.ExperimentalTextApi
@@ -52,7 +53,6 @@ object MaterialSymbols {
     const val Search = "search"
     const val Settings = "settings"
     const val Schedule = "schedule"
-    const val PlayCircle = "play_circle"
     const val QueueMusic = "queue_music"
     const val Sensors = "sensors"
     const val PlaylistAdd = "playlist_add"
@@ -63,7 +63,6 @@ object MaterialSymbols {
     const val Tune = "tune"
     const val MaskedTransitions = "masked_transitions"
 
-    const val Gradient = "gradient"
     const val Subwoofer = "subwoofer"
     const val ChevronRight = "chevron_right"
     const val ChevronLeft = "chevron_left"
@@ -112,7 +111,28 @@ object MaterialSymbols {
     const val StylusFountainPen = "stylus_fountain_pen"
     const val Edit = "edit"
     const val Delete = "delete"
+    const val Folder = "folder"
 }
+
+/**
+ * Glyphs that point along the reading direction and are flipped in right-to-left layouts,
+ * following Material's auto-mirrored icons. Media transport glyphs (play, skip) and
+ * symmetric icons are deliberately absent. The volume speakers are listed so they face the
+ * right way in RTL text; inside the left-to-right player controls they stay unflipped.
+ */
+internal val MirroredInRtlSymbols: Set<String> = setOf(
+    MaterialSymbols.ChevronLeft,
+    MaterialSymbols.ChevronRight,
+    MaterialSymbols.QueueMusic,
+    MaterialSymbols.PlaylistAdd,
+    MaterialSymbols.PlaylistRemove,
+    MaterialSymbols.QueuePlayNext,
+    MaterialSymbols.ViewList,
+    MaterialSymbols.Label,
+    MaterialSymbols.Chat,
+    MaterialSymbols.VolumeDown,
+    MaterialSymbols.VolumeUp,
+)
 
 @Composable
 fun MaterialSymbol(

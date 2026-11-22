@@ -1,6 +1,7 @@
 package me.misa198.airmedy.ui.components
 
 import android.animation.ValueAnimator
+import androidx.compose.foundation.text.InlineTextContent
 import androidx.compose.foundation.MarqueeSpacing
 import androidx.compose.foundation.basicMarquee
 import androidx.compose.foundation.layout.fillMaxWidth
@@ -19,6 +20,7 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.CompositingStrategy
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.layout.onSizeChanged
+import androidx.compose.ui.text.AnnotatedString
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
@@ -32,21 +34,34 @@ fun AirmedyMarqueeText(
     modifier: Modifier = Modifier,
     fade: Boolean = false,
     animate: Boolean = true,
+) = AirmedyMarqueeText(AnnotatedString(text), color, style, modifier, fade, animate)
+
+@Composable
+internal fun AirmedyMarqueeText(
+    text: AnnotatedString,
+    color: Color,
+    style: TextStyle,
+    modifier: Modifier = Modifier,
+    fade: Boolean = false,
+    animate: Boolean = true,
+    inlineContent: Map<String, InlineTextContent> = emptyMap(),
 ) {
     key(text) {
         var containerWidth by remember { mutableIntStateOf(0) }
         var textWidth by remember { mutableIntStateOf(0) }
         Text(
             text = text,
+            inlineContent = inlineContent,
             modifier = modifier.fillMaxWidth().onSizeChanged { containerWidth = it.width }
                 .graphicsLayer {
                     compositingStrategy = if (fade) CompositingStrategy.Offscreen else CompositingStrategy.Auto
                 }
                 .drawWithCache {
+                    val rtl = isRtlText(text.text, layoutDirection)
                     val mask = Brush.horizontalGradient(
                         colors = listOf(color.copy(alpha = 1f), color.copy(alpha = 0f)),
-                        startX = (size.width - 16.dp.toPx()).coerceAtLeast(0f),
-                        endX = size.width,
+                        startX = if (rtl) minOf(16.dp.toPx(), size.width) else (size.width - 16.dp.toPx()).coerceAtLeast(0f),
+                        endX = if (rtl) 0f else size.width,
                     )
                     onDrawWithContent {
                         drawContent()

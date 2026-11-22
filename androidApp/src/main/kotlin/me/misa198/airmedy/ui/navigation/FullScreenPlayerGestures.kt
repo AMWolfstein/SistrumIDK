@@ -21,6 +21,8 @@ import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.LocalLayoutDirection
+import me.misa198.airmedy.ui.components.towardsEnd
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.geometry.Offset
@@ -117,6 +119,7 @@ internal fun FullScreenPlayerSwipeTarget(
     content: @Composable () -> Unit,
 ) {
     val density = LocalDensity.current
+    val layoutDirection = LocalLayoutDirection.current
     val hapticFeedback = LocalHapticFeedback.current
     val latestOnPrevious by rememberUpdatedState(onPrevious)
     val latestOnNext by rememberUpdatedState(onNext)
@@ -134,7 +137,7 @@ internal fun FullScreenPlayerSwipeTarget(
                 .onSizeChanged { targetSize = it }
                 .onGloballyPositioned { coordinates = it }
                 .semantics { this.testTag = testTag }
-                .pointerInput(maximumOffsetPx, thresholdPx, velocityMinimumPx, enabled, exclusions, targetSize) {
+                .pointerInput(maximumOffsetPx, thresholdPx, velocityMinimumPx, enabled, exclusions, targetSize, layoutDirection) {
                     if (!enabled) return@pointerInput
                     awaitEachGesture {
                         val down = awaitFirstDown(requireUnconsumed = false)
@@ -159,7 +162,7 @@ internal fun FullScreenPlayerSwipeTarget(
                                 change.consume()
                             }
                             val durationMs = (android.os.SystemClock.uptimeMillis() - swipeState.dragStartedAtMs).coerceAtLeast(1L)
-                            val direction = swipeState.gestureHorizontalOffset.compareTo(0f)
+                            val direction = swipeState.gestureHorizontalOffset.towardsEnd(layoutDirection).compareTo(0f)
                             val dispatch = completed && shouldDispatchFullScreenSwipe(
                                 swipeState.gestureHorizontalOffset,
                                 swipeState.verticalDragOffset,

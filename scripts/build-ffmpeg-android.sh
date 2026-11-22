@@ -36,15 +36,21 @@ fi
 NDK_VERSION="30.0.16248370"
 NDK="${SDK_DIR}/ndk/${NDK_VERSION}"
 case "$(uname -s)" in
-    Linux) HOST_TAG="linux-x86_64"; JOBS="$(nproc)" ;;
-    Darwin) HOST_TAG="darwin-x86_64"; JOBS="$(sysctl -n hw.ncpu)" ;;
+    Linux) HOST_OS="linux"; JOBS="$(nproc)" ;;
+    Darwin) HOST_OS="darwin"; JOBS="$(sysctl -n hw.ncpu)" ;;
     *) echo "Run this script on a supported Linux or macOS Android NDK host." >&2; exit 1 ;;
 esac
-TOOLCHAIN="${NDK}/toolchains/llvm/prebuilt/${HOST_TAG}"
 API=31
 TRIPLE="aarch64-linux-android"
-if [[ ! -x "${TOOLCHAIN}/bin/${TRIPLE}${API}-clang" ]]; then
-    echo "Android NDK ${NDK_VERSION} with the ${HOST_TAG} toolchain is required at ${NDK}." >&2
+TOOLCHAIN=""
+for candidate in "${NDK}/toolchains/llvm/prebuilt/${HOST_OS}-$(uname -m)" "${NDK}/toolchains/llvm/prebuilt/${HOST_OS}-"*; do
+    if [[ -x "${candidate}/bin/${TRIPLE}${API}-clang" ]]; then
+        TOOLCHAIN="${candidate}"
+        break
+    fi
+done
+if [[ -z "${TOOLCHAIN}" ]]; then
+    echo "Android NDK ${NDK_VERSION} with a ${HOST_OS} toolchain is required at ${NDK}." >&2
     exit 1
 fi
 

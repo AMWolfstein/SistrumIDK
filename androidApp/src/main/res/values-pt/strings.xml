@@ -10,12 +10,9 @@
     <string name="destination_settings">Configurações</string>
     <string name="insight_library_section">Biblioteca</string>
     <string name="insight_listening_section">Histórico</string>
-    <string name="insight_range_7d">7D</string>
-    <string name="insight_range_30d">30D</string>
+    <string name="insight_range_7d">7 dias</string>
+    <string name="insight_range_30d">30 dias</string>
     <string name="insight_range_all">Tudo</string>
-    <string name="insight_all_devices">Todos os dispositivos</string>
-    <string name="insight_this_phone">Este telemóvel</string>
-    <string name="insight_other_devices">Outros dispositivos</string>
     <string name="insight_library_growth">Crescimento da biblioteca</string>
     <string name="insight_audio_quality">Qualidade do áudio</string>
     <string name="insight_library_size">Tamanho da biblioteca</string>
@@ -43,9 +40,21 @@
     <string name="insight_no_top_tracks">Ainda não existem faixas reproduzidas.</string>
     <string name="insight_show_more">Mostrar mais</string>
     <string name="insight_show_less">Mostrar menos</string>
-    <string name="insight_days_value">%1$d dias</string>
-    <string name="insight_plays_value">%1$d reproduções</string>
-    <string name="insight_attempts_value">%1$d tentativas</string>
+    <plurals name="insight_days_value">
+        <item quantity="one">%1$d dias</item>
+        <item quantity="many">%1$d dias</item>
+        <item quantity="other">%1$d dias</item>
+    </plurals>
+    <plurals name="insight_plays_value">
+        <item quantity="one">%1$d reproduções</item>
+        <item quantity="many">%1$d reproduções</item>
+        <item quantity="other">%1$d reproduções</item>
+    </plurals>
+    <plurals name="insight_attempts_value">
+        <item quantity="one">%1$d tentativas</item>
+        <item quantity="many">%1$d tentativas</item>
+        <item quantity="other">%1$d tentativas</item>
+    </plurals>
     <string name="insight_percent_value">%1$d%%</string>
     <string name="insight_change_value">%1$+.0f%% face ao período anterior</string>
     <string name="insight_duration_days_hours">%1$d d %2$d h</string>
@@ -123,7 +132,7 @@
     <string name="bottom_sheet_back">Voltar</string>
     <string name="create">Criar</string>
     <string name="save">Guardar</string>
-    <string name="playlist_sync_failed">Não foi possível guardar as alterações desta playlist</string>
+    <string name="playlist_save_failed">Não foi possível guardar as alterações desta playlist</string>
     <string name="playlist_details_title">Playlist</string>
     <string name="playlist_details_empty_title">Playlist indisponível</string>
     <string name="playlist_details_empty_description">Nenhuma faixa desta playlist está disponível na sua biblioteca.</string>
@@ -145,7 +154,11 @@
     <string name="song_transition_title">Transição de faixas</string>
     <string name="playback_crossfade">Transição suave</string>
     <string name="playback_crossfade_duration">Duração da transição</string>
-    <string name="playback_crossfade_duration_value">%1$d segundos</string>
+    <plurals name="playback_crossfade_duration_value">
+        <item quantity="one">%1$d segundos</item>
+        <item quantity="many">%1$d segundos</item>
+        <item quantity="other">%1$d segundos</item>
+    </plurals>
     <string name="playback_crossfade_minimum">1s</string>
     <string name="playback_crossfade_maximum">12s</string>
     <string name="playback_blend_artwork_during_crossfade">Misturar capa e fundo</string>
@@ -246,6 +259,7 @@
     <string name="track_context_track_info_title">Informações da faixa</string>
     <string name="track_info_details">DETALHES</string>
     <string name="track_info_quality_lossy">Com perdas</string>
+    <string name="track_explicit">Explícito</string>
     <string name="track_info_quality_lossless">Sem perdas</string>
     <string name="track_info_quality_hi_res">Hi-Res</string>
     <string name="track_info_quality_dsd">DSD</string>
@@ -371,4 +385,5 @@
     <string name="lyrics_info_title">Fontes das letras</string>
     <string name="lyrics_info_description">As letras são obtidas automaticamente dos fornecedores ativados (LRCLIB, KuGou) e guardadas no dispositivo.</string>
     <string name="scan_found_nothing_library_kept">Nenhuma música encontrada; biblioteca mantida. Verifique as listas de pastas.</string>
+    <string name="playlist_sync_failed">Não foi possível guardar as alterações desta playlist</string>
 </resources>

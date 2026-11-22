@@ -120,12 +120,14 @@ internal fun LyricsContent(
     onRomanizationEnabledChanged: (Boolean) -> Unit,
     onGlowChanged: (Boolean) -> Unit,
     modifier: Modifier = Modifier,
+    onSidecarChanged: (Boolean) -> Unit = {},
 ) {
     Column(modifier = modifier, verticalArrangement = Arrangement.spacedBy(12.dp)) {
         LabeledCard(label = stringResource(R.string.lyrics_data_sources)) {
             ActionList(
                 items = listOf(
                     ActionListItem(R.string.lyrics_embedded, trailingContent = { Switch(checked = settings.embedded, onCheckedChange = onEmbeddedChanged) }, onClick = { onEmbeddedChanged(!settings.embedded) }),
+                    ActionListItem(R.string.lyrics_sidecar, trailingContent = { Switch(checked = settings.sidecar, onCheckedChange = onSidecarChanged) }, onClick = { onSidecarChanged(!settings.sidecar) }),
                     ActionListItem(R.string.lyrics_lrclib, trailingContent = { Switch(checked = settings.lrclib, onCheckedChange = onLrclibChanged) }, onClick = { onLrclibChanged(!settings.lrclib) }),
                     ActionListItem(R.string.lyrics_kugou, trailingContent = { Switch(checked = settings.kugou, onCheckedChange = onKugouChanged) }, onClick = { onKugouChanged(!settings.kugou) }),
                     ActionListItem(R.string.lyrics_romanization, trailingContent = { Switch(checked = settings.romanizationEnabled, onCheckedChange = onRomanizationEnabledChanged) }, onClick = { onRomanizationEnabledChanged(!settings.romanizationEnabled) }),

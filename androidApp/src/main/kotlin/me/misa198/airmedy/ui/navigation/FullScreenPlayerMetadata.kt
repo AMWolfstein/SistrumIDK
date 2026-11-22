@@ -1,5 +1,8 @@
 package me.misa198.airmedy.ui.navigation
 
+import me.misa198.airmedy.ui.components.isRtlText
+import androidx.compose.ui.platform.LocalLayoutDirection
+import androidx.compose.ui.AbsoluteAlignment
 import androidx.compose.animation.EnterTransition
 import androidx.compose.animation.ExitTransition
 import androidx.compose.animation.fadeIn
@@ -11,6 +14,18 @@ import androidx.compose.animation.core.Animatable
 import androidx.compose.animation.core.FastOutSlowInEasing
 import androidx.compose.animation.core.tween
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.text.InlineTextContent
+import androidx.compose.foundation.text.appendInlineContent
+import androidx.compose.ui.draw.clip
+import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.ui.semantics.clearAndSetSemantics
+import androidx.compose.ui.text.Placeholder
+import androidx.compose.ui.text.PlaceholderVerticalAlign
+import androidx.compose.ui.text.buildAnnotatedString
+import me.misa198.airmedy.sync.isExplicit
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.Arrangement
@@ -68,7 +83,7 @@ internal fun FullScreenPlayerMetadataTransition(
     displayedHorizontalSwipeOffset: Float,
     hazeState: HazeState?,
     compact: Boolean,
-    animateMarquee: Boolean,
+    isPlaying: Boolean,
     isFavorite: Boolean,
     onFavoriteToggle: (String, Boolean) -> Unit,
     contextTrack: LibraryTrack?,
@@ -97,7 +112,7 @@ internal fun FullScreenPlayerMetadataTransition(
         label = "full-screen-player-metadata-crossfade",
     ) { animatedItem ->
         FullScreenPlayerMetadata(
-            animatedItem, displayedHorizontalSwipeOffset, hazeState, compact, animateMarquee, isFavorite, onFavoriteToggle,
+            animatedItem, displayedHorizontalSwipeOffset, hazeState, compact, isPlaying, isFavorite, onFavoriteToggle,
             contextTrack, contextMenuExpanded, onContextMenuOpen, onContextMenuDismiss, playbackQueue,
             onTrackPlayNext, onTrackAddToQueue, moodRadioEligibleTrackIds, onStartMoodRadio, onTrackGoToAlbum, onTrackGoToArtist,
             onTrackContextBottomSheet, onCloseFullscreenThen, showMore,
@@ -111,7 +126,7 @@ private fun FullScreenPlayerMetadata(
     displayedHorizontalSwipeOffset: Float,
     hazeState: HazeState?,
     compact: Boolean,
-    animateMarquee: Boolean,
+    isPlaying: Boolean,
     isFavorite: Boolean,
     onFavoriteToggle: (String, Boolean) -> Unit,
     contextTrack: LibraryTrack?,
@@ -145,8 +160,18 @@ private fun FullScreenPlayerMetadata(
     Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
         Column(Modifier.weight(1f).clipToBounds().graphicsLayer { translationX = displayedHorizontalSwipeOffset }
             .semantics { testTag = FullScreenPlayerMetadataSwipeTestTag }) {
-            AirmedyMarqueeText(item.title, colors.onPrimary, if (compact) MaterialTheme.typography.titleMedium.copy(fontWeight = FontWeight.Bold) else MaterialTheme.typography.titleLarge.copy(fontWeight = FontWeight.Bold), fade = true, animate = animateMarquee)
-            AirmedyMarqueeText(item.artist, colors.foregroundSubtle, if (compact) MaterialTheme.typography.bodySmall else MaterialTheme.typography.bodyMedium, fade = true, animate = animateMarquee)
+            val titleStyle = if (compact) MaterialTheme.typography.titleMedium.copy(fontWeight = FontWeight.Bold) else MaterialTheme.typography.titleLarge.copy(fontWeight = FontWeight.Bold)
+            if (contextTrack?.isExplicit() == true) {
+                // The alternate text stands in for the badge in the title's text, so TalkBack
+                // reads "<title> Explicit".
+                val explicitLabel = stringResource(R.string.track_explicit)
+                val title = buildAnnotatedString { append(item.title); appendInlineContent(ExplicitBadgeId, " $explicitLabel") }
+                val titleIsRtl = isRtlText(item.title, LocalLayoutDirection.current)
+                AirmedyMarqueeText(title, colors.onPrimary, titleStyle, animate = isPlaying, fade = true, inlineContent = explicitBadgeInlineContent(titleIsRtl))
+            } else {
+                AirmedyMarqueeText(item.title, colors.onPrimary, titleStyle, animate = isPlaying, fade = true)
+            }
+            AirmedyMarqueeText(item.artist, colors.foregroundSubtle, if (compact) MaterialTheme.typography.bodySmall else MaterialTheme.typography.bodyMedium, animate = isPlaying, fade = true)
         }
         Spacer(Modifier.width(4.dp))
         if (!compact) AirmedyIconButton(
@@ -203,4 +228,32 @@ internal fun FullScreenQualityDialog(labelRes: Int, symbol: String, details: Lis
             AirmedyPillButton(stringResource(R.string.ok), onDismiss, AirmedyPillButtonVariant.Primary, Modifier.padding(start = 16.dp, top = 20.dp, end = 16.dp, bottom = 16.dp))
         }
     }
+}
+
+private const val ExplicitBadgeId = "explicit"
+internal const val FullScreenPlayerExplicitBadgeTestTag = "full_screen_explicit_badge"
+
+/**
+ * An "E" in a small rounded square, placed 6dp after the title. The badge follows the title's
+ * own direction, so it sits to the left of an Arabic title and to the right of a Latin one.
+ */
+@Composable
+private fun explicitBadgeInlineContent(titleIsRtl: Boolean): Map<String, InlineTextContent> {
+    val colors = LocalAirmedyColors.current
+    val density = LocalDensity.current
+    val placeholder = with(density) { Placeholder(24.dp.toSp(), 18.dp.toSp(), PlaceholderVerticalAlign.TextCenter) }
+    return mapOf(
+        ExplicitBadgeId to InlineTextContent(placeholder) {
+            Box(Modifier.fillMaxSize(), contentAlignment = if (titleIsRtl) AbsoluteAlignment.CenterLeft else AbsoluteAlignment.CenterRight) {
+                Box(
+                    Modifier.size(18.dp).clip(RoundedCornerShape(4.dp))
+                        .background(colors.foregroundSubtle.copy(alpha = 0.85f))
+                        .clearAndSetSemantics { testTag = FullScreenPlayerExplicitBadgeTestTag },
+                    contentAlignment = Alignment.Center,
+                ) {
+                    Text("E", color = colors.playerBackdrop, fontSize = with(density) { 12.dp.toSp() }, fontWeight = FontWeight.Bold, lineHeight = with(density) { 12.dp.toSp() })
+                }
+            }
+        },
+    )
 }

@@ -11,8 +11,9 @@ import org.junit.Test
 class LocalPlaylistProjectionTest {
     @Test fun artworkReferencedByLocalEditsIsRetained() {
         val hash = "a".repeat(64)
-        assertEquals(emptyList<String>(), unusedPlaylistArtworkHashes(listOf(hash), listOf(mutation("1", PlaylistMutationOperation.SET_ARTWORK, PlaylistMutationPayload(artworkSha256 = hash))), emptyList()))
-        assertEquals(listOf(hash), unusedPlaylistArtworkHashes(listOf(hash), emptyList(), emptyList()))
+        val pending = listOf(mutation("1", PlaylistMutationOperation.SET_ARTWORK, PlaylistMutationPayload(artworkSha256 = hash)))
+        assertEquals(setOf(hash), playlistArtworkInUse(emptyList(), emptyList(), pending))
+        assertEquals(emptySet<String>(), playlistArtworkInUse(emptyList(), emptyList(), emptyList()))
     }
 
     @Test fun pendingRemoveTrackIsProjectedImmediately() {

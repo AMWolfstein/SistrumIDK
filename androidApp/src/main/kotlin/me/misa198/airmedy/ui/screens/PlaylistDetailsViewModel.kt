@@ -1,11 +1,15 @@
 package me.misa198.airmedy.ui.screens
 
+import android.content.Context
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.ViewModelProvider
 import androidx.lifecycle.viewModelScope
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.combine
+import kotlinx.coroutines.flow.flowOn
+import kotlinx.coroutines.flow.onEach
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.serialization.json.booleanOrNull
 import me.misa198.airmedy.player.PlaybackController
@@ -29,32 +33,43 @@ internal data class PlaylistDetailsUiState(
     internal val playlists: List<LibraryPlaylist> = emptyList(),
     internal val allTracks: List<LibraryTrack> = emptyList(),
     internal val artworkPathByKey: Map<String, String> = emptyMap(),
-)
+    internal val favoritesMetadata: String = "{}",
+) {
+    /** Favorited track ids in library order. Outside equals() and forced on Dispatchers.Default by the ViewModel. */
+    internal val favoriteTrackIds: List<String> by lazy { allTracks.filter(LibraryTrack::isFavorite).map(LibraryTrack::id) }
+}
 
 internal class PlaylistDetailsViewModel(
+    private val context: Context,
     private val syncStore: AndroidLibrarySyncStore,
     private val playbackController: PlaybackController,
 ) : ViewModel() {
     class Factory(
+        private val context: Context,
         private val store: AndroidLibrarySyncStore,
         private val playback: PlaybackController,
     ) : ViewModelProvider.Factory {
         @Suppress("UNCHECKED_CAST")
         override fun <T : ViewModel> create(modelClass: Class<T>): T =
-            PlaylistDetailsViewModel(store, playback) as T
+            PlaylistDetailsViewModel(context, store, playback) as T
     }
 
     val uiState: StateFlow<PlaylistDetailsUiState> = combine(
         syncStore.playlists,
         syncStore.tracks,
         syncStore.artworkPaths,
-    ) { playlists, tracks, artworkPaths ->
+        syncStore.favoritesMetadata,
+    ) { playlists, tracks, artworkPaths, favoritesMetadata ->
         PlaylistDetailsUiState(
             playlists = playlists,
             allTracks = tracks,
             artworkPathByKey = artworkPaths,
+            favoritesMetadata = favoritesMetadata,
         )
-    }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), PlaylistDetailsUiState())
+    }
+        // Build the lazy index here, on Dispatchers.Default, not on first read in composition.
+        .onEach { it.favoriteTrackIds }
+        .flowOn(Dispatchers.Default).stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), PlaylistDetailsUiState())
 
     fun play(playlistId: String, shuffle: Boolean) {
         val tracks = playlistDetailsUiStateFor(uiState.value, playlistId).tracks
@@ -72,30 +87,34 @@ internal class PlaylistDetailsViewModel(
     fun removeTrack(playlistId: String, trackId: String) {
         if (playlistId == FavoritesPlaylistId || trackId.isBlank()) return
         viewModelScope.launch {
-            syncStore.queuePlaylistMutation(
-                PlaylistMutation(
-                    mutationId = UUID.randomUUID().toString(),
-                    playlistId = playlistId,
-                    operation = PlaylistMutationOperation.REMOVE_TRACK,
-                    updatedAt = System.currentTimeMillis(),
-                    payload = PlaylistMutationPayload(trackId = trackId),
-                ),
-            )
+            runPlaylistWrite(context) {
+                syncStore.queuePlaylistMutation(
+                    PlaylistMutation(
+                        mutationId = UUID.randomUUID().toString(),
+                        playlistId = playlistId,
+                        operation = PlaylistMutationOperation.REMOVE_TRACK,
+                        updatedAt = System.currentTimeMillis(),
+                        payload = PlaylistMutationPayload(trackId = trackId),
+                    ),
+                )
+            }
         }
     }
 
     fun moveTrack(playlistId: String, trackId: String, previousTrackId: String?, nextTrackId: String?) {
         if (playlistId == FavoritesPlaylistId || trackId.isBlank()) return
         viewModelScope.launch {
-            syncStore.queuePlaylistMutation(
-                PlaylistMutation(
-                    mutationId = UUID.randomUUID().toString(),
-                    playlistId = playlistId,
-                    operation = PlaylistMutationOperation.MOVE_TRACK,
-                    updatedAt = System.currentTimeMillis(),
-                    payload = PlaylistMutationPayload(trackId = trackId, previousTrackId = previousTrackId, nextTrackId = nextTrackId),
-                ),
-            )
+            runPlaylistWrite(context) {
+                syncStore.queuePlaylistMutation(
+                    PlaylistMutation(
+                        mutationId = UUID.randomUUID().toString(),
+                        playlistId = playlistId,
+                        operation = PlaylistMutationOperation.MOVE_TRACK,
+                        updatedAt = System.currentTimeMillis(),
+                        payload = PlaylistMutationPayload(trackId = trackId, previousTrackId = previousTrackId, nextTrackId = nextTrackId),
+                    ),
+                )
+            }
         }
     }
 }
@@ -109,11 +128,11 @@ internal fun playlistDetailsUiStateFor(
     state: PlaylistDetailsUiState,
     playlistId: String,
 ): PlaylistDetailsUiState {
-    val basePlaylist = playlistsWithFavorites(state.playlists).firstOrNull { it.id == playlistId }
+    val basePlaylist = playlistsWithFavorites(state.playlists, favoritesMetadata = state.favoritesMetadata).firstOrNull { it.id == playlistId }
         ?: return PlaylistDetailsUiState()
     val tracksById = state.allTracks.associateBy { it.id }
     val playlist = if (basePlaylist.id == FavoritesPlaylistId) {
-        basePlaylist.copy(trackIds = state.allTracks.filter(LibraryTrack::isFavorite).map(LibraryTrack::id))
+        basePlaylist.copy(trackIds = state.favoriteTrackIds)
     } else {
         basePlaylist
     }

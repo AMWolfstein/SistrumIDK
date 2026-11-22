@@ -16,6 +16,7 @@ import android.os.Bundle
 import android.os.Build
 import android.Manifest
 import android.content.pm.ActivityInfo
+import android.content.Context
 import android.content.pm.PackageManager
 import android.content.res.Configuration
 import android.content.Intent
@@ -63,6 +64,8 @@ import me.misa198.airmedy.lastfm.isLastFmAuthCallback
 import me.misa198.airmedy.lyrics.AndroidLyricsService
 import me.misa198.airmedy.lyrics.LyricsPreferences
 import kotlin.math.roundToInt
+import me.misa198.airmedy.ui.screens.runPlaylistWrite
+import me.misa198.airmedy.ui.components.withLatinDigits
 import me.misa198.airmedy.ui.screens.LibraryTracksViewModel
 import me.misa198.airmedy.ui.screens.LibraryArtistsViewModel
 import me.misa198.airmedy.ui.screens.LibraryAlbumsViewModel
@@ -108,7 +111,6 @@ class MainActivity : ComponentActivity() {
     private val insightViewModel: InsightViewModel by viewModels {
         InsightViewModel.Factory(
             LocalLibraryRuntime.libraryStore(),
-            flow { emit(DeviceIdentity(applicationContext).id()) },
             AndroidPlaybackRuntime.controller(),
         )
     }
@@ -138,7 +140,7 @@ class MainActivity : ComponentActivity() {
         AlbumDetailsViewModel.Factory(LocalLibraryRuntime.libraryStore(), AndroidPlaybackRuntime.controller())
     }
     private val playlistDetailsViewModel: PlaylistDetailsViewModel by viewModels {
-        PlaylistDetailsViewModel.Factory(LocalLibraryRuntime.libraryStore(), AndroidPlaybackRuntime.controller())
+        PlaylistDetailsViewModel.Factory(applicationContext, LocalLibraryRuntime.libraryStore(), AndroidPlaybackRuntime.controller())
     }
     private val artistDetailsViewModel: ArtistDetailsViewModel by viewModels {
         ArtistDetailsViewModel.Factory(LocalLibraryRuntime.libraryStore(), AndroidPlaybackRuntime.controller())
@@ -148,6 +150,11 @@ class MainActivity : ComponentActivity() {
     }
     private val composerDetailsViewModel: ComposerDetailsViewModel by viewModels {
         ComposerDetailsViewModel.Factory(LocalLibraryRuntime.libraryStore(), AndroidPlaybackRuntime.controller())
+    }
+
+    override fun attachBaseContext(newBase: Context) {
+        // Keep numbers in Western digits in every locale (see LatinDigits.kt).
+        super.attachBaseContext(newBase.withLatinDigits())
     }
 
     override fun onCreate(savedInstanceState: Bundle?) {
@@ -325,7 +332,6 @@ class MainActivity : ComponentActivity() {
                     state = insightUiState,
                     onLibraryPeriodSelected = insightViewModel::setLibraryPeriod,
                     onListeningPeriodSelected = insightViewModel::setListeningPeriod,
-                    onSourceSelected = insightViewModel::setSourceFilter,
                     onTrackClick = insightViewModel::playTopTrack,
                 ),
                 library = LibraryDestinationModel(
@@ -361,7 +367,9 @@ class MainActivity : ComponentActivity() {
                         onAddToQueue = playbackController::append,
                         onAddToFavorites = { trackIds ->
                             preferenceScope.launch {
-                                trackIds.forEach { trackId -> LocalLibraryRuntime.libraryStore().setFavorite(trackId, true) }
+                                runPlaylistWrite(applicationContext) {
+                                    trackIds.forEach { trackId -> LocalLibraryRuntime.libraryStore().setFavorite(trackId, true) }
+                                }
                             }
                         },
                     ),
@@ -427,6 +435,7 @@ class MainActivity : ComponentActivity() {
                     onRomanizationEnabledChanged = { enabled -> preferenceScope.launch { lyricsPreferences.setRomanizationEnabled(enabled) } },
                     onLyricsGlowChanged = { enabled -> preferenceScope.launch { lyricsPreferences.setGlowEnabled(enabled) } },
                     onEmbeddedChanged = { enabled -> preferenceScope.launch { lyricsPreferences.setEmbedded(enabled) } },
+                    onSidecarChanged = { enabled -> preferenceScope.launch { lyricsPreferences.setSidecar(enabled) } },
                     crossfadeSeconds = crossfadeSettings.seconds,
                     lastEnabledCrossfadeSeconds = crossfadeSettings.lastEnabledSeconds,
                     onCrossfadeSecondsChanged = playbackController::setCrossfadeSeconds,
@@ -489,8 +498,8 @@ class MainActivity : ComponentActivity() {
                 onRepeatModeChange = playbackController::setRepeatMode,
                 onFavoriteToggle = { trackId, favorite ->
                     preferenceScope.launch {
-                        LocalLibraryRuntime.libraryStore().setFavorite(trackId, favorite)
-                        lastFm.setLoved(trackId, favorite)
+                        val saved = runPlaylistWrite(applicationContext) { LocalLibraryRuntime.libraryStore().setFavorite(trackId, favorite) }
+                        if (saved) lastFm.setLoved(trackId, favorite)
                     }
                 },
                 onTrackPlayNext = playbackController::playNext,

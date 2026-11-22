@@ -67,6 +67,8 @@ import me.misa198.airmedy.ui.components.AnimatedPlayPauseSymbol
 import me.misa198.airmedy.ui.components.AnimatedSkipSymbol
 import me.misa198.airmedy.ui.components.MaterialSymbol
 import me.misa198.airmedy.ui.components.MaterialSymbols
+import me.misa198.airmedy.ui.components.LeftToRight
+import me.misa198.airmedy.ui.components.formatDisplay
 import me.misa198.airmedy.ui.components.TrackAudioQuality
 import me.misa198.airmedy.ui.components.sliderFilledTrackColor
 import me.misa198.airmedy.ui.components.trackAudioQuality
@@ -154,13 +156,15 @@ internal fun FullScreenPlayerControls(
                 isPreparing, contextTrack, showQualityBadge, onSeekRequested, onSeekConfirmed)
             FullScreenPlaybackButtons(isPreparing, isPlaying, canNavigatePrevious, canNavigateNext, onPrevious, onPlayPause, onNext)
             Column {
-                Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
-                    MaterialSymbol(MaterialSymbols.VolumeDown, null, tint = volumeColor, size = 20.dp, filled = true, modifier = Modifier.offset(x = -volumeOffset))
-                    Spacer(Modifier.width(10.dp))
-                    AirmedyTrackSlider(volume, onVolumeChange, onInteractionChange = { volumeInteracting = it }, trackHeight = 7.dp,
-                        modifier = Modifier.weight(1f).semantics { contentDescription = volumeLabel })
-                    Spacer(Modifier.width(10.dp))
-                    MaterialSymbol(MaterialSymbols.VolumeUp, null, tint = volumeColor, size = 20.dp, filled = true, modifier = Modifier.offset(x = volumeOffset))
+                LeftToRight {
+                    Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
+                        MaterialSymbol(MaterialSymbols.VolumeDown, null, tint = volumeColor, size = 20.dp, filled = true, modifier = Modifier.offset(x = -volumeOffset))
+                        Spacer(Modifier.width(10.dp))
+                        AirmedyTrackSlider(volume, onVolumeChange, onInteractionChange = { volumeInteracting = it }, trackHeight = 7.dp,
+                            modifier = Modifier.weight(1f).semantics { contentDescription = volumeLabel })
+                        Spacer(Modifier.width(10.dp))
+                        MaterialSymbol(MaterialSymbols.VolumeUp, null, tint = volumeColor, size = 20.dp, filled = true, modifier = Modifier.offset(x = volumeOffset))
+                    }
                 }
                 Spacer(Modifier.height(if (compactControls) 0.dp else 4.dp))
                 FullScreenPanelButtons(selectedPanel, queue, onPanelSelected) {
@@ -206,6 +210,7 @@ internal fun FullScreenSeekControls(
     val seekScaleY by animateFloatAsState(if (seekInteracting) 1.10f else 1f, tween(220, easing = FastOutSlowInEasing), label = "full-screen-seek-supporting-scale-y")
     val qualityBadge = contextTrack?.let(::trackAudioQuality)?.let {
         when (it) {
+            TrackAudioQuality.Lossy -> R.string.track_info_quality_lossy to MaterialSymbols.MusicNote
             TrackAudioQuality.Lossless -> R.string.track_info_quality_lossless to MaterialSymbols.GraphicEq
             TrackAudioQuality.HiRes -> R.string.track_info_quality_hi_res to MaterialSymbols.Bolt
             TrackAudioQuality.Dsd -> R.string.track_info_quality_dsd to MaterialSymbols.Crown
@@ -218,46 +223,48 @@ internal fun FullScreenSeekControls(
         it.labelRes == R.string.track_info_sample_rate || it.labelRes == R.string.track_info_bit_depth || it.labelRes == R.string.track_info_codec
     }
     Column {
-        AirmedyTrackSlider(
-            value = pendingSeekFraction ?: if (durationMs > 0) currentPositionMs.toFloat() / durationMs else 0f,
-            onValueChange = { pendingSeekFraction = it },
-            onValueChangeFinished = {
-                pendingSeekFraction?.let { onSeekRequested((durationMs * it).toLong()) }
-                awaitingSeekConfirmation = pendingSeekFraction != null
-            },
-            enabled = durationMs > 0 && !isPreparing,
-            onInteractionChange = { seekInteracting = it },
-            trackHeight = 7.dp,
-            modifier = Modifier.excludeFullScreenSwipe().semantics { contentDescription = seekLabel },
-        )
-        Box(Modifier.fillMaxWidth()) {
-            Text(
-                text = formatPlaybackTime(pendingSeekFraction?.let { (durationMs * it).toLong() } ?: currentPositionMs),
-                color = seekLabelColor,
-                style = MaterialTheme.typography.labelSmall,
-                modifier = Modifier.align(Alignment.CenterStart).offset(x = -seekOffset, y = (-12).dp + seekOffset)
-                    .semantics { testTag = FullScreenPlayerElapsedTimeTestTag },
+        LeftToRight {
+            AirmedyTrackSlider(
+                value = pendingSeekFraction ?: if (durationMs > 0) currentPositionMs.toFloat() / durationMs else 0f,
+                onValueChange = { pendingSeekFraction = it },
+                onValueChangeFinished = {
+                    pendingSeekFraction?.let { onSeekRequested((durationMs * it).toLong()) }
+                    awaitingSeekConfirmation = pendingSeekFraction != null
+                },
+                enabled = durationMs > 0 && !isPreparing,
+                onInteractionChange = { seekInteracting = it },
+                trackHeight = 7.dp,
+                modifier = Modifier.excludeFullScreenSwipe().semantics { contentDescription = seekLabel },
             )
-            Row(
-                verticalAlignment = Alignment.CenterVertically,
-                horizontalArrangement = Arrangement.spacedBy(3.dp),
-                modifier = Modifier.align(Alignment.Center).offset(y = (-12).dp + seekOffset).alpha(if (qualityVisible) 1f else 0f)
-                    .graphicsLayer { scaleX = seekScaleX; scaleY = seekScaleY }
-                    .then(if (qualityVisible) Modifier.excludeFullScreenSwipe().semantics { testTag = FullScreenPlayerQualityBadgeTestTag } else Modifier.clearAndSetSemantics {})
-                    .clip(RoundedCornerShape(6.dp)).background(fullScreenSecondaryControlBackground(colors))
-                    .then(if (qualityVisible) Modifier.clickable(role = Role.Button, interactionSource = remember { MutableInteractionSource() }, indication = null) { qualityDialogVisible = true } else Modifier)
-                    .padding(horizontal = 8.dp, vertical = 3.dp),
-            ) {
-                MaterialSymbol(qualitySlot.second, null, size = 12.dp, tint = colors.foregroundSubtle)
-                Text(stringResource(qualitySlot.first), color = colors.foregroundSubtle, style = MaterialTheme.typography.labelSmall.copy(fontWeight = FontWeight.Medium))
+            Box(Modifier.fillMaxWidth()) {
+                Text(
+                    text = formatPlaybackTime(pendingSeekFraction?.let { (durationMs * it).toLong() } ?: currentPositionMs),
+                    color = seekLabelColor,
+                    style = MaterialTheme.typography.labelSmall,
+                    modifier = Modifier.align(Alignment.CenterStart).offset(x = -seekOffset, y = (-12).dp + seekOffset)
+                        .semantics { testTag = FullScreenPlayerElapsedTimeTestTag },
+                )
+                Row(
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(3.dp),
+                    modifier = Modifier.align(Alignment.Center).offset(y = (-12).dp + seekOffset).alpha(if (qualityVisible) 1f else 0f)
+                        .graphicsLayer { scaleX = seekScaleX; scaleY = seekScaleY }
+                        .then(if (qualityVisible) Modifier.excludeFullScreenSwipe().semantics { testTag = FullScreenPlayerQualityBadgeTestTag } else Modifier.clearAndSetSemantics {})
+                        .clip(RoundedCornerShape(6.dp)).background(fullScreenSecondaryControlBackground(colors))
+                        .then(if (qualityVisible) Modifier.clickable(role = Role.Button, interactionSource = remember { MutableInteractionSource() }, indication = null) { qualityDialogVisible = true } else Modifier)
+                        .padding(horizontal = 8.dp, vertical = 3.dp),
+                ) {
+                    MaterialSymbol(qualitySlot.second, null, size = 12.dp, tint = colors.foregroundSubtle)
+                    Text(stringResource(qualitySlot.first), color = colors.foregroundSubtle, style = MaterialTheme.typography.labelSmall.copy(fontWeight = FontWeight.Medium))
+                }
+                Text(
+                    text = displayedDurationMs?.let(::formatPlaybackTime) ?: "--:--",
+                    color = seekLabelColor,
+                    style = MaterialTheme.typography.labelSmall,
+                    modifier = Modifier.align(Alignment.CenterEnd).offset(x = seekOffset, y = (-12).dp + seekOffset)
+                        .semantics { testTag = FullScreenPlayerDurationTestTag },
+                )
             }
-            Text(
-                text = displayedDurationMs?.let(::formatPlaybackTime) ?: "--:--",
-                color = seekLabelColor,
-                style = MaterialTheme.typography.labelSmall,
-                modifier = Modifier.align(Alignment.CenterEnd).offset(x = seekOffset, y = (-12).dp + seekOffset)
-                    .semantics { testTag = FullScreenPlayerDurationTestTag },
-            )
         }
         if (qualityDialogVisible && qualityBadge != null) FullScreenQualityDialog(qualityBadge.first, qualityBadge.second, qualityDetails) { qualityDialogVisible = false }
     }
@@ -273,10 +280,12 @@ internal fun FullScreenPlaybackButtons(
     onPlayPause: () -> Unit,
     onNext: () -> Unit,
 ) {
-    Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(24.dp, Alignment.CenterHorizontally), verticalAlignment = Alignment.CenterVertically) {
-        FullScreenTransportButton(MaterialSymbols.SkipPrevious, stringResource(R.string.player_previous), onPrevious, enabled = canNavigatePrevious, iconSize = 36.dp, skipForward = false)
-        FullScreenTransportButton(label = stringResource(if (isPlaying) R.string.player_pause else R.string.player_play), onClick = onPlayPause, enabled = !isPreparing, iconSize = 48.dp, isPlaying = isPlaying)
-        FullScreenTransportButton(MaterialSymbols.SkipNext, stringResource(R.string.player_next), onNext, enabled = canNavigateNext, iconSize = 36.dp, skipForward = true)
+    LeftToRight {
+        Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(24.dp, Alignment.CenterHorizontally), verticalAlignment = Alignment.CenterVertically) {
+            FullScreenTransportButton(MaterialSymbols.SkipPrevious, stringResource(R.string.player_previous), onPrevious, enabled = canNavigatePrevious, iconSize = 36.dp, skipForward = false)
+            FullScreenTransportButton(label = stringResource(if (isPlaying) R.string.player_pause else R.string.player_play), onClick = onPlayPause, enabled = !isPreparing, iconSize = 48.dp, isPlaying = isPlaying)
+            FullScreenTransportButton(MaterialSymbols.SkipNext, stringResource(R.string.player_next), onNext, enabled = canNavigateNext, iconSize = 36.dp, skipForward = true)
+        }
     }
 }
 
@@ -382,5 +391,5 @@ internal fun FullScreenTransportButton(
 
 private fun formatPlaybackTime(timeMs: Long): String {
     val seconds = (timeMs.coerceAtLeast(0L) / 1000).toInt()
-    return "%d:%02d".format(seconds / 60, seconds % 60)
+    return formatDisplay("%d:%02d", seconds / 60, seconds % 60)
 }

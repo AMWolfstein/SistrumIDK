@@ -1,5 +1,6 @@
 package me.misa198.airmedy.ui.navigation
 
+import androidx.compose.ui.unit.LayoutDirection
 import androidx.compose.animation.AnimatedContent
 import androidx.compose.animation.EnterTransition
 import androidx.compose.animation.ExitTransition
@@ -54,11 +55,12 @@ import me.misa198.airmedy.ui.screens.AboutContent
 import me.misa198.airmedy.ui.screens.AppearanceContent
 import me.misa198.airmedy.ui.screens.LibraryContent
 import me.misa198.airmedy.ui.screens.LibraryScanContent
+import me.misa198.airmedy.ui.screens.ScanFilterContent
+import me.misa198.airmedy.ui.screens.TagSeparatorsContent
 import me.misa198.airmedy.ui.screens.LibrarySearchContent
 import me.misa198.airmedy.ui.screens.LibrarySearchUiState
 import me.misa198.airmedy.ui.screens.InsightContent
 import me.misa198.airmedy.ui.screens.InsightPeriod
-import me.misa198.airmedy.ui.screens.InsightSourceFilter
 import me.misa198.airmedy.ui.screens.InsightUiState
 import me.misa198.airmedy.ui.screens.SettingsContent
 import me.misa198.airmedy.ui.screens.IntegrationContent
@@ -194,15 +196,16 @@ internal fun AppDestinationContent(
         if (uri == null) return@rememberLauncherForActivityResult
         artistImagePickerScope.launch {
             runCatching {
-                val artwork = withContext(Dispatchers.IO) {
-                    stageArtistArtwork(
-                        artistImagePickerContext.contentResolver,
-                        artistImagePickerContext.filesDir,
-                        artistId,
-                        uri,
-                    )
+                LocalLibraryRuntime.libraryStore().stageArtistArtwork {
+                    withContext(Dispatchers.IO) {
+                        stageArtistArtwork(
+                            artistImagePickerContext.contentResolver,
+                            artistImagePickerContext.filesDir,
+                            artistId,
+                            uri,
+                        )
+                    }
                 }
-                LocalLibraryRuntime.libraryStore().stageArtistArtwork(artwork)
             }
         }
     }
@@ -216,7 +219,6 @@ internal fun AppDestinationContent(
     val onHomeTrackClick = destinations.home.onTrackClick
     val onInsightLibraryPeriodSelected = destinations.insight.onLibraryPeriodSelected
     val onInsightListeningPeriodSelected = destinations.insight.onListeningPeriodSelected
-    val onInsightSourceSelected = destinations.insight.onSourceSelected
     val onInsightTrackClick = destinations.insight.onTrackClick
     val onSortOptionSelected = library.tracks.onSortOptionSelected
     val onToggleSortOrder = library.tracks.onToggleSortOrder
@@ -268,6 +270,7 @@ internal fun AppDestinationContent(
     val onRomanizationEnabledChanged = settings.onRomanizationEnabledChanged
     val onLyricsGlowChanged = settings.onLyricsGlowChanged
     val onEmbeddedChanged = settings.onEmbeddedChanged
+    val onSidecarChanged = settings.onSidecarChanged
     val crossfadeSeconds = settings.crossfadeSeconds
     val lastEnabledCrossfadeSeconds = settings.lastEnabledCrossfadeSeconds
     val onCrossfadeSecondsChanged = settings.onCrossfadeSecondsChanged
@@ -322,6 +325,8 @@ internal fun AppDestinationContent(
             },
             showHeader = false,
         ) { modifier, contentPadding ->
+            // Horizontal slide offsets are physical: forward pages enter from the layout's end side.
+            val slideDirection = if (LocalLayoutDirection.current == LayoutDirection.Rtl) -1 else 1
             AnimatedContent(
                 targetState = stackPage,
                 modifier = modifier,
@@ -330,13 +335,13 @@ internal fun AppDestinationContent(
                         fadeIn(animationSpec = tween(durationMillis = 200)) togetherWith
                             fadeOut(animationSpec = tween(durationMillis = 200))
                     } else if (isForwardTransition(targetState, initialState)) {
-                        (slideInHorizontally { it } togetherWith
-                            slideOutHorizontally { -it / 4 }).apply {
+                        (slideInHorizontally { it * slideDirection } togetherWith
+                            slideOutHorizontally { -it / 4 * slideDirection }).apply {
                             targetContentZIndex = 1f
                         }
                     } else {
-                        (slideInHorizontally { -it / 4 } togetherWith
-                            slideOutHorizontally { it }).apply {
+                        (slideInHorizontally { -it / 4 * slideDirection } togetherWith
+                            slideOutHorizontally { it * slideDirection }).apply {
                             targetContentZIndex = 0f
                         }
                     }
@@ -380,7 +385,6 @@ internal fun AppDestinationContent(
                                 contentPadding = contentPadding,
                                 onLibraryPeriodSelected = onInsightLibraryPeriodSelected,
                                 onListeningPeriodSelected = onInsightListeningPeriodSelected,
-                                onSourceSelected = onInsightSourceSelected,
                                 onArtistClick = { onIntent(AppIntent.OpenArtistDetails(it)) },
                                 onTrackClick = onInsightTrackClick,
                                 modifier = Modifier.fillMaxSize(),
@@ -419,6 +423,14 @@ internal fun AppDestinationContent(
                                 hazeState = hazeState,
                             )
                             AppStackPage.SettingsScan -> LibraryScanContent(
+                                modifier = settingsPageModifier,
+                                onScanFilterSelected = { onIntent(AppIntent.OpenPage(AppStackPage.SettingsScanFilter)) },
+                                onTagSeparatorsSelected = { onIntent(AppIntent.OpenPage(AppStackPage.SettingsTagSeparators)) },
+                            )
+                            AppStackPage.SettingsScanFilter -> ScanFilterContent(
+                                modifier = settingsPageModifier,
+                            )
+                            AppStackPage.SettingsTagSeparators -> TagSeparatorsContent(
                                 modifier = settingsPageModifier,
                             )
                             AppStackPage.SettingsPlayback -> PlaybackSettingsContent(
@@ -471,7 +483,7 @@ internal fun AppDestinationContent(
                                 onDisconnect = onLastFmDisconnect,
                                 modifier = settingsPageModifier,
                             )
-                            AppStackPage.SettingsLyrics -> LyricsContent(lyricsSettings, onLrclibChanged, onKugouChanged, onEmbeddedChanged, onRomanizationEnabledChanged, onLyricsGlowChanged, settingsPageModifier)
+                            AppStackPage.SettingsLyrics -> LyricsContent(lyricsSettings, onLrclibChanged, onKugouChanged, onEmbeddedChanged, onRomanizationEnabledChanged, onLyricsGlowChanged, settingsPageModifier, onSidecarChanged)
                             AppStackPage.SettingsAbout -> AboutContent(
                                 modifier = settingsPageModifier,
                                 onOpenExternalUrl = { url ->
@@ -546,6 +558,11 @@ internal fun AppDestinationContent(
                                 onAddToQueue = onArtistAddToQueue,
                                 onTrackContextBottomSheet = onArtistTrackContextBottomSheet,
                                 onAddArtistImage = { artistImagePicker.launch("image/*") },
+                                onRemoveArtistImage = {
+                                    selectedArtistId?.let { artistId ->
+                                        artistImagePickerScope.launch { runCatching { LocalLibraryRuntime.libraryStore().clearArtistArtwork(artistId) } }
+                                    }
+                                },
                                 onAlbumClick = { album -> onIntent(AppIntent.OpenAlbumDetails(album.id)) },
                                 playbackQueue = playbackQueue,
                             )
