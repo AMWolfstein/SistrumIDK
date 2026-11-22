@@ -382,4 +382,5 @@
     <string name="app_update_no_notes">Release notes are not available.</string>
     <string name="app_update_later">Later</string>
     <string name="app_update_action">Update</string>
+    <string name="scan_found_nothing_library_kept">No music found. Your library was kept.</string>
 </resources>

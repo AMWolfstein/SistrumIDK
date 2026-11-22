@@ -210,7 +210,7 @@ internal interface SyncDao {
     @Insert(onConflict = OnConflictStrategy.REPLACE) suspend fun insertAssets(values: List<SyncAssetEntity>)
     @Insert(onConflict = OnConflictStrategy.REPLACE) suspend fun insertTracks(values: List<SyncTrackEntity>)
     @Insert suspend fun insertSearchDocuments(values: List<LibrarySearchDocumentEntity>)
-    @Insert(onConflict = OnConflictStrategy.IGNORE) suspend fun insertPlaylistMutation(value: PlaylistMutationEntity)
+    @Insert(onConflict = OnConflictStrategy.REPLACE) suspend fun insertPlaylistMutation(value: PlaylistMutationEntity)
     @Insert(onConflict = OnConflictStrategy.REPLACE) suspend fun insertLocalPlaylist(value: LocalPlaylistEntity)
     @Insert(onConflict = OnConflictStrategy.REPLACE) suspend fun insertPlaylistArtwork(value: PlaylistArtworkStagingEntity)
     @Insert(onConflict = OnConflictStrategy.REPLACE) suspend fun insertArtistArtwork(value: ArtistArtworkStagingEntity)
@@ -254,6 +254,9 @@ internal interface SyncDao {
     @Query("DELETE FROM provider_lyrics WHERE trackId NOT IN (SELECT trackId FROM sync_tracks WHERE planId = :planId)") suspend fun deleteProviderLyricsNotInPlan(planId: String)
     @Query("DELETE FROM sync_plans WHERE planId != :planId") suspend fun deleteStalePlans(planId: String)
     @Query("DELETE FROM library_search_fts WHERE planId = :planId") suspend fun deleteSearchDocuments(planId: String)
+    @Query("SELECT COUNT(*) FROM sync_tracks t JOIN sync_plans p ON p.planId = t.planId WHERE p.active = 1")
+    suspend fun activeTrackCount(): Int
+
     @Query("SELECT * FROM playlist_mutations WHERE state = 'pending' ORDER BY updatedAt, mutationId") suspend fun pendingPlaylistMutations(): List<PlaylistMutationEntity>
     @Query("SELECT * FROM playlist_mutations WHERE state IN ('pending', 'awaiting_sync') ORDER BY updatedAt, mutationId") fun observeProjectedPlaylistMutations(): Flow<List<PlaylistMutationEntity>>
     @Query("SELECT * FROM local_playlists ORDER BY name COLLATE NOCASE") fun observeLocalPlaylists(): Flow<List<LocalPlaylistEntity>>
@@ -414,6 +417,17 @@ data class LibraryTrack(
     val sortTitle: String = "",
     val sortArtists: String = "",
 )
+
+fun LibraryTrack.durationMillis(): Long? = (metadataObject()?.get("duration") as? JsonPrimitive)
+    ?.contentOrNull?.toDoubleOrNull()?.toLong()?.takeIf { it > 0 }
+
+internal fun LibraryTrack.toLyricsTrack(): LyricsTrack {
+    val metadata = metadataObject()
+    val artist = ((metadata?.get("artists") as? JsonArray)?.firstOrNull() as? JsonObject)
+        ?.string("name").orEmpty().ifBlank { artists.substringBefore(',').trim() }
+    val duration = durationMillis()?.let { ((it + 500) / 1000).toInt() } ?: 0
+    return LyricsTrack(title, artist, album, duration, audioPath = audioPath.orEmpty())
+}
 
 internal data class LibraryPlaylistRow(val id: String, val name: String, val trackIdsJson: String, val rawJson: String)
 data class LibraryPlaylist(val id: String, val name: String, val trackIds: List<String>, val metadataJson: String, val syncFailed: Boolean = false)
@@ -615,7 +629,7 @@ internal class AndroidLibrarySyncStore(
         require(mutation.validationError() == null) { mutation.validationError() ?: "Invalid playlist mutation" }
         dao.insertPlaylistMutation(
             PlaylistMutationEntity(
-                mutation.mutationId,
+                mutation.dedupeMutationId() ?: mutation.mutationId,
                 mutation.playlistId,
                 mutation.operation.name,
                 mutation.updatedAt,
@@ -694,11 +708,8 @@ internal class AndroidLibrarySyncStore(
 
     fun providerLyrics(trackId: String): Flow<String?> = dao.observeProviderLyrics(trackId)
     suspend fun saveProviderLyrics(trackId: String, content: String, source: String) = dao.insertProviderLyric(ProviderLyricEntity(trackId, content, source))
-    suspend fun lyricsTrack(trackId: String): LyricsTrack? = tracks.first().firstOrNull { it.id == trackId }?.let { track ->
-        val metadata = track.metadataObject()
-        val artist = ((metadata?.get("artists") as? JsonArray)?.firstOrNull() as? JsonObject)?.string("name").orEmpty().ifBlank { track.artists.substringBefore(',').trim() }
-        LyricsTrack(track.title, artist, track.album, metadata?.get("duration")?.jsonPrimitive?.contentOrNull?.toIntOrNull() ?: 0, audioPath = track.audioPath.orEmpty())
-    }
+    suspend fun lyricsTrack(trackId: String): LyricsTrack? = tracks.first().firstOrNull { it.id == trackId }?.toLyricsTrack()
+
 
     /**
      * Replaces the active library with a locally scanned [snapshot] in one transaction:
@@ -711,10 +722,11 @@ internal class AndroidLibrarySyncStore(
         snapshot: LocalLibrarySnapshot,
         audioRows: Map<String, LocalScanAudio>,
         artworkRows: List<LocalScanArtwork>,
-    ) {
+    ): Boolean {
         val planId = "local-${UUID.randomUUID()}"
         val artworkKeys = artworkRows.mapTo(mutableSetOf(), LocalScanArtwork::artworkKey)
         val (stale, activePaths) = database.withTransaction {
+            if (snapshot.tracks.isEmpty() && dao.activeTrackCount() > 0) return@withTransaction null
             dao.insertPlan(SyncPlanEntity(planId, LocalLibraryOwnerId, localLibraryManifest(planId), "staging", false))
             val playCounts = dao.trackPlayCounts().associate { it.trackId to it.playCount }
             dao.insertAssets(buildList {
@@ -761,7 +773,7 @@ internal class AndroidLibrarySyncStore(
                 dao.deleteProviderLyricsNotInPlan(planId)
                 dao.deleteStalePlans(planId)
             } to active
-        }
+        } ?: return false
         stale.forEach { asset ->
             if (asset.kind == "artwork") {
                 asset.relativePath
@@ -769,6 +781,7 @@ internal class AndroidLibrarySyncStore(
                     ?.let { File(filesDir, it).delete() }
             }
         }
+        return true
     }
 
     suspend fun recordListening(write: ListeningWrite) = database.withTransaction {
@@ -862,6 +875,15 @@ private fun PlaylistMutationEntity.toPlaylistMutation(): PlaylistMutation? = run
         LibraryJson.json.decodeFromString(PlaylistMutationPayload.serializer(), payloadJson),
     )
 }.getOrNull()
+
+private fun PlaylistMutation.dedupeMutationId(): String? = when (operation) {
+    PlaylistMutationOperation.SET_FAVORITE -> "dedupe:favorite:${payload.trackId}"
+    PlaylistMutationOperation.SET_ARTWORK, PlaylistMutationOperation.REMOVE_ARTWORK -> "dedupe:artwork:$playlistId"
+    PlaylistMutationOperation.UPDATE -> "dedupe:update:$playlistId"
+    // Membership and move operations are ordered deltas. Keeping only the last
+    // delta for a track can change its position relative to other tracks.
+    else -> null
+}
 
 /** Applies stored playlist edits to the library snapshot. */
 internal fun applyPendingPlaylistMutations(

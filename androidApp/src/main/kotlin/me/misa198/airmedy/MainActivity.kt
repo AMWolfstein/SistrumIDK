@@ -503,7 +503,7 @@ class MainActivity : ComponentActivity() {
                     systemMusicVolumeState = currentSystemMusicVolume()
                 },
                 onMiniPlayerDismiss = playbackController::clearQueue,
-                onOpenMediaOutputSwitcher = ::openMediaOutputSwitcher,
+                onOpenMediaOutputSwitcher = if (canShowSystemMediaOutputSwitcher(Build.VERSION.SDK_INT)) ::openMediaOutputSwitcher else null,
             )
             App(
                 uiState = uiState,
@@ -631,6 +631,9 @@ internal fun adjustSystemMusicVolume(current: Float, maximum: Int, direction: In
  * buildable with API 36 while using it on devices where the platform provides it.
  */
 internal fun showSystemOutputSwitcher(router: MediaRouter2, sessionToken: MediaSession.Token?): Boolean {
+    // MediaRouter2.showSystemOutputSwitcher is API 34 (minSdk is 31). The caller already
+    // gates on canShowSystemMediaOutputSwitcher; checking here guards the call where it's made.
+    if (Build.VERSION.SDK_INT < Build.VERSION_CODES.UPSIDE_DOWN_CAKE) return false
     if (sessionToken != null) {
         val method = router.javaClass.methods.firstOrNull { candidate ->
             candidate.name == "showSystemOutputSwitcher" &&

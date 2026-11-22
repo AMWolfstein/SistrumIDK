@@ -126,7 +126,7 @@ internal fun FullScreenPlayerControls(
     onPrevious: () -> Unit,
     onPlayPause: () -> Unit,
     onNext: () -> Unit,
-    onOpenMediaOutputSwitcher: () -> Unit,
+    onOpenMediaOutputSwitcher: (() -> Unit)?,
     modifier: Modifier = Modifier,
 ) {
     val colors = LocalAirmedyColors.current
@@ -164,7 +164,9 @@ internal fun FullScreenPlayerControls(
                 }
                 Spacer(Modifier.height(if (compactControls) 0.dp else 4.dp))
                 FullScreenPanelButtons(selectedPanel, queue, onPanelSelected) {
-                    FullScreenTransportButton(MaterialSymbols.Airplay, stringResource(R.string.player_cast), onOpenMediaOutputSwitcher, iconSize = 24.dp, tint = colors.foregroundSubtle, filled = false)
+                    onOpenMediaOutputSwitcher?.let { open ->
+                        FullScreenTransportButton(MaterialSymbols.Airplay, stringResource(R.string.player_cast), open, iconSize = 24.dp, tint = colors.foregroundSubtle, filled = false)
+                    }
                 }
             }
         }

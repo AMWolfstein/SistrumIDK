@@ -1,8 +1,8 @@
 {
   "missions": {},
-  "next_completion": 6,
+  "next_completion": 7,
   "next_mission": 1,
-  "next_tor": 6,
+  "next_tor": 7,
   "tasks": {
     "TOR001": {
       "completion": 1,
@@ -83,6 +83,22 @@
       "record": ".specify/quick-tasks/TOR005.md",
       "status": "complete",
       "title": "Bundle Airmedy romanization dictionaries for offline Android lyrics"
+    },
+    "TOR006": {
+      "completion": 6,
+      "evidence": {
+        "checks": "DevDebug and shared host tests passed; DevDebug instrumentation compiled; diff and exclusion checks passed",
+        "result": "PASS",
+        "reviewer": "tor_review",
+        "round": 2
+      },
+      "final": false,
+      "kind": "TOR",
+      "mission": null,
+      "nonce": "577677aadc234de4a0ba960a6b5246c9",
+      "record": ".specify/quick-tasks/TOR006.md",
+      "status": "complete",
+      "title": "Port selected SistrumKotlin fixes and Android features"
     }
   },
   "version": 1

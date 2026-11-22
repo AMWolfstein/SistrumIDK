@@ -31,6 +31,7 @@ fun AirmedyMarqueeText(
     style: TextStyle,
     modifier: Modifier = Modifier,
     fade: Boolean = false,
+    animate: Boolean = true,
 ) {
     key(text) {
         var containerWidth by remember { mutableIntStateOf(0) }
@@ -52,7 +53,7 @@ fun AirmedyMarqueeText(
                         if (fade && textWidth > containerWidth) drawRect(mask, blendMode = BlendMode.DstIn)
                     }
                 }.basicMarquee(
-                iterations = if (ValueAnimator.areAnimatorsEnabled()) Int.MAX_VALUE else 0,
+                iterations = if (animate && ValueAnimator.areAnimatorsEnabled()) Int.MAX_VALUE else 0,
                 repeatDelayMillis = 3_000,
                 initialDelayMillis = 3_000,
                 spacing = MarqueeSpacing(32.dp),

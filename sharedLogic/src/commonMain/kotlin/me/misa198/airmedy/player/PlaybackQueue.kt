@@ -42,7 +42,7 @@ sealed interface QueueTransition {
 
 /**
  * Stateful, UI-free implementation of the queue contract in the player catalog.
- * Callers serialize mutations; the class deliberately has no Android/iOS dependencies.
+ * Callers serialize mutations; the class deliberately has no platform dependencies.
  */
 class PlaybackQueue(private val random: Random = Random.Default) {
     private var original = mutableListOf<String>()

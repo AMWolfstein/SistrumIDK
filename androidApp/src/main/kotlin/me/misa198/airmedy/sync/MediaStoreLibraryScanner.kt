@@ -58,20 +58,21 @@ internal class MediaStoreLibraryScanner(
         val tracks = mutableListOf<LocalTrack>()
         val albumRepresentatives = linkedMapOf<String, Pair<Uri, String>>()
 
-        // Older MediaStore providers reject columns they do not recognize.
-        val projection = if (Build.VERSION.SDK_INT >= 36) {
-            Projection + arrayOf(ColumnSampleRate, ColumnBitsPerSample)
+        val optionalColumns = arrayOf(ColumnSampleRate, ColumnBitsPerSample)
+        fun query(projection: Array<String>) = contentResolver.query(
+            MediaStore.Audio.Media.EXTERNAL_CONTENT_URI, projection, Selection, null, SortOrder,
+        )
+        val scanCursor = if (Build.VERSION.SDK_INT >= 36) {
+            try {
+                query(Projection + optionalColumns)
+            } catch (_: IllegalArgumentException) {
+                query(Projection)
+            }
         } else {
-            Projection
+            query(Projection)
         }
-        contentResolver.query(
-            MediaStore.Audio.Media.EXTERNAL_CONTENT_URI,
-            projection,
-            Selection,
-            null,
-            SortOrder,
-        )?.use { cursor ->
-            val columns = projection.associateWith { name -> cursor.getColumnIndex(name) }
+        scanCursor?.use { cursor ->
+            val columns = (Projection + optionalColumns).associateWith(cursor::getColumnIndex)
             fun text(name: String): String? = columns[name]?.takeIf { it >= 0 }?.let(cursor::getString)?.trim()
             fun number(name: String): Long? = columns[name]?.takeIf { it >= 0 }?.let(cursor::getLong)
 

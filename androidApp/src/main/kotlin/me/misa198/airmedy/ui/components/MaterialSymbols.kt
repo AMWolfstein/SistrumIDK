@@ -11,8 +11,8 @@ import androidx.compose.ui.graphics.ClipOp
 import androidx.compose.ui.graphics.StrokeCap
 import androidx.compose.ui.graphics.drawscope.clipRect
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.semantics.clearAndSetSemantics
 import androidx.compose.ui.semantics.contentDescription
-import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.ExperimentalTextApi
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.font.Font
@@ -145,10 +145,8 @@ fun MaterialSymbol(
                     cap = StrokeCap.Round,
                 )
             } else Modifier,
-        ).then(
-            if (contentDescription != null) {
-                Modifier.semantics { this.contentDescription = contentDescription }
-            } else Modifier,
-        ),
+        ).clearAndSetSemantics {
+            if (contentDescription != null) this.contentDescription = contentDescription
+        },
     )
 }
