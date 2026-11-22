@@ -24,3 +24,6 @@
 -keepclasseswithmembernames class * {
     native <methods>;
 }
+
+# Markwon only registers its optional GIF decoder when GifDrawable is present.
+-dontwarn pl.droidsonroids.gif.GifDrawable

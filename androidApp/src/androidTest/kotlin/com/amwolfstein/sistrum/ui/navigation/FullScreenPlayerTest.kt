@@ -1,0 +1,1240 @@
+package com.amwolfstein.sistrum.ui.navigation
+
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.setValue
+import androidx.compose.runtime.CompositionLocalProvider
+import androidx.compose.runtime.SideEffect
+import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.width
+import androidx.compose.ui.Modifier
+import androidx.compose.ui.hapticfeedback.HapticFeedback
+import androidx.compose.ui.hapticfeedback.HapticFeedbackType
+import androidx.compose.ui.platform.LocalHapticFeedback
+import androidx.compose.ui.platform.LocalDensity
+import androidx.activity.compose.LocalActivity
+import androidx.compose.ui.test.assertTextEquals
+import androidx.compose.ui.test.assertCountEquals
+import androidx.compose.ui.test.assertIsSelected
+import androidx.compose.ui.test.assertLeftPositionInRootIsEqualTo
+import androidx.compose.ui.test.click
+import androidx.compose.ui.test.junit4.v2.createComposeRule
+import androidx.compose.ui.test.onAllNodesWithText
+import androidx.compose.ui.test.onAllNodesWithTag
+import androidx.compose.ui.test.onNodeWithContentDescription
+import androidx.compose.ui.test.onNodeWithTag
+import androidx.compose.ui.test.onNodeWithText
+import androidx.compose.ui.test.performClick
+import androidx.compose.ui.test.performTouchInput
+import androidx.compose.ui.test.swipeDown
+import androidx.compose.ui.test.swipeLeft
+import androidx.compose.ui.test.longClick
+import androidx.compose.ui.unit.dp
+import com.amwolfstein.sistrum.player.PlaybackItem
+import com.amwolfstein.sistrum.player.PlaybackQueueSnapshot
+import com.amwolfstein.sistrum.player.PlaybackState
+import com.amwolfstein.sistrum.player.RepeatMode
+import com.amwolfstein.sistrum.settings.ThemeMode
+import com.amwolfstein.sistrum.sync.LibraryTrack
+import com.amwolfstein.sistrum.ui.theme.SistrumTheme
+import com.amwolfstein.sistrum.ui.components.MaterialSymbols
+import com.amwolfstein.sistrum.ui.components.TrackContextArtist
+import com.amwolfstein.sistrum.ui.components.TrackContextBottomSheetRequest
+import org.junit.Rule
+import org.junit.Test
+import org.junit.Assert.assertEquals
+import org.junit.Assert.assertFalse
+import org.junit.Assert.assertTrue
+import android.view.Window
+import android.view.WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON
+import androidx.test.platform.app.InstrumentationRegistry
+import com.amwolfstein.sistrum.R
+
+class FullScreenPlayerTest {
+    @get:Rule
+    val composeTestRule = createComposeRule()
+
+    @Test
+    fun lyricsPanelKeepsScreenOnOnlyWhileEnabledVisibleAndPlaying() {
+        var enabled by mutableStateOf(false)
+        var visible by mutableStateOf(true)
+        var playing by mutableStateOf(true)
+        lateinit var window: Window
+        composeTestRule.setContent {
+            window = checkNotNull(LocalActivity.current).window
+            SistrumTheme(themeMode = ThemeMode.Dark) {
+                FullScreenPlayer(
+                    modifier = Modifier.width(400.dp).height(900.dp),
+                    visible = visible,
+                    dragProgress = 0f,
+                    isDragging = false,
+                    openingFromMiniPlayerSwipe = false,
+                    playbackState = if (playing) PlaybackState.Playing(item, 0L, 120_000L)
+                        else PlaybackState.Paused(item, 0L, 120_000L),
+                    keepScreenOnForLyrics = enabled,
+                    volume = 0.5f,
+                    onSeek = {}, onVolumeChange = {}, onPrevious = {}, onPlayPause = {}, onNext = {},
+                    onOpenMediaOutputSwitcher = {}, onDismiss = {},
+                )
+            }
+        }
+
+        val context = InstrumentationRegistry.getInstrumentation().targetContext
+        composeTestRule.onNodeWithContentDescription(context.getString(R.string.player_lyrics)).performClick()
+        composeTestRule.runOnIdle { assertFalse(window.attributes.flags and FLAG_KEEP_SCREEN_ON != 0) }
+        composeTestRule.runOnIdle { enabled = true }
+        composeTestRule.runOnIdle { assertTrue(window.attributes.flags and FLAG_KEEP_SCREEN_ON != 0) }
+        composeTestRule.runOnIdle { playing = false }
+        composeTestRule.runOnIdle { assertFalse(window.attributes.flags and FLAG_KEEP_SCREEN_ON != 0) }
+        composeTestRule.runOnIdle { playing = true }
+        composeTestRule.runOnIdle { assertTrue(window.attributes.flags and FLAG_KEEP_SCREEN_ON != 0) }
+        composeTestRule.onNodeWithContentDescription(context.getString(R.string.player_queue)).performClick()
+        composeTestRule.runOnIdle { assertFalse(window.attributes.flags and FLAG_KEEP_SCREEN_ON != 0) }
+        composeTestRule.onNodeWithContentDescription(context.getString(R.string.player_lyrics)).performClick()
+        composeTestRule.runOnIdle { assertTrue(window.attributes.flags and FLAG_KEEP_SCREEN_ON != 0) }
+        composeTestRule.runOnIdle { enabled = false }
+        composeTestRule.runOnIdle { assertFalse(window.attributes.flags and FLAG_KEEP_SCREEN_ON != 0) }
+        composeTestRule.runOnIdle { enabled = true }
+        composeTestRule.runOnIdle { visible = false }
+        composeTestRule.runOnIdle { assertFalse(window.attributes.flags and FLAG_KEEP_SCREEN_ON != 0) }
+    }
+
+    @Test
+    fun romanizationToggleReplacesAndRestoresSecondary() {
+        var enabled by mutableStateOf(false)
+        composeTestRule.setContent {
+            SistrumTheme(themeMode = ThemeMode.Dark) {
+                FullScreenPlayerLyricsPanel(
+                    trackId = "test", lyrics = "你好 ^ Hello", currentPositionMs = 0L, onSeek = {},
+                    romanization = com.amwolfstein.sistrum.lyrics.RomanizationUiState(
+                        input = listOf("你好"), supported = true, enabled = enabled, secondary = listOf("nǐ hǎo"),
+                    ),
+                    romanizationAllowed = true,
+                    onRomanizationToggle = { enabled = !enabled },
+                    modifier = Modifier.width(320.dp).height(400.dp),
+                )
+            }
+        }
+        composeTestRule.onNodeWithText("Hello").assertExists()
+        composeTestRule.onNodeWithTag("romanization_toggle").performClick().assertIsSelected()
+        composeTestRule.onNodeWithText("nǐ hǎo").assertExists()
+        composeTestRule.onNodeWithText("Hello").assertDoesNotExist()
+        composeTestRule.onNodeWithTag("romanization_toggle").performClick()
+        composeTestRule.onNodeWithText("Hello").assertExists()
+    }
+
+    @Test
+    fun romanizationHeightChangesMoveFollowingRowsSmoothly() {
+        var enabled by mutableStateOf(false)
+        var visible by mutableStateOf(true)
+        composeTestRule.setContent {
+            SistrumTheme(themeMode = ThemeMode.Dark) {
+                FullScreenPlayerLyricsPanel(
+                    trackId = "test", lyrics = "你好\nNext line\nLast line", currentPositionMs = 0L, onSeek = {},
+                    romanization = com.amwolfstein.sistrum.lyrics.RomanizationUiState(
+                        input = listOf("你好", "Next line", "Last line"), supported = true,
+                        enabled = enabled, secondary = listOf("nǐ hǎo", null, null),
+                    ),
+                    visible = visible,
+                    romanizationAllowed = true,
+                    onRomanizationToggle = { enabled = !enabled },
+                    modifier = Modifier.width(320.dp).height(400.dp),
+                )
+            }
+        }
+        fun nextLineTop() = composeTestRule.onNodeWithText("Next line").fetchSemanticsNode().boundsInRoot.top
+        val before = nextLineTop()
+        composeTestRule.mainClock.autoAdvance = false
+        composeTestRule.onNodeWithTag("romanization_toggle").performClick()
+        composeTestRule.mainClock.advanceTimeByFrame()
+        composeTestRule.waitForIdle()
+        composeTestRule.mainClock.advanceTimeBy(96L)
+        val during = nextLineTop()
+        composeTestRule.mainClock.advanceTimeBy(500L)
+        val after = nextLineTop()
+        assertTrue("Following rows should move through intermediate positions", during > before && during < after)
+        composeTestRule.onNodeWithTag("romanization_toggle").performClick()
+        composeTestRule.mainClock.advanceTimeByFrame()
+        composeTestRule.waitForIdle()
+        composeTestRule.mainClock.advanceTimeBy(96L)
+        val hiding = nextLineTop()
+        composeTestRule.mainClock.advanceTimeBy(500L)
+        assertTrue(hiding > before && hiding < after)
+        assertEquals(before, nextLineTop(), 1f)
+
+        // Closing/reopening clears the toggle animation even if results arrive later.
+        composeTestRule.runOnIdle { visible = false }
+        composeTestRule.mainClock.advanceTimeByFrame()
+        composeTestRule.waitForIdle()
+        composeTestRule.runOnIdle { visible = true }
+        composeTestRule.mainClock.advanceTimeByFrame()
+        composeTestRule.waitForIdle()
+        composeTestRule.runOnIdle { enabled = true }
+        composeTestRule.mainClock.advanceTimeByFrame()
+        composeTestRule.waitForIdle()
+        assertEquals(after, nextLineTop(), 1f)
+        composeTestRule.mainClock.advanceTimeBy(500L)
+        assertEquals(after, nextLineTop(), 1f)
+    }
+
+    @Test
+    fun returningToForegroundRestoresRomanizationWithoutPlacementAnimation() {
+        val lifecycleOwner = object : androidx.lifecycle.LifecycleOwner {
+            override val lifecycle = androidx.lifecycle.LifecycleRegistry(this)
+        }
+        composeTestRule.runOnIdle {
+            lifecycleOwner.lifecycle.currentState = androidx.lifecycle.Lifecycle.State.RESUMED
+        }
+        val primary = listOf("你好", "Next line", "Last line")
+        var state by mutableStateOf(com.amwolfstein.sistrum.lyrics.RomanizationUiState(
+            input = primary, supported = true, secondary = listOf("nǐ hǎo", null, null),
+        ))
+        composeTestRule.setContent {
+            CompositionLocalProvider(androidx.lifecycle.compose.LocalLifecycleOwner provides lifecycleOwner) {
+                SistrumTheme(themeMode = ThemeMode.Dark) {
+                    FullScreenPlayerLyricsPanel(
+                        trackId = "test", lyrics = "你好\nNext line\nLast line", currentPositionMs = 0L, onSeek = {},
+                        romanization = state,
+                        romanizationAllowed = true,
+                        onRomanizationToggle = { state = state.copy(enabled = !state.enabled) },
+                        onRomanizationInput = { lines, visible ->
+                            state = state.copy(input = lines, secondary = emptyList(), supported = visible)
+                        },
+                        modifier = Modifier.width(320.dp).height(400.dp),
+                    )
+                }
+            }
+        }
+        composeTestRule.onNodeWithTag("romanization_toggle").performClick()
+        composeTestRule.runOnIdle { state = state.copy(secondary = listOf("nǐ hǎo", null, null)) }
+        fun nextLineTop() = composeTestRule.onNodeWithText("Next line").fetchSemanticsNode().boundsInRoot.top
+        val restoredTop = nextLineTop()
+        composeTestRule.runOnIdle {
+            lifecycleOwner.lifecycle.currentState = androidx.lifecycle.Lifecycle.State.CREATED
+        }
+        composeTestRule.waitForIdle()
+        composeTestRule.runOnIdle {
+            lifecycleOwner.lifecycle.currentState = androidx.lifecycle.Lifecycle.State.RESUMED
+        }
+        composeTestRule.waitForIdle()
+        assertTrue(state.enabled)
+        assertTrue(state.secondary.isEmpty())
+        composeTestRule.mainClock.autoAdvance = false
+        composeTestRule.runOnIdle { state = state.copy(secondary = listOf("nǐ hǎo", null, null)) }
+        composeTestRule.mainClock.advanceTimeByFrame()
+        composeTestRule.waitForIdle()
+        assertEquals(restoredTop, nextLineTop(), 1f)
+        composeTestRule.mainClock.advanceTimeBy(96L)
+        assertEquals(restoredTop, nextLineTop(), 1f)
+        composeTestRule.mainClock.advanceTimeBy(500L)
+        assertEquals(restoredTop, nextLineTop(), 1f)
+    }
+
+    @Test
+    fun disabledRomanizationHidesTheToggleAndRestoresSecondaryLyrics() {
+        var allowed by mutableStateOf(true)
+        composeTestRule.setContent {
+            SistrumTheme(themeMode = ThemeMode.Dark) {
+                FullScreenPlayerLyricsPanel(
+                    trackId = "test", lyrics = "你好 ^ Hello", currentPositionMs = 0L, onSeek = {},
+                    romanization = com.amwolfstein.sistrum.lyrics.RomanizationUiState(
+                        input = listOf("你好"), supported = true, enabled = true, secondary = listOf("nǐ hǎo"),
+                    ),
+                    romanizationAllowed = allowed,
+                    modifier = Modifier.width(320.dp).height(400.dp),
+                )
+            }
+        }
+
+        composeTestRule.onNodeWithText("nǐ hǎo").assertExists()
+        allowed = false
+        composeTestRule.onNodeWithText("Hello").assertExists()
+        composeTestRule.onAllNodesWithTag("romanization_toggle").assertCountEquals(0)
+    }
+
+    @Test
+    fun preparingPlaybackUsesMetadataDuration() {
+        composeTestRule.setContent {
+            SistrumTheme(themeMode = ThemeMode.Dark) {
+                FullScreenPlayer(
+                    modifier = Modifier.width(400.dp).height(900.dp),
+                    visible = true,
+                    dragProgress = 0f,
+                    isDragging = false,
+                    openingFromMiniPlayerSwipe = false,
+                    playbackState = PlaybackState.Preparing(item),
+                    queueTracks = listOf(
+                        LibraryTrack(
+                            id = item.trackId,
+                            title = item.title,
+                            artists = item.artist,
+                            metadataJson = "{\"duration\":245}",
+                        ),
+                    ),
+                    volume = 0.5f,
+                    onSeek = {}, onVolumeChange = {}, onPrevious = {}, onPlayPause = {}, onNext = {},
+                    onOpenMediaOutputSwitcher = {}, onDismiss = {},
+                )
+            }
+        }
+
+        composeTestRule.onNodeWithTag(FullScreenPlayerDurationTestTag).assertExists()
+        composeTestRule.onNodeWithText("4:05").assertExists()
+    }
+
+    @Test
+    fun explicitBadgeShowsOnlyForExplicitTracks() {
+        var track by mutableStateOf(
+            LibraryTrack(id = item.trackId, title = item.title, artists = item.artist, metadataJson = "{\"format\":\"flac\",\"explicit\":true}"),
+        )
+        composeTestRule.setContent {
+            SistrumTheme(themeMode = ThemeMode.Dark) {
+                FullScreenPlayer(
+                    visible = true,
+                    dragProgress = 0f,
+                    isDragging = false,
+                    openingFromMiniPlayerSwipe = false,
+                    playbackState = PlaybackState.Playing(item, 0L, 120_000L),
+                    queueTracks = listOf(track),
+                    volume = 0.5f,
+                    onSeek = {}, onVolumeChange = {}, onPrevious = {}, onPlayPause = {}, onNext = {},
+                    onOpenMediaOutputSwitcher = {}, onDismiss = {},
+                )
+            }
+        }
+
+        // The badge sits inline after the title, and TalkBack reads it as part of the title.
+        composeTestRule.onNodeWithTag(FullScreenPlayerExplicitBadgeTestTag, useUnmergedTree = true).assertExists()
+        composeTestRule.onNodeWithText("${item.title} Explicit").assertExists()
+
+        composeTestRule.runOnIdle { track = track.copy(metadataJson = "{\"format\":\"flac\"}") }
+        composeTestRule.onAllNodesWithTag(FullScreenPlayerExplicitBadgeTestTag, useUnmergedTree = true).assertCountEquals(0)
+        composeTestRule.onAllNodesWithText("Explicit", substring = true).assertCountEquals(0)
+        composeTestRule.onNodeWithText(item.title).assertExists()
+    }
+
+    @Test
+    fun qualityDialogKeepsPhoneWidthInBothThemes() {
+        var theme by mutableStateOf(ThemeMode.Light)
+        var density = 1f
+        var dismissed = false
+        composeTestRule.setContent {
+            density = LocalDensity.current.density
+            SistrumTheme(themeMode = theme) {
+                FullScreenQualityDialog(R.string.track_info_quality_lossless, MaterialSymbols.GraphicEq, emptyList()) {
+                    dismissed = true
+                }
+            }
+        }
+        fun assertCompactDialog() {
+            val bounds = composeTestRule.onNodeWithTag("full_screen_quality_dialog").fetchSemanticsNode().boundsInRoot
+            assertTrue("Quality dialog must stay within phone width", bounds.width <= 420f * density + 1f)
+        }
+        assertCompactDialog()
+        composeTestRule.runOnIdle { theme = ThemeMode.Dark }
+        assertCompactDialog()
+        composeTestRule.onNodeWithContentDescription("OK").performClick()
+        composeTestRule.runOnIdle { assertTrue(dismissed) }
+    }
+
+    @Test
+    fun qualityBadgeShowsSupportedFormatsAndRespectsSetting() {
+        var showQualityBadge by mutableStateOf(true)
+        var track by mutableStateOf(
+            LibraryTrack(id = item.trackId, title = item.title, artists = item.artist, metadataJson = "{\"format\":\"flac\",\"bit_depth\":16,\"sample_rate\":44100}"),
+        )
+        composeTestRule.setContent {
+            SistrumTheme(themeMode = ThemeMode.Dark) {
+                FullScreenPlayer(
+                    modifier = Modifier.width(400.dp).height(900.dp),
+                    visible = true,
+                    dragProgress = 0f,
+                    isDragging = false,
+                    openingFromMiniPlayerSwipe = false,
+                    playbackState = PlaybackState.Playing(item, 0L, 120_000L),
+                    queueTracks = listOf(track),
+                    showQualityBadge = showQualityBadge,
+                    volume = 0.5f,
+                    onSeek = {}, onVolumeChange = {}, onPrevious = {}, onPlayPause = {}, onNext = {},
+                    onOpenMediaOutputSwitcher = {}, onDismiss = {},
+                )
+            }
+        }
+
+        composeTestRule.onNodeWithTag(FullScreenPlayerQualityBadgeTestTag).assertExists()
+        composeTestRule.onNodeWithText("Lossless").assertExists()
+        val elapsedTimeBounds = composeTestRule
+            .onNodeWithTag(FullScreenPlayerElapsedTimeTestTag)
+            .fetchSemanticsNode()
+            .boundsInRoot
+        val durationBounds = composeTestRule
+            .onNodeWithTag(FullScreenPlayerDurationTestTag)
+            .fetchSemanticsNode()
+            .boundsInRoot
+        composeTestRule.onNodeWithTag(FullScreenPlayerQualityBadgeTestTag).performClick()
+        composeTestRule.onNodeWithText("Sample rate").assertExists()
+        composeTestRule.onNodeWithText("44.1 kHz").assertExists()
+        composeTestRule.onNodeWithText("Bit depth").assertExists()
+        composeTestRule.onNodeWithText("16-bit").assertExists()
+        composeTestRule.onAllNodesWithText("Codec").assertCountEquals(0)
+        composeTestRule.onNodeWithContentDescription("OK").performClick()
+        composeTestRule.onAllNodesWithText("Sample rate").assertCountEquals(0)
+
+        composeTestRule.runOnIdle {
+            track = track.copy(metadataJson = "{\"format\":\"flac\",\"bit_depth\":24,\"sample_rate\":96000}")
+        }
+        composeTestRule.onNodeWithText("Hi-Res").assertExists()
+
+        composeTestRule.runOnIdle {
+            track = track.copy(metadataJson = "{\"format\":\"dsf\"}")
+        }
+        composeTestRule.onNodeWithText("DSD").assertExists()
+
+        composeTestRule.runOnIdle {
+            track = track.copy(metadataJson = "{\"format\":\"mp3\"}")
+        }
+        composeTestRule.onNodeWithTag(FullScreenPlayerQualityBadgeTestTag).assertExists()
+        composeTestRule.onNodeWithText("Lossy").assertExists()
+        assertEquals(
+            elapsedTimeBounds.left,
+            composeTestRule.onNodeWithTag(FullScreenPlayerElapsedTimeTestTag).fetchSemanticsNode().boundsInRoot.left,
+            0.5f,
+        )
+        assertEquals(
+            durationBounds.right,
+            composeTestRule.onNodeWithTag(FullScreenPlayerDurationTestTag).fetchSemanticsNode().boundsInRoot.right,
+            0.5f,
+        )
+
+        composeTestRule.runOnIdle {
+            track = track.copy(metadataJson = "{\"format\":\"dsf\"}")
+            showQualityBadge = false
+        }
+        composeTestRule.onAllNodesWithTag(FullScreenPlayerQualityBadgeTestTag).assertCountEquals(0)
+    }
+
+    @Test
+    fun favoriteStarConfirmsOnlyWhenAdding() {
+        val haptics = mutableListOf<HapticFeedbackType>()
+        var change: Boolean? = null
+        composeTestRule.setContent {
+            SistrumTheme(themeMode = ThemeMode.Dark) {
+                CompositionLocalProvider(LocalHapticFeedback provides object : HapticFeedback {
+                    override fun performHapticFeedback(hapticFeedbackType: HapticFeedbackType) { haptics += hapticFeedbackType }
+                }) {
+                    FullScreenPlayer(
+                    modifier = Modifier.width(400.dp).height(900.dp),
+                        visible = true,
+                        dragProgress = 0f,
+                        isDragging = false,
+                        openingFromMiniPlayerSwipe = false,
+                        playbackState = PlaybackState.Playing(item, 0L, 120_000L),
+                        volume = 0.5f,
+                        onSeek = {}, onVolumeChange = {}, onPrevious = {}, onPlayPause = {}, onNext = {},
+                        onFavoriteToggle = { _, favorite -> change = favorite },
+                        onOpenMediaOutputSwitcher = {}, onDismiss = {},
+                    )
+                }
+            }
+        }
+
+        composeTestRule.onNodeWithContentDescription("Favorite").assertTextEquals("star").performClick()
+        composeTestRule.runOnIdle {
+            assertEquals(true, change)
+            assertEquals(listOf(HapticFeedbackType.Confirm), haptics)
+        }
+    }
+
+    @Test
+    fun favoriteStarDoesNotConfirmWhenRemoving() {
+        val haptics = mutableListOf<HapticFeedbackType>()
+        var change: Boolean? = null
+        composeTestRule.setContent {
+            SistrumTheme(themeMode = ThemeMode.Dark) {
+                CompositionLocalProvider(LocalHapticFeedback provides object : HapticFeedback {
+                    override fun performHapticFeedback(hapticFeedbackType: HapticFeedbackType) { haptics += hapticFeedbackType }
+                }) {
+                    FullScreenPlayer(
+                    modifier = Modifier.width(400.dp).height(900.dp),
+                        visible = true,
+                        dragProgress = 0f,
+                        isDragging = false,
+                        openingFromMiniPlayerSwipe = false,
+                        playbackState = PlaybackState.Playing(item, 0L, 120_000L),
+                        volume = 0.5f,
+                        onSeek = {}, onVolumeChange = {}, onPrevious = {}, onPlayPause = {}, onNext = {},
+                        isFavorite = true,
+                        onFavoriteToggle = { _, favorite -> change = favorite },
+                        onOpenMediaOutputSwitcher = {}, onDismiss = {},
+                    )
+                }
+            }
+        }
+
+        composeTestRule.onNodeWithContentDescription("Favorite").assertTextEquals("star").performClick()
+        composeTestRule.runOnIdle {
+            assertEquals(false, change)
+            assertEquals(emptyList<HapticFeedbackType>(), haptics)
+        }
+    }
+
+    @Test
+    fun shortScreenCentersAndCapsArtworkByAvailableHeight() {
+        var size by mutableStateOf(360.dp to 568.dp)
+        var density = 1f
+        composeTestRule.setContent {
+            density = LocalDensity.current.density
+            SistrumTheme(themeMode = ThemeMode.Dark) {
+                FullScreenPlayer(
+                    visible = true,
+                    dragProgress = 0f,
+                    isDragging = false,
+                    openingFromMiniPlayerSwipe = false,
+                    playbackState = PlaybackState.Playing(item, 0L, 120_000L),
+                    volume = 0.5f,
+                    onSeek = {},
+                    onVolumeChange = {},
+                    onPrevious = {},
+                    onPlayPause = {},
+                    onNext = {},
+                    onOpenMediaOutputSwitcher = {},
+                    onDismiss = {},
+                    modifier = Modifier.width(size.first).height(size.second),
+                )
+            }
+        }
+
+        fun assertArtworkLeavesRoomForControls() {
+            val layout = composeTestRule.onNodeWithTag("phone_player_layout").fetchSemanticsNode().boundsInRoot
+            val artwork = composeTestRule.onNodeWithTag(FullScreenPlayerArtworkTestTag).fetchSemanticsNode().boundsInRoot
+            val controls = composeTestRule.onNodeWithTag(FullScreenPlayerControlsTestTag).fetchSemanticsNode().boundsInRoot
+            assertEquals(layout.center.x, artwork.center.x, 1f)
+            assertTrue("Compact controls must retain their touch targets", controls.height >= 160f * density)
+            assertTrue("Compact controls must release their old height reserve", controls.height < 300f * density)
+            assertTrue(controls.bottom <= layout.bottom + 1f)
+            assertTrue(artwork.bottom <= controls.top)
+            val metadata = composeTestRule.onNodeWithTag("phone_player_expanded_metadata").fetchSemanticsNode().boundsInRoot
+            val topBlock = composeTestRule.onNodeWithTag(FullScreenPlayerArtworkSwipeTestTag).fetchSemanticsNode().boundsInRoot
+            assertEquals("Metadata must sit just above seek controls", controls.top, metadata.bottom, 1f)
+            assertEquals("Artwork must center in the space above metadata",
+                (topBlock.top + metadata.top - 24f * density) / 2f, artwork.center.y, 1f)
+            assertTrue("Artwork must leave at least 24dp above metadata", artwork.bottom <= metadata.top - 24f * density + 1f)
+        }
+        assertArtworkLeavesRoomForControls()
+        composeTestRule.runOnIdle { size = 475.dp to 751.dp }
+        assertArtworkLeavesRoomForControls()
+        val artwork = composeTestRule.onNodeWithTag(FullScreenPlayerArtworkTestTag).fetchSemanticsNode().boundsInRoot
+        assertTrue("Fold cover artwork must grow into the space released by compact controls", artwork.width >= 240f * density)
+        composeTestRule.runOnIdle { size = 390.dp to 1000.dp }
+        assertArtworkLeavesRoomForControls()
+    }
+
+    @Test
+    fun queueStatusBadgeWaitsForQueueButtonBackgroundToFadeOut() {
+        composeTestRule.mainClock.autoAdvance = false
+        composeTestRule.setContent {
+            SistrumTheme(themeMode = ThemeMode.Dark) {
+                FullScreenPlayer(
+                    modifier = Modifier.width(400.dp).height(900.dp),
+                    visible = true,
+                    dragProgress = 0f,
+                    isDragging = false,
+                    openingFromMiniPlayerSwipe = false,
+                    playbackState = PlaybackState.Playing(item, 0L, 120_000L),
+                    queue = PlaybackQueueSnapshot(shuffle = true),
+                    volume = 0.5f,
+                    onSeek = {},
+                    onVolumeChange = {},
+                    onPrevious = {},
+                    onPlayPause = {},
+                    onNext = {},
+                    onOpenMediaOutputSwitcher = {},
+                    onDismiss = {},
+                )
+            }
+        }
+
+        composeTestRule.onNodeWithTag(FullScreenQueueStatusBadgeTestTag).assertExists()
+        composeTestRule.onNodeWithContentDescription("Queue").performClick()
+        composeTestRule.onAllNodesWithTag(FullScreenQueueStatusBadgeTestTag).assertCountEquals(0)
+
+        composeTestRule.onNodeWithContentDescription("Queue").performClick()
+        composeTestRule.mainClock.advanceTimeBy(QueueStatusBadgeRevealDelayMs.toLong() - 1L)
+        composeTestRule.onAllNodesWithTag(FullScreenQueueStatusBadgeTestTag).assertCountEquals(0)
+
+        composeTestRule.mainClock.advanceTimeBy(1L)
+        composeTestRule.onNodeWithTag(FullScreenQueueStatusBadgeTestTag).assertExists()
+    }
+
+    @Test
+    fun swipingDownFromArtworkDismissesFullscreenPlayer() {
+        var dismissCount = 0
+        composeTestRule.setContent {
+            SistrumTheme(themeMode = ThemeMode.Dark) {
+                FullScreenPlayer(
+                    modifier = Modifier.width(400.dp).height(900.dp),
+                    visible = true,
+                    dragProgress = 0f,
+                    isDragging = false,
+                    openingFromMiniPlayerSwipe = false,
+                    playbackState = PlaybackState.Playing(item, 0L, 120_000L),
+                    volume = 0.5f,
+                    onSeek = {},
+                    onVolumeChange = {},
+                    onPrevious = {},
+                    onPlayPause = {},
+                    onNext = {},
+                    onOpenMediaOutputSwitcher = {},
+                    onDismiss = { dismissCount++ },
+                )
+            }
+        }
+
+        composeTestRule.onNodeWithTag("full_screen_player_artwork").performTouchInput {
+            swipeDown()
+        }
+        composeTestRule.runOnIdle { assertEquals(1, dismissCount) }
+    }
+
+    @Test
+    fun boundarySwipeUsesTheLatestQueueAndCallback() {
+        var queue by mutableStateOf(PlaybackQueueSnapshot())
+        var callbackGeneration by mutableStateOf(1)
+        var invokedGeneration: Int? = null
+        composeTestRule.setContent {
+            val onNext = if (callbackGeneration == 1) {
+                { invokedGeneration = 1 }
+            } else {
+                { invokedGeneration = 2 }
+            }
+            SistrumTheme(themeMode = ThemeMode.Dark) {
+                FullScreenPlayer(
+                    modifier = Modifier.width(400.dp).height(900.dp),
+                    visible = true,
+                    dragProgress = 0f,
+                    isDragging = false,
+                    openingFromMiniPlayerSwipe = false,
+                    playbackState = PlaybackState.Playing(item, 0L, 120_000L),
+                    queue = queue,
+                    volume = 0.5f,
+                    onSeek = {},
+                    onVolumeChange = {},
+                    onPrevious = {},
+                    onPlayPause = {},
+                    onNext = onNext,
+                    onOpenMediaOutputSwitcher = {},
+                    onDismiss = {},
+                )
+            }
+        }
+
+        composeTestRule.runOnIdle {
+            queue = PlaybackQueueSnapshot(
+                originalTrackIds = listOf(item.trackId),
+                activeTrackIds = listOf(item.trackId),
+                currentIndex = 0,
+            )
+            callbackGeneration = 2
+        }
+        composeTestRule.onNodeWithTag("full_screen_player_artwork_swipe_target")
+            .performTouchInput { swipeLeft() }
+
+        composeTestRule.runOnIdle { assertEquals(2, invokedGeneration) }
+    }
+
+    @Test
+    fun moreOptionsUsesTheTrackContextMenuForTheCurrentTrack() {
+        composeTestRule.setContent {
+            SistrumTheme(themeMode = ThemeMode.Dark) {
+                FullScreenPlayer(
+                    modifier = Modifier.width(400.dp).height(900.dp),
+                    visible = true,
+                    dragProgress = 0f,
+                    isDragging = false,
+                    openingFromMiniPlayerSwipe = false,
+                    playbackState = PlaybackState.Playing(item, 0L, 120_000L),
+                    queue = PlaybackQueueSnapshot(activeTrackIds = listOf(item.trackId), currentIndex = 0),
+                    queueTracks = listOf(LibraryTrack(id = item.trackId, title = item.title, artists = item.artist)),
+                    volume = 0.5f,
+                    onSeek = {},
+                    onVolumeChange = {},
+                    onPrevious = {},
+                    onPlayPause = {},
+                    onNext = {},
+                    onOpenMediaOutputSwitcher = {},
+                    onDismiss = {},
+                )
+            }
+        }
+
+        composeTestRule.onNodeWithContentDescription("More options").performClick()
+        composeTestRule.onNodeWithText("Track info").assertExists()
+        composeTestRule.onNodeWithText("Add to playlist").assertExists()
+    }
+
+    @Test
+    fun queueRowLongPressOpensQueueMenuWithoutAddToQueueOrCurrentTrackPlayNext() {
+        var removedTrackId: String? = null
+        composeTestRule.setContent {
+            SistrumTheme(themeMode = ThemeMode.Dark) {
+                FullScreenQueuePanel(
+                    queue = PlaybackQueueSnapshot(activeTrackIds = listOf("track-1"), currentIndex = 0),
+                    tracks = listOf(LibraryTrack(id = "track-1", title = "Track 1", artists = "Artist")),
+                    currentTrackId = "track-1",
+                    isPlaying = true,
+                    onTrackSelected = {},
+                    onTrackRemoved = { removedTrackId = it },
+                    onReorder = {},
+                    onShuffleChange = {},
+                    onRepeatModeChange = {},
+                    modifier = Modifier.height(160.dp),
+                )
+            }
+        }
+
+        composeTestRule.onNodeWithText("Track 1").performTouchInput { longClick() }
+
+        composeTestRule.onNodeWithText("Remove from queue").assertExists()
+        composeTestRule.onAllNodesWithText("Add to queue").assertCountEquals(0)
+        composeTestRule.onAllNodesWithText("Play next").assertCountEquals(0)
+        composeTestRule.onNodeWithText("Remove from queue").performClick()
+        composeTestRule.runOnIdle { assertEquals("track-1", removedTrackId) }
+    }
+
+    @Test
+    fun moreOptionsRequestsAnArtistPickerForCollaborations() {
+        var bottomSheetRequest: TrackContextBottomSheetRequest? = null
+        composeTestRule.setContent {
+            SistrumTheme(themeMode = ThemeMode.Dark) {
+                FullScreenPlayer(
+                    modifier = Modifier.width(400.dp).height(900.dp),
+                    visible = true,
+                    dragProgress = 0f,
+                    isDragging = false,
+                    openingFromMiniPlayerSwipe = false,
+                    playbackState = PlaybackState.Playing(item, 0L, 120_000L),
+                    queueTracks = listOf(
+                        LibraryTrack(
+                            id = item.trackId,
+                            title = item.title,
+                            artists = "Artist A, Artist B",
+                            metadataJson = """{\"artists\":[{\"id\":\"artist-a\",\"name\":\"Artist A\"},{\"id\":\"artist-b\",\"name\":\"Artist B\"}]}""",
+                        ),
+                    ),
+                    volume = 0.5f,
+                    onSeek = {},
+                    onVolumeChange = {},
+                    onPrevious = {},
+                    onPlayPause = {},
+                    onNext = {},
+                    onTrackContextBottomSheet = { bottomSheetRequest = it },
+                    onOpenMediaOutputSwitcher = {},
+                    onDismiss = {},
+                )
+            }
+        }
+
+        composeTestRule.onNodeWithContentDescription("More options").performClick()
+        composeTestRule.onNodeWithText("Go to artists").performClick()
+
+        composeTestRule.runOnIdle {
+            assertEquals(
+                TrackContextBottomSheetRequest.Artists(
+                    listOf(TrackContextArtist("artist-a", "Artist A"), TrackContextArtist("artist-b", "Artist B")),
+                ),
+                bottomSheetRequest,
+            )
+        }
+    }
+
+    @Test
+    fun lyricsAndQueuePanelsToggleAndPersistAcrossTrackChanges() {
+        val playbackState = mutableStateOf<PlaybackState>(PlaybackState.Playing(item, 0L, 120_000L))
+        val emptyLyrics = InstrumentationRegistry.getInstrumentation().targetContext.getString(R.string.player_lyrics_not_available)
+        composeTestRule.setContent {
+            SistrumTheme(themeMode = ThemeMode.Dark) {
+                FullScreenPlayer(
+                    modifier = Modifier.width(400.dp).height(900.dp),
+                    visible = true,
+                    dragProgress = 0f,
+                    isDragging = false,
+                    openingFromMiniPlayerSwipe = false,
+                    playbackState = playbackState.value,
+                    volume = 0.5f,
+                    onSeek = {},
+                    onVolumeChange = {},
+                    onPrevious = {},
+                    onPlayPause = {},
+                    onNext = {},
+                    onOpenMediaOutputSwitcher = {},
+                    onDismiss = {},
+                )
+            }
+        }
+
+        composeTestRule.onNodeWithContentDescription("Lyrics").performClick()
+        composeTestRule.waitForIdle()
+        composeTestRule.onNodeWithText(emptyLyrics).assertExists()
+
+        composeTestRule.runOnIdle {
+            playbackState.value = PlaybackState.Playing(secondItem, 0L, 120_000L)
+        }
+        composeTestRule.onNodeWithText(emptyLyrics).assertExists()
+
+        composeTestRule.onNodeWithContentDescription("Queue").performClick()
+        composeTestRule.waitForIdle()
+        composeTestRule.onNodeWithText("Queue").assertExists()
+
+        composeTestRule.onNodeWithTag("full_screen_player_artwork").performClick()
+        composeTestRule.waitForIdle()
+        composeTestRule.onAllNodesWithText("Queue").assertCountEquals(0)
+
+        composeTestRule.onNodeWithContentDescription("Lyrics").performClick()
+        composeTestRule.waitForIdle()
+        composeTestRule.onNodeWithText(emptyLyrics).assertExists()
+
+        composeTestRule.onNodeWithTag("full_screen_player_artwork").performClick()
+        composeTestRule.waitForIdle()
+        composeTestRule.onAllNodesWithText(emptyLyrics).assertCountEquals(0)
+    }
+
+    @Test
+    fun syncedLyricsShowsBilingualLyricsAndSeeksOnLineTap() {
+        var seekPositionMs: Long? = null
+        composeTestRule.setContent {
+            SistrumTheme(themeMode = ThemeMode.Dark) {
+                FullScreenPlayerLyricsPanel(
+                    trackId = "track-1",
+                    lyrics = "[00:01.00]Primary ^ Translation\n[00:03.00]Next line",
+                    currentPositionMs = 1_000L,
+                    onSeek = { seekPositionMs = it },
+                    modifier = Modifier.height(180.dp),
+                )
+            }
+        }
+
+        composeTestRule.onNodeWithTag("synced_lyrics_list").assertExists()
+        composeTestRule.onNodeWithText("Translation").assertExists()
+        composeTestRule.onNodeWithTag("synced_lyric_3.0").performClick()
+        composeTestRule.runOnIdle { assertEquals(3_000L, seekPositionMs) }
+    }
+
+    @Test
+    fun enhancedLyricsRenderTimedWordsAndKeepLineSeeking() {
+        var seekPositionMs: Long? = null
+        composeTestRule.setContent {
+            SistrumTheme(themeMode = ThemeMode.Dark) {
+                FullScreenPlayerLyricsPanel(
+                    trackId = "track-1",
+                    lyrics = "[00:01]Hello <00:02>world<00:03>",
+                    currentPositionMs = 1_500L,
+                    onSeek = { seekPositionMs = it },
+                    modifier = Modifier.height(180.dp),
+                )
+            }
+        }
+
+        composeTestRule.onNodeWithTag("karaoke_word_0").assertExists()
+        composeTestRule.onNodeWithTag("karaoke_word_1").assertExists()
+        composeTestRule.onNodeWithTag("synced_lyric_1.0").performClick()
+        composeTestRule.runOnIdle { assertEquals(1_000L, seekPositionMs) }
+    }
+
+    @Test
+    fun fullScreenPlayerShowsEnhancedLyricsAndSeeks() {
+        var seekPositionMs: Long? = null
+        composeTestRule.setContent {
+            SistrumTheme(themeMode = ThemeMode.Dark) {
+                FullScreenPlayer(
+                    modifier = Modifier.width(400.dp).height(900.dp),
+                    visible = true,
+                    dragProgress = 0f,
+                    isDragging = false,
+                    openingFromMiniPlayerSwipe = false,
+                    playbackState = PlaybackState.Playing(item, 1_500L, 120_000L),
+                    lyrics = "[00:01]Hello <00:02>world<00:03>",
+                    lyricsGlowEnabled = true,
+                    volume = 0.5f,
+                    onSeek = { seekPositionMs = it },
+                    onVolumeChange = {}, onPrevious = {}, onPlayPause = {}, onNext = {},
+                    onOpenMediaOutputSwitcher = {}, onDismiss = {},
+                )
+            }
+        }
+
+        composeTestRule.onNodeWithContentDescription("Lyrics").performClick()
+        composeTestRule.onNodeWithTag("karaoke_word_0").assertExists()
+        composeTestRule.onNodeWithTag("karaoke_glow_0").assertExists()
+        composeTestRule.onNodeWithTag("synced_lyric_1.0").performClick()
+        composeTestRule.runOnIdle { assertEquals(1_000L, seekPositionMs) }
+    }
+
+    @Test
+    fun glowDefaultsOffAndKeepsEnhancedWordFill() {
+        composeTestRule.setContent {
+            SistrumTheme(themeMode = ThemeMode.Dark) {
+                FullScreenPlayer(
+                    modifier = Modifier.width(400.dp).height(900.dp),
+                    visible = true,
+                    dragProgress = 0f,
+                    isDragging = false,
+                    openingFromMiniPlayerSwipe = false,
+                    playbackState = PlaybackState.Playing(item, 1_500L, 120_000L),
+                    lyrics = "[00:01]Hello <00:02>world<00:03>",
+                    volume = 0.5f,
+                    onSeek = {},
+                    onVolumeChange = {}, onPrevious = {}, onPlayPause = {}, onNext = {},
+                    onOpenMediaOutputSwitcher = {}, onDismiss = {},
+                )
+            }
+        }
+
+        composeTestRule.onNodeWithContentDescription("Lyrics").performClick()
+        composeTestRule.onNodeWithTag("karaoke_word_0").assertExists()
+        composeTestRule.onAllNodesWithTag("karaoke_glow_0").assertCountEquals(0)
+    }
+
+    @Test
+    fun wrappedEnhancedLyricKeepsTheWholeWordAndSeekTarget() {
+        var seekPositionMs: Long? = null
+        composeTestRule.setContent {
+            SistrumTheme(themeMode = ThemeMode.Dark) {
+                FullScreenPlayerLyricsPanel(
+                    trackId = "wrapped",
+                    lyrics = "[00:01]A long phrase with several words that wraps<00:03>",
+                    currentPositionMs = 2_000L,
+                    onSeek = { seekPositionMs = it },
+                    modifier = Modifier.width(180.dp).height(300.dp),
+                )
+            }
+        }
+
+        composeTestRule.onNodeWithTag("karaoke_word_0").assertExists()
+        composeTestRule.onNodeWithTag("synced_lyric_1.0").performClick()
+        composeTestRule.runOnIdle { assertEquals(1_000L, seekPositionMs) }
+    }
+
+    @Test
+    fun enhancedLyricsFadeWithoutFillingTheOutgoingWords() {
+        var position by mutableStateOf<Float?>(1.5f)
+        val observed = mutableListOf<KaraokeLinePresentation>()
+        composeTestRule.setContent {
+            val presentation = rememberKaraokeLinePresentation(position, if (position != null) 1f else .25f)
+            SideEffect { observed += presentation }
+        }
+        composeTestRule.mainClock.autoAdvance = false
+        composeTestRule.runOnIdle { position = 1.9f }
+        composeTestRule.mainClock.advanceTimeByFrame()
+        // A line boundary must use the latest playback position, with no trailing fill animation.
+        composeTestRule.runOnIdle { assertEquals(1.9f, observed.last().positionSeconds) }
+        composeTestRule.runOnIdle { position = null; observed.clear() }
+        composeTestRule.mainClock.advanceTimeBy(160)
+        composeTestRule.runOnIdle {
+            assertEquals(1f, observed.first().sungOpacity)
+            assertTrue(observed.last().sungOpacity > .25f && observed.last().sungOpacity < 1f)
+        }
+        composeTestRule.mainClock.advanceTimeBy(400)
+        composeTestRule.runOnIdle {
+            val frozenPosition = observed.first().positionSeconds
+            assertEquals(1.9f, frozenPosition)
+            observed.forEach {
+                assertEquals(frozenPosition, it.positionSeconds)
+                assertTrue(it.sungOpacity in .25f..1f)
+                assertTrue(it.unsungOpacity >= .25f && it.unsungOpacity <= .35f)
+            }
+            observed.zipWithNext().forEach { (before, after) ->
+                assertTrue(after.sungOpacity <= before.sungOpacity)
+                assertTrue(after.unsungOpacity <= before.unsungOpacity)
+            }
+            assertEquals(.25f, observed.last().sungOpacity)
+            assertEquals(.25f, observed.last().unsungOpacity)
+        }
+
+        // Seeking back into this row starts at the new position while brightness fades in.
+        composeTestRule.runOnIdle { position = 1.2f; observed.clear() }
+        composeTestRule.mainClock.advanceTimeBy(160)
+        composeTestRule.runOnIdle {
+            assertEquals(.25f, observed.first().sungOpacity)
+            assertTrue(observed.last().sungOpacity > .25f && observed.last().sungOpacity < 1f)
+            assertEquals(1.2f, observed.last().positionSeconds)
+        }
+        composeTestRule.mainClock.advanceTimeBy(400)
+        composeTestRule.runOnIdle {
+            assertEquals(1f, observed.last().sungOpacity)
+            assertEquals(.35f, observed.last().unsungOpacity)
+        }
+    }
+
+    @Test
+    fun lyricsClockFinishesLastWordAtNextLineBoundary() {
+        var displayedPositionMs = 0L
+        composeTestRule.mainClock.autoAdvance = false
+        composeTestRule.setContent {
+            val position = rememberLyricsDisplayPosition("track-1", 1_800L, null, true)
+            SideEffect { displayedPositionMs = position }
+        }
+        composeTestRule.mainClock.advanceTimeBy(240)
+        composeTestRule.runOnIdle {
+            assertEquals(2_000L, displayedPositionMs)
+            assertEquals(1f, karaokeWordProgress(PlayerLyricWord("last", 1.8f, 2f), displayedPositionMs / 1_000f))
+        }
+    }
+
+    @Test
+    fun enhancedLyricsBrowseAndResumeWithoutResettingTheFill() {
+        var position by mutableStateOf<Float?>(1.5f)
+        val observed = mutableListOf<KaraokeLinePresentation>()
+        composeTestRule.setContent {
+            val presentation = rememberKaraokeLinePresentation(position, 1f)
+            SideEffect { observed += presentation }
+        }
+        composeTestRule.mainClock.autoAdvance = false
+        composeTestRule.runOnIdle { position = null; observed.clear() }
+        composeTestRule.mainClock.advanceTimeBy(160)
+        composeTestRule.runOnIdle {
+            assertEquals(.35f, observed.first().unsungOpacity)
+            assertTrue(observed.last().unsungOpacity > .35f && observed.last().unsungOpacity < 1f)
+            observed.forEach { assertEquals(1.5f, it.positionSeconds) }
+        }
+        // Reverse the transition before browsing has finished fading in.
+        composeTestRule.runOnIdle { position = 1.8f }
+        composeTestRule.mainClock.advanceTimeBy(400)
+        composeTestRule.runOnIdle {
+            assertEquals(1.8f, observed.last().positionSeconds)
+            assertEquals(1f, observed.last().sungOpacity)
+            assertEquals(.35f, observed.last().unsungOpacity)
+        }
+    }
+
+    @Test
+    fun enhancedLyricsJumpToNewPositionOnSeek() {
+        var position by mutableStateOf<Float?>(1.5f)
+        var presented = 0f
+        composeTestRule.setContent {
+            val presentation = rememberKaraokeLinePresentation(position, 1f)
+            SideEffect { presented = presentation.positionSeconds }
+        }
+        composeTestRule.mainClock.autoAdvance = false
+        composeTestRule.runOnIdle { position = 8f }
+        composeTestRule.mainClock.advanceTimeByFrame()
+        composeTestRule.runOnIdle { assertEquals(8f, presented) }
+    }
+
+    @Test
+    fun loadingLyricsShowsAnimatedSkeleton() {
+        composeTestRule.setContent {
+            SistrumTheme(themeMode = ThemeMode.Dark) {
+                FullScreenPlayerLyricsPanel(
+                    trackId = "track-1",
+                    lyrics = null,
+                    loading = true,
+                    currentPositionMs = 0L,
+                    onSeek = {},
+                    modifier = Modifier.height(180.dp),
+                )
+            }
+        }
+
+        composeTestRule.onAllNodesWithTag("lyrics_loading_skeleton").assertCountEquals(5)
+    }
+
+    @Test
+    fun syncedLyricsTouchUsesTheLatestSeekCallbackAfterRecomposition() {
+        var callbackGeneration by mutableStateOf(1)
+        var invokedGeneration: Int? = null
+        composeTestRule.setContent {
+            val onSeek: (Long) -> Unit = if (callbackGeneration == 1) {
+                { invokedGeneration = 1 }
+            } else {
+                { invokedGeneration = 2 }
+            }
+            SistrumTheme(themeMode = ThemeMode.Dark) {
+                FullScreenPlayerLyricsPanel(
+                    trackId = "track-1",
+                    lyrics = "[00:03.00]Seekable line",
+                    currentPositionMs = 1_000L,
+                    onSeek = onSeek,
+                    modifier = Modifier.height(180.dp),
+                )
+            }
+        }
+
+        composeTestRule.runOnIdle { callbackGeneration = 2 }
+        composeTestRule.onNodeWithTag("synced_lyric_3.0").performTouchInput { click() }
+
+        composeTestRule.runOnIdle { assertEquals(2, invokedGeneration) }
+    }
+
+    @Test
+    fun queueShowsTracksAndDispatchesPlaybackControls() {
+        var selectedTrack: String? = null
+        var shuffle: Boolean? = null
+        var repeat: RepeatMode? = null
+        var queue by mutableStateOf(
+            PlaybackQueueSnapshot(
+                originalTrackIds = listOf("track-1", "track-2"),
+                activeTrackIds = listOf("track-1", "track-2"),
+                currentIndex = 0,
+            ),
+        )
+        composeTestRule.setContent {
+            SistrumTheme(themeMode = ThemeMode.Dark) {
+                FullScreenPlayer(
+                    modifier = Modifier.width(400.dp).height(900.dp),
+                    visible = true,
+                    dragProgress = 0f,
+                    isDragging = false,
+                    openingFromMiniPlayerSwipe = false,
+                    playbackState = PlaybackState.Playing(item, 0L, 120_000L),
+                    queue = queue,
+                    queueTracks = listOf(
+                        LibraryTrack(id = "track-1", title = "Test title", artists = "Test artist"),
+                        LibraryTrack(id = "track-2", title = "Next track", artists = "Next artist"),
+                    ),
+                    volume = 0.5f,
+                    onSeek = {},
+                    onVolumeChange = {},
+                    onPrevious = {},
+                    onPlayPause = {},
+                    onNext = {},
+                    onQueueTrackSelected = { selectedTrack = it },
+                    onShuffleChange = {
+                        shuffle = it
+                        queue = queue.copy(shuffle = it)
+                    },
+                    onRepeatModeChange = {
+                        repeat = it
+                        queue = queue.copy(repeatMode = it)
+                    },
+                    onOpenMediaOutputSwitcher = {},
+                    onDismiss = {},
+                )
+            }
+        }
+
+        composeTestRule.onNodeWithContentDescription("Queue").performClick()
+        composeTestRule.onNodeWithTag("full_screen_queue_panel_header")
+            .assertLeftPositionInRootIsEqualTo(20.dp)
+        composeTestRule.onNodeWithTag("full_screen_queue_row-track-1")
+            .assertLeftPositionInRootIsEqualTo(0.dp)
+        composeTestRule.onNodeWithTag("full_screen_queue_row_content-track-1")
+            .assertLeftPositionInRootIsEqualTo(20.dp)
+        composeTestRule.onNodeWithContentDescription("More options").assertExists()
+        composeTestRule.onNodeWithTag("playing_indicator").assertExists()
+        composeTestRule.onNodeWithText("Next track").performClick()
+        composeTestRule.onNodeWithContentDescription("Shuffle").performClick()
+        composeTestRule.onNodeWithContentDescription("Repeat off").performClick()
+        composeTestRule.onNodeWithContentDescription("Shuffle on").assertIsSelected()
+        composeTestRule.onNodeWithContentDescription("Repeat all").assertIsSelected()
+
+        composeTestRule.runOnIdle {
+            assertEquals("track-2", selectedTrack)
+            assertEquals(true, shuffle)
+            assertEquals(RepeatMode.All, repeat)
+        }
+    }
+
+    @Test
+    fun queueDoesNotScrollWhenPlaybackAdvances() {
+        val trackIds = List(12) { "queue-$it" }
+        var queue by mutableStateOf(
+            PlaybackQueueSnapshot(
+                originalTrackIds = trackIds,
+                activeTrackIds = trackIds,
+                currentIndex = 0,
+            ),
+        )
+        var currentTrackId by mutableStateOf(trackIds.first())
+        composeTestRule.setContent {
+            SistrumTheme(themeMode = ThemeMode.Dark) {
+                FullScreenQueuePanel(
+                    queue = queue,
+                    tracks = trackIds.mapIndexed { index, trackId ->
+                        LibraryTrack(id = trackId, title = "Track $index", artists = "Artist")
+                    },
+                    currentTrackId = currentTrackId,
+                    isPlaying = true,
+                    onTrackSelected = {},
+                    onReorder = {},
+                    onShuffleChange = {},
+                    onRepeatModeChange = {},
+                    modifier = Modifier.height(112.dp),
+                )
+            }
+        }
+
+        composeTestRule.runOnIdle {
+            queue = queue.copy(currentIndex = trackIds.lastIndex)
+            currentTrackId = trackIds.last()
+        }
+        composeTestRule.onNodeWithText("Track 11").assertDoesNotExist()
+    }
+
+    @Test
+    fun queueScrollsCurrentTrackIntoViewWhenPanelFirstOpens() {
+        val trackIds = List(12) { "queue-$it" }
+        val currentTrackId = trackIds.last()
+        composeTestRule.setContent {
+            SistrumTheme(themeMode = ThemeMode.Dark) {
+                FullScreenQueuePanel(
+                    queue = PlaybackQueueSnapshot(
+                        originalTrackIds = trackIds,
+                        activeTrackIds = trackIds,
+                        currentIndex = trackIds.lastIndex,
+                    ),
+                    tracks = trackIds.mapIndexed { index, trackId ->
+                        LibraryTrack(id = trackId, title = "Track $index", artists = "Artist")
+                    },
+                    currentTrackId = currentTrackId,
+                    isPlaying = true,
+                    onTrackSelected = {},
+                    onReorder = {},
+                    onShuffleChange = {},
+                    onRepeatModeChange = {},
+                    modifier = Modifier.height(112.dp),
+                )
+            }
+        }
+
+        composeTestRule.onNodeWithText("Track 11").assertExists()
+    }
+
+    @Test
+    fun queueExposesASeparateReorderHandle() {
+        var selectedTrack: String? = null
+        composeTestRule.setContent {
+            SistrumTheme(themeMode = ThemeMode.Dark) {
+                FullScreenQueuePanel(
+                    queue = PlaybackQueueSnapshot(activeTrackIds = listOf("track-1"), currentIndex = 0),
+                    tracks = listOf(LibraryTrack(id = "track-1", title = "Track 1", artists = "Artist")),
+                    currentTrackId = "track-1",
+                    isPlaying = false,
+                    onTrackSelected = { selectedTrack = it },
+                    onReorder = {},
+                    onShuffleChange = {},
+                    onRepeatModeChange = {},
+                    modifier = Modifier.height(160.dp),
+                )
+            }
+        }
+
+        composeTestRule.onNodeWithContentDescription("Reorder track").assertExists()
+        composeTestRule.onNodeWithText("Track 1").performClick()
+        composeTestRule.runOnIdle { assertEquals("track-1", selectedTrack) }
+    }
+
+    private companion object {
+        val item = PlaybackItem(
+            trackId = "track-1",
+            title = "Test title",
+            artist = "Test artist",
+            audioPath = "/audio/track-1.flac",
+        )
+        val secondItem = PlaybackItem(
+            trackId = "track-2",
+            title = "Next track",
+            artist = "Next artist",
+            audioPath = "/audio/track-2.flac",
+        )
+    }
+}

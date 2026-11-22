@@ -1,8 +1,8 @@
 {
   "missions": {},
-  "next_completion": 8,
+  "next_completion": 9,
   "next_mission": 1,
-  "next_tor": 8,
+  "next_tor": 9,
   "tasks": {
     "TOR001": {
       "completion": 1,
@@ -115,6 +115,22 @@
       "record": ".specify/quick-tasks/TOR007.md",
       "status": "complete",
       "title": "Port SistrumKotlin Android features and localization"
+    },
+    "TOR008": {
+      "completion": 8,
+      "evidence": {
+        "checks": "DevRelease build and LintVital passed; 479 host tests passed; instrumentation compiled; original development certificate, new manifest and all 24 JNI exports verified",
+        "result": "PASS",
+        "reviewer": "tor_review",
+        "round": 1
+      },
+      "final": false,
+      "kind": "TOR",
+      "mission": null,
+      "nonce": "9e2d8d20ee474b0287bf3ff5e889641c",
+      "record": ".specify/quick-tasks/TOR008.md",
+      "status": "complete",
+      "title": "Rebrand Android as Sistrum V0.1.0"
     }
   },
   "version": 1
