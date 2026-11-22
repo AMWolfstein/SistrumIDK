@@ -1,8 +1,8 @@
 {
   "missions": {},
-  "next_completion": 5,
+  "next_completion": 6,
   "next_mission": 1,
-  "next_tor": 5,
+  "next_tor": 6,
   "tasks": {
     "TOR001": {
       "completion": 1,
@@ -67,6 +67,22 @@
       "record": ".specify/quick-tasks/TOR004.md",
       "status": "complete",
       "title": "Remove iOS and desktop sync from the Android app"
+    },
+    "TOR005": {
+      "completion": 5,
+      "evidence": {
+        "checks": "CodeGraph refreshed; pinned Airmedy dictionary blobs match; DevDebug merged all dictionaries and licenses offline; Android host 278/278 and shared host 40/40 passed",
+        "result": "PASS",
+        "reviewer": "tor_review",
+        "round": 1
+      },
+      "final": false,
+      "kind": "TOR",
+      "mission": null,
+      "nonce": "da9292725f674e489c203484b1f262e5",
+      "record": ".specify/quick-tasks/TOR005.md",
+      "status": "complete",
+      "title": "Bundle Airmedy romanization dictionaries for offline Android lyrics"
     }
   },
   "version": 1

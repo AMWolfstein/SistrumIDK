@@ -8,15 +8,18 @@
 | Korean rules | [koreanromanizer v1.0.0](https://github.com/misa198/koreanromanizer/tree/v1.0.0), based on koroman e529729b923f8a9d9acc62b2c9c0887b00e9bd88 | MIT, Copyright (c) 2025 Donghe Youn (Daissue) |
 
 Korean rules are ported to Kotlin, preserving the Go implementation's unchanged
-non-Hangul text. Chinese conversion follows the desktop engine. Gradle copies
-the unmodified phrase/OpenCC files from `internal/infra/romanization/data` into
-generated Android assets. No runtime download is performed.
+non-Hangul text. Chinese conversion follows the desktop engine. The unmodified
+`pinyin.txt` and `TSCharacters.txt` came from
+[Airmedy's romanization data at d859940](https://github.com/misa198/airmedy/tree/d859940c0629907e377c889fb276904b6a7a4b8c/internal/infra/romanization/data).
+All three dictionaries live in `androidApp/src/main/assets/romanization`.
+Gradle packages them and includes this notice and the OpenCC license.
 
 `characters.tsv` contains hexadecimal Unicode code points and the first
-tone-marked reading from go-pinyin. Regenerate from the repository root with
-`go run ./mobile/tools/romanization/export.go`; output is sorted and checked in.
-Ordinary Android builds do not require Go. Update the Android engine version
-when changing dictionaries or rules, and re-run the desktop reading fixtures.
+tone-marked reading from go-pinyin. To regenerate it, run
+`go run ./mobile/tools/romanization/export.go` from the pinned Airmedy checkout
+linked above and copy the resulting sorted file into the Android assets here.
+Android builds use the checked-in data. Update the Android engine version when
+changing dictionaries or rules, and re-run the bundled reading fixtures.
 
 ## MIT license (character/phrase data and Korean rules)
 

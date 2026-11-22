@@ -223,8 +223,8 @@ lines are unsupported. Names can have different readings.
 
 Shared logic owns validation, conversion contracts and Korean rules; Android
 owns dictionary loading, Unicode normalization and presentation. The build
-packages pinned desktop phrase/OpenCC data without requiring a desktop
-connection. Provenance and the optional regeneration command are in
+packages the pinned dictionaries from this checkout for offline use.
+Provenance and the optional regeneration command are in
 [`tools/romanization/ATTRIBUTION.md`](tools/romanization/ATTRIBUTION.md).
 
 ## Last.fm

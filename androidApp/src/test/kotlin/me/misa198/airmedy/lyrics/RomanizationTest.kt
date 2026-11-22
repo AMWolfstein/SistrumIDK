@@ -19,13 +19,11 @@ import org.junit.Test
 @OptIn(ExperimentalCoroutinesApi::class)
 class RomanizationTest {
     @Test
-    fun offlineDesktopFixtures() = runTest {
+    fun offlineBundledFixtures() = runTest {
         var opens = 0
         val engine = AndroidRomanizationEngine { path ->
             opens++
-            val file = if (path.endsWith("characters.tsv")) File("src/main/assets/$path")
-            else File("../../internal/infra/romanization/data/${path.substringAfterLast('/')}")
-            file.inputStream()
+            File("src/main/assets", path).inputStream()
         }
         val service = RomanizeLyrics(engine)
         assertTrue(service.inspect(listOf("你好", "한글")).supported)
