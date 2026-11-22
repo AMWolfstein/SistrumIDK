@@ -1,0 +1,27 @@
+{
+  "shared": [
+    ".agents/skills",
+    ".agents/reviewers",
+    ".github/workflows/workflow-integrity.yml",
+    ".specify/.gitignore",
+    ".specify/LICENSE.spec-kit",
+    ".specify/init-options.json",
+    ".specify/project-policy.md",
+    ".specify/scripts",
+    ".specify/templates",
+    ".specify/memory",
+    ".specify/upstream.json",
+    ".specify/workflows",
+    ".specify/integrations/speckit.manifest.json"
+  ],
+  "targets": {
+    "claude": [
+      "CLAUDE.md"
+    ],
+    "codex": [
+      ".specify/init-options.json",
+      ".specify/integration.json",
+      ".specify/integrations/codex.manifest.json"
+    ]
+  }
+}
