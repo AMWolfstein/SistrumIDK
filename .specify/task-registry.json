@@ -1,8 +1,8 @@
 {
   "missions": {},
-  "next_completion": 10,
+  "next_completion": 11,
   "next_mission": 1,
-  "next_tor": 10,
+  "next_tor": 11,
   "tasks": {
     "TOR001": {
       "completion": 1,
@@ -147,6 +147,22 @@
       "record": ".specify/quick-tasks/TOR009.md",
       "status": "complete",
       "title": "Port Media3 M1 playback test setup"
+    },
+    "TOR010": {
+      "completion": 10,
+      "evidence": {
+        "checks": "DevDebug host test-source compilation; Git whitespace",
+        "result": "PASS",
+        "reviewer": "tor_review",
+        "round": 2
+      },
+      "final": false,
+      "kind": "TOR",
+      "mission": null,
+      "nonce": "021644f3c184424a80e06a2e3febe3ac",
+      "record": ".specify/quick-tasks/TOR010.md",
+      "status": "complete",
+      "title": "Port Media3 M2 playback engine boundary"
     }
   },
   "version": 1
