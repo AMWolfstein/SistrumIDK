@@ -1,8 +1,25 @@
 {
-  "version": 1,
-  "next_mission": 1,
-  "next_tor": 1,
-  "next_completion": 1,
   "missions": {},
-  "tasks": {}
+  "next_completion": 2,
+  "next_mission": 1,
+  "next_tor": 2,
+  "tasks": {
+    "TOR001": {
+      "completion": 1,
+      "evidence": {
+        "checks": "Independent staged tree comparison, upstream attribution and AGENTS preservation, ignore rules, Gradle wrapper syntax and commit convention passed",
+        "result": "PASS",
+        "reviewer": "tor_review",
+        "round": 1
+      },
+      "final": false,
+      "kind": "TOR",
+      "mission": null,
+      "nonce": "20adb58599ad4fe495f9c14298c09d7c",
+      "record": ".specify/quick-tasks/TOR001.md",
+      "status": "complete",
+      "title": "Import the upstream Airmedy mobile baseline"
+    }
+  },
+  "version": 1
 }
