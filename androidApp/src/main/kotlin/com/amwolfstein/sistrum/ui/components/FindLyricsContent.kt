@@ -107,8 +107,8 @@ internal fun FindLyricsContent(
                             verticalAlignment = Alignment.CenterVertically,
                         ) {
                             Column(Modifier.weight(1f)) {
-                                Text(result.trackName, style = MaterialTheme.typography.bodyMedium.copy(fontWeight = FontWeight.SemiBold), color = colors.textMain, maxLines = 1, overflow = TextOverflow.Ellipsis)
-                                Text(result.artistName, style = MaterialTheme.typography.bodySmall, color = colors.textMuted, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                                Text(result.trackName, modifier = Modifier.fillMaxWidth(), style = MaterialTheme.typography.bodyMedium.copy(fontWeight = FontWeight.SemiBold), color = colors.textMain, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                                Text(result.artistName, modifier = Modifier.fillMaxWidth(), style = MaterialTheme.typography.bodySmall, color = colors.textMuted, maxLines = 1, overflow = TextOverflow.Ellipsis)
                             }
                             Column(horizontalAlignment = Alignment.End, modifier = Modifier.padding(start = 12.dp)) {
                                 Text(result.provider.uppercase(), style = MaterialTheme.typography.labelSmall, color = colors.textMuted)

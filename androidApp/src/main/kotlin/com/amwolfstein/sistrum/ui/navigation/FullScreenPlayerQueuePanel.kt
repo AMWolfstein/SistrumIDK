@@ -440,6 +440,7 @@ private fun FullScreenQueueTrackRow(
             ) {
                 Text(
                     text = title,
+                    modifier = Modifier.fillMaxWidth(),
                     color = colors.onPrimary,
                     style = MaterialTheme.typography.bodyMedium.copy(fontWeight = FontWeight.SemiBold),
                     maxLines = 1,
@@ -447,6 +448,7 @@ private fun FullScreenQueueTrackRow(
                 )
                 Text(
                     text = artist,
+                    modifier = Modifier.fillMaxWidth(),
                     color = colors.foregroundSubtle,
                     style = MaterialTheme.typography.bodySmall,
                     maxLines = 1,

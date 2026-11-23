@@ -55,6 +55,7 @@ fun AlbumTrackRow(
             .padding(end = 8.dp), verticalArrangement = Arrangement.Center) {
             Text(
                 title,
+                Modifier.fillMaxWidth(),
                 style = MaterialTheme.typography.bodyMedium.copy(fontWeight = FontWeight.SemiBold),
                 color = colors.textMain,
                 maxLines = 1,
@@ -62,7 +63,7 @@ fun AlbumTrackRow(
             )
             Text(
                 artist,
-                Modifier.padding(top = 2.dp),
+                Modifier.fillMaxWidth().padding(top = 2.dp),
                 style = MaterialTheme.typography.bodySmall,
                 color = colors.textMuted,
                 maxLines = 1,

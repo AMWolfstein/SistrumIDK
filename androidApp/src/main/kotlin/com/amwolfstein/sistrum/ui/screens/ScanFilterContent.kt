@@ -218,6 +218,7 @@ private fun FolderRow(folder: String, onRemove: () -> Unit) {
         Column(modifier = Modifier.weight(1f).padding(start = 16.dp)) {
             Text(
                 text = File(folder).name.ifEmpty { folder },
+                modifier = Modifier.fillMaxWidth(),
                 style = MaterialTheme.typography.bodyLarge,
                 color = colors.textMain,
                 maxLines = 1,
@@ -225,6 +226,7 @@ private fun FolderRow(folder: String, onRemove: () -> Unit) {
             )
             Text(
                 text = folder,
+                modifier = Modifier.fillMaxWidth(),
                 style = MaterialTheme.typography.bodySmall,
                 color = colors.textMuted,
                 maxLines = 1,
@@ -260,6 +262,7 @@ private fun SuggestedFolderRow(folder: String, onAdd: () -> Unit) {
         Column(modifier = Modifier.weight(1f).padding(start = 16.dp)) {
             Text(
                 text = File(folder).name.ifEmpty { folder },
+                modifier = Modifier.fillMaxWidth(),
                 style = MaterialTheme.typography.bodyLarge,
                 color = colors.textMain,
                 maxLines = 1,
@@ -267,6 +270,7 @@ private fun SuggestedFolderRow(folder: String, onAdd: () -> Unit) {
             )
             Text(
                 text = folder,
+                modifier = Modifier.fillMaxWidth(),
                 style = MaterialTheme.typography.bodySmall,
                 color = colors.textMuted,
                 maxLines = 1,

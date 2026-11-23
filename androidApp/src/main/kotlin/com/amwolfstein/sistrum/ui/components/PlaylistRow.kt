@@ -51,6 +51,7 @@ internal fun PlaylistRow(
         Column(modifier = Modifier.weight(1f).padding(horizontal = 12.dp)) {
             Text(
                 text = name,
+                modifier = Modifier.fillMaxWidth(),
                 style = MaterialTheme.typography.bodyMedium.copy(fontWeight = FontWeight.SemiBold),
                 color = colors.textMain,
                 maxLines = 1,
@@ -59,6 +60,7 @@ internal fun PlaylistRow(
             if (syncFailed) {
                 Text(
                     text = stringResource(R.string.playlist_sync_failed),
+                    modifier = Modifier.fillMaxWidth(),
                     style = MaterialTheme.typography.labelSmall,
                     color = colors.textMuted,
                     maxLines = 1,

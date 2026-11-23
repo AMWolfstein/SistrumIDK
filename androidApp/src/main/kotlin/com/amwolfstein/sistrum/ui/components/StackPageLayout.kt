@@ -33,7 +33,6 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.statusBars
 import androidx.compose.foundation.layout.width
-import androidx.compose.foundation.layout.wrapContentWidth
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.Icon
@@ -224,7 +223,7 @@ fun StackPageHeader(
                 Text(
                     text = currentTitle.text,
                     modifier = Modifier
-                        .wrapContentWidth(Alignment.Start)
+                        .fillMaxWidth()
                         .testTag(StackPageTitleTag),
                     color = colors.textMain,
                     style = if (onBackClick != null) {

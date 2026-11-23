@@ -95,7 +95,7 @@ fun DiscCard(
             color = colors.textMain,
             maxLines = 1,
             overflow = TextOverflow.Ellipsis,
-            modifier = Modifier.padding(top = DiscCardTitleGap, start = 2.dp, end = 2.dp),
+            modifier = Modifier.fillMaxWidth().padding(top = DiscCardTitleGap, start = 2.dp, end = 2.dp),
         )
 
         Text(
@@ -104,7 +104,7 @@ fun DiscCard(
             color = colors.textMuted,
             maxLines = 1,
             overflow = TextOverflow.Ellipsis,
-            modifier = Modifier.padding(top = DiscCardSubtitleGap, start = 2.dp, end = 2.dp, bottom = DiscCardBottomAllowance),
+            modifier = Modifier.fillMaxWidth().padding(top = DiscCardSubtitleGap, start = 2.dp, end = 2.dp, bottom = DiscCardBottomAllowance),
         )
     }
 }

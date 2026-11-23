@@ -20,3 +20,4 @@
 - TOR018 — Port Spec 002 Phase A Kotlin audio modules
 - TOR019 — Port Spec 002 M1 Kotlin playback decoders
 - TOR020 — Port Spec 002 M2 Night mode and silence-aware crossfade
+- TOR021 — Fix Arabic text fitting and add decoder diagnostics

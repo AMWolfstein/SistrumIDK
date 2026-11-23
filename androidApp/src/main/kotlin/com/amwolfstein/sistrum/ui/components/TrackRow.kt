@@ -158,6 +158,7 @@ fun TrackRow(
         ) {
             Text(
                 text = title,
+                modifier = Modifier.fillMaxWidth(),
                 style = MaterialTheme.typography.bodyMedium.copy(fontWeight = FontWeight.SemiBold),
                 color = colors.textMain,
                 maxLines = 1,
@@ -169,7 +170,7 @@ fun TrackRow(
                 color = colors.textMuted,
                 maxLines = 1,
                 overflow = TextOverflow.Ellipsis,
-                modifier = Modifier.padding(top = 2.dp),
+                modifier = Modifier.fillMaxWidth().padding(top = 2.dp),
             )
         }
 

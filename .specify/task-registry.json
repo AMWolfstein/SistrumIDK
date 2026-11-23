@@ -1,8 +1,8 @@
 {
   "missions": {},
-  "next_completion": 21,
+  "next_completion": 22,
   "next_mission": 1,
-  "next_tor": 21,
+  "next_tor": 22,
   "tasks": {
     "TOR001": {
       "completion": 1,
@@ -323,6 +323,22 @@
       "record": ".specify/quick-tasks/TOR020.md",
       "status": "complete",
       "title": "Port Spec 002 M2 Night mode and silence-aware crossfade"
+    },
+    "TOR021": {
+      "completion": 21,
+      "evidence": {
+        "checks": "DevDebug host and instrumentation Kotlin compilation; upstream Arabic plurals; Git whitespace",
+        "result": "PASS",
+        "reviewer": "tor_review",
+        "round": 1
+      },
+      "final": false,
+      "kind": "TOR",
+      "mission": null,
+      "nonce": "e3276ec49e5642a78d2f10628943f5bd",
+      "record": ".specify/quick-tasks/TOR021.md",
+      "status": "complete",
+      "title": "Fix Arabic text fitting and add decoder diagnostics"
     }
   },
   "version": 1
