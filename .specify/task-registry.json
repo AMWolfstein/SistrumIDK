@@ -1,8 +1,8 @@
 {
   "missions": {},
-  "next_completion": 17,
+  "next_completion": 18,
   "next_mission": 1,
-  "next_tor": 17,
+  "next_tor": 18,
   "tasks": {
     "TOR001": {
       "completion": 1,
@@ -259,6 +259,22 @@
       "record": ".specify/quick-tasks/TOR016.md",
       "status": "complete",
       "title": "Port Media3 M8 default engine and playback fixes"
+    },
+    "TOR017": {
+      "completion": 17,
+      "evidence": {
+        "checks": "DevDebug host and instrumentation Kotlin compilation; Git whitespace",
+        "result": "PASS",
+        "reviewer": "tor_review",
+        "round": 1
+      },
+      "final": false,
+      "kind": "TOR",
+      "mission": null,
+      "nonce": "b2a88a1d171747cb9e4b49b0ae4eab24",
+      "record": ".specify/quick-tasks/TOR017.md",
+      "status": "complete",
+      "title": "Port Media3 M9 Auto normalization"
     }
   },
   "version": 1

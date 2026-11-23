@@ -16,3 +16,4 @@
 - TOR014 — Port Media3 M6 measured loudness normalization
 - TOR015 — Port Media3 M7 crossfade
 - TOR016 — Port Media3 M8 default engine and playback fixes
+- TOR017 — Port Media3 M9 Auto normalization
