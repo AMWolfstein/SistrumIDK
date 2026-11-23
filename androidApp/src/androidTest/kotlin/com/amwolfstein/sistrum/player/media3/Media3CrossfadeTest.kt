@@ -24,6 +24,7 @@ import kotlin.math.roundToInt
 import kotlin.math.sin
 import kotlin.math.sqrt
 import kotlinx.coroutines.runBlocking
+import com.amwolfstein.sistrum.BuildConfig
 import com.amwolfstein.sistrum.player.EqualizerSettings
 import com.amwolfstein.sistrum.player.NormalizationSettings
 import com.amwolfstein.sistrum.player.PlaybackItem
@@ -37,7 +38,7 @@ import org.junit.Assume.assumeTrue
 import org.junit.Test
 import org.junit.runner.RunWith
 
-/** T059: run only against the .qa target. Taps are before track volume, so tests may mute output.
+/** T059: run only against DevDebug. Taps are before track volume, so tests may mute output.
  * Timing is reconstructed independently from PCM curve positions and the players' audible clocks,
  * rather than asserting against the engine's chosen delay. Every test reports an instrumentation row.
  */
@@ -622,7 +623,9 @@ class Media3CrossfadeTest {
     }
 
     private fun withRig(name: String, body: (Rig) -> Unit) {
-        check(context.packageName.endsWith(".qa")) { "Media3CrossfadeTest requires the .qa target" }
+        check(BuildConfig.DEBUG && BuildConfig.FLAVOR == "dev") {
+            "Media3CrossfadeTest requires the DevDebug target"
+        }
         assumeTrue("test corpus missing: $CORPUS", File(CORPUS, "gapless_flac_1.flac").isFile)
         val rig = Rig()
         var result = "FAIL"

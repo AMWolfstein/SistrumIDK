@@ -262,8 +262,8 @@ class MainActivity : ComponentActivity() {
                 romanizationViewModel.setAllowed(lyricsSettings.romanizationEnabled)
             }
             val enginePreferences = remember { EngineSelectionPreferences(applicationContext) }
-            // Unknown selection must not clear saved settings while DataStore is loading.
-            val selectedEngine by enginePreferences.engine.collectAsStateWithLifecycle(initialValue = null)
+            // The Media3 default keeps settings available and does not clear them while DataStore is loading.
+            val selectedEngine by enginePreferences.engine.collectAsStateWithLifecycle(initialValue = EngineKind.Media3)
             val normalizationAvailable = selectedEngine == EngineKind.Media3
             val analysisScheduler = remember { LoudnessAnalysisScheduler.get(applicationContext) }
             val analysisProgress by analysisScheduler.progress.collectAsStateWithLifecycle()

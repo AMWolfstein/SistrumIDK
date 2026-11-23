@@ -1,8 +1,8 @@
 {
   "missions": {},
-  "next_completion": 16,
+  "next_completion": 17,
   "next_mission": 1,
-  "next_tor": 16,
+  "next_tor": 17,
   "tasks": {
     "TOR001": {
       "completion": 1,
@@ -243,6 +243,22 @@
       "record": ".specify/quick-tasks/TOR015.md",
       "status": "complete",
       "title": "Port Media3 M7 crossfade"
+    },
+    "TOR016": {
+      "completion": 16,
+      "evidence": {
+        "checks": "DevDebug host and instrumentation Kotlin compilation; Git whitespace",
+        "result": "PASS",
+        "reviewer": "tor_review",
+        "round": 2
+      },
+      "final": false,
+      "kind": "TOR",
+      "mission": null,
+      "nonce": "f845e2673ee349d794f4944f85623744",
+      "record": ".specify/quick-tasks/TOR016.md",
+      "status": "complete",
+      "title": "Port Media3 M8 default engine and playback fixes"
     }
   },
   "version": 1
