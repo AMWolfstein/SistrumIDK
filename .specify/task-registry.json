@@ -1,8 +1,8 @@
 {
   "missions": {},
-  "next_completion": 18,
+  "next_completion": 19,
   "next_mission": 1,
-  "next_tor": 18,
+  "next_tor": 19,
   "tasks": {
     "TOR001": {
       "completion": 1,
@@ -275,6 +275,22 @@
       "record": ".specify/quick-tasks/TOR017.md",
       "status": "complete",
       "title": "Port Media3 M9 Auto normalization"
+    },
+    "TOR018": {
+      "completion": 18,
+      "evidence": {
+        "checks": "Four JVM compileTestKotlin tasks; upstream TSV equality; Git whitespace",
+        "result": "PASS",
+        "reviewer": "tor_review",
+        "round": 2
+      },
+      "final": false,
+      "kind": "TOR",
+      "mission": null,
+      "nonce": "e1a969fedf8d41a5a3426869f90ec94d",
+      "record": ".specify/quick-tasks/TOR018.md",
+      "status": "complete",
+      "title": "Port Spec 002 Phase A Kotlin audio modules"
     }
   },
   "version": 1

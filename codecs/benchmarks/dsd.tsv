@@ -1,0 +1,39 @@
+# OpenJDK 64-Bit Server VM 21.0.12.1; amd64; 8 CPUs
+# 20 warmups, five measured full decodes; median RTF and allocation bytes; open/seek/hash excluded; bounded input reads included
+file	mode	status	audio_seconds	decode_seconds	real_time_factor	allocated_bytes
+dsd128-1ch.dff	pcm	ok	0.050000	0.012151	0.243017	0
+dsd128-1ch.dff	dop	ok	0.050000	0.000545	0.010904	0
+dsd128-1ch.dsf	pcm	ok	0.050000	0.012047	0.240937	0
+dsd128-1ch.dsf	dop	ok	0.050000	0.000388	0.007763	0
+dsd128-2ch.dff	pcm	ok	0.050000	0.026709	0.534180	0
+dsd128-2ch.dff	dop	ok	0.050000	0.000577	0.011545	0
+dsd128-2ch.dsf	pcm	ok	0.050000	0.024664	0.493282	0
+dsd128-2ch.dsf	dop	ok	0.050000	0.000938	0.018761	0
+dsd128-6ch.dff		refused: dff: CHNL number not found or is unsupported.				
+dsd128-6ch.dsf	pcm	ok	0.050000	0.075615	1.512295	0
+dsd128-6ch.dsf	dop	ok	0.050000	0.001800	0.035992	0
+dsd256-1ch.dff	pcm	ok	0.050000	0.017301	0.346025	0
+dsd256-1ch.dff	dop	ok	0.050000	0.000630	0.012606	0
+dsd256-1ch.dsf	pcm	ok	0.050000	0.017258	0.345157	0
+dsd256-1ch.dsf	dop	ok	0.050000	0.000748	0.014956	0
+dsd256-2ch.dff	pcm	ok	0.050000	0.034429	0.688590	0
+dsd256-2ch.dff	dop	ok	0.050000	0.001003	0.020052	0
+dsd256-2ch.dsf	pcm	ok	0.050000	0.034714	0.694286	0
+dsd256-2ch.dsf	dop	ok	0.050000	0.001238	0.024754	0
+dsd256-6ch.dff		refused: dff: CHNL number not found or is unsupported.				
+dsd256-6ch.dsf	pcm	ok	0.050000	0.113496	2.269914	0
+dsd256-6ch.dsf	dop	ok	0.050000	0.003146	0.062923	0
+dsd64-1ch.dff	pcm	ok	0.050006	0.009320	0.186384	0
+dsd64-1ch.dff	dop	ok	0.050006	0.000157	0.003141	0
+dsd64-1ch.dsf	pcm	ok	0.050006	0.009322	0.186428	0
+dsd64-1ch.dsf	dop	ok	0.050006	0.000185	0.003709	0
+dsd64-2ch.dff	pcm	ok	0.050006	0.018624	0.372431	0
+dsd64-2ch.dff	dop	ok	0.050006	0.000250	0.005000	0
+dsd64-2ch.dsf	pcm	ok	0.050006	0.018645	0.372861	0
+dsd64-2ch.dsf	dop	ok	0.050006	0.000312	0.006241	0
+dsd64-6ch.dff		refused: dff: CHNL number not found or is unsupported.				
+dsd64-6ch.dsf	pcm	ok	0.050006	0.058157	1.163003	0
+dsd64-6ch.dsf	dop	ok	0.050006	0.000796	0.015912	0
+dsd64-msb-partial-bits.dsf	pcm	ok	0.011621	0.004306	0.370555	0
+dsd64-msb-partial-bits.dsf	dop	ok	0.011621	0.000047	0.004029	0
+dst-compressed.dff		refused: dff: Compression type must be 'DSD '. DST not supported.				
