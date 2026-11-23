@@ -1,8 +1,8 @@
 {
   "missions": {},
-  "next_completion": 20,
+  "next_completion": 21,
   "next_mission": 1,
-  "next_tor": 20,
+  "next_tor": 21,
   "tasks": {
     "TOR001": {
       "completion": 1,
@@ -307,6 +307,22 @@
       "record": ".specify/quick-tasks/TOR019.md",
       "status": "complete",
       "title": "Port Spec 002 M1 Kotlin playback decoders"
+    },
+    "TOR020": {
+      "completion": 20,
+      "evidence": {
+        "checks": "DevDebug host and instrumentation Kotlin compilation; Git whitespace",
+        "result": "PASS",
+        "reviewer": "tor_review",
+        "round": 2
+      },
+      "final": false,
+      "kind": "TOR",
+      "mission": null,
+      "nonce": "72751aed111649aa8b8f055a698551af",
+      "record": ".specify/quick-tasks/TOR020.md",
+      "status": "complete",
+      "title": "Port Spec 002 M2 Night mode and silence-aware crossfade"
     }
   },
   "version": 1

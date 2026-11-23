@@ -27,9 +27,31 @@ internal class LoudnessStore(private val database: SyncDatabase) {
 
     private val dao = database.syncDao()
 
+    /** Read already measured edges only; playback never starts analysis or waits for it. */
+    suspend fun silenceProfile(trackId: String): SilenceProfile? = database.withTransaction {
+        val fingerprint = dao.activeAudioSha(trackId) ?: return@withTransaction null
+        val raw = dao.activeDocumentJson("analysis", trackId) ?: return@withTransaction null
+        playbackSilenceProfile(LibraryJson.json.parseToJsonElement(raw).jsonObject, fingerprint)
+    }
+
     suspend fun pendingTracks(analyzerVersion: String = ANALYZER_VERSION): List<PendingTrack> =
         database.withTransaction {
-            dao.pendingTrackRows(analyzerVersion, DECODER_SET_VERSION).map { row ->
+            val pending = dao.pendingTrackRows(analyzerVersion, DECODER_SET_VERSION)
+            val silencePending = dao.loudnessPlannerTrackRows().filter { row ->
+                row.unavailableReason == null && row.audioPath != null && row.fingerprint != null &&
+                    needsSilenceAnalysis(row.analysisJson?.let {
+                        try { LibraryJson.json.parseToJsonElement(it).jsonObject }
+                        catch (error: IllegalArgumentException) {
+                            Log.w("LoudnessStore", "Invalid analysis for ${row.trackId}; scheduling normal analysis", error)
+                            null
+                        }
+                    }, row.fingerprint)
+            }.map { row ->
+                com.amwolfstein.sistrum.sync.PendingTrackRow(
+                    row.trackId, row.audioPath!!, row.fingerprint!!, row.rawJson,
+                )
+            }
+            (pending + silencePending).distinctBy { it.trackId }.map { row ->
                 val json = runCatching { LibraryJson.json.parseToJsonElement(row.rawJson).jsonObject }.getOrNull()
                 PendingTrack(
                     trackId = row.trackId,
@@ -226,6 +248,7 @@ internal fun analysisDocument(
                 put("reason", result.reason)
             })
             put("last_failed_at", analyzedAt)
+            put("silenceAttemptVersion", SilenceProfile.VERSION)
         })
     }
     return when (result) {
@@ -234,6 +257,11 @@ internal fun analysisDocument(
             put("true_peak", result.truePeakDbtp)
             put("sample_peak", result.samplePeakDbfs)
             put("status", "ok")
+            result.silence?.let {
+                put("silenceLeadMs", it.leadMs)
+                put("silenceTailMs", it.tailMs)
+                put("silenceVersion", SilenceProfile.VERSION)
+            }
             put("source_fingerprint", result.fingerprint)
             put("analyzer_version", ANALYZER_VERSION)
             put("decoder_set_version", DECODER_SET_VERSION)
@@ -241,6 +269,11 @@ internal fun analysisDocument(
         }
         is TrackLoudnessResult.Silent -> buildJsonObject {
             put("status", "silent")
+            result.silence?.let {
+                put("silenceLeadMs", it.leadMs)
+                put("silenceTailMs", it.tailMs)
+                put("silenceVersion", SilenceProfile.VERSION)
+            }
             put("source_fingerprint", result.fingerprint)
             put("analyzer_version", ANALYZER_VERSION)
             put("decoder_set_version", DECODER_SET_VERSION)
@@ -263,3 +296,21 @@ private fun JsonObject.string(name: String): String? = (this[name] as? JsonPrimi
 private fun JsonObject.double(name: String): Double? = (this[name] as? JsonPrimitive)?.contentOrNull?.toDoubleOrNull()
 
 private fun JsonObject.long(name: String): Long = (this[name] as? JsonPrimitive)?.contentOrNull?.toLongOrNull() ?: 0L
+
+/** A failed refresh is attempted once per silence version; usable prior loudness stays available. */
+internal fun needsSilenceAnalysis(document: JsonObject?, fingerprint: String): Boolean =
+    document != null && document.string("source_fingerprint") == fingerprint &&
+        document.string("status") in setOf("ok", "silent") &&
+        document.string("silenceVersion") != SilenceProfile.VERSION &&
+        document.string("silenceAttemptVersion") != SilenceProfile.VERSION
+
+/** Missing/old measurements are normal; corrupt current measurements are refused to the caller for logging. */
+internal fun playbackSilenceProfile(document: JsonObject, fingerprint: String): SilenceProfile? {
+    if (document.string("silenceVersion") != SilenceProfile.VERSION ||
+        document.string("source_fingerprint") != fingerprint ||
+        document.string("status") !in setOf("ok", "silent")) return null
+    val lead = document.string("silenceLeadMs")?.toLongOrNull()
+    val tail = document.string("silenceTailMs")?.toLongOrNull()
+    require(lead != null && tail != null && lead >= 0L && tail >= 0L) { "Invalid silence edge durations" }
+    return SilenceProfile(lead, tail)
+}

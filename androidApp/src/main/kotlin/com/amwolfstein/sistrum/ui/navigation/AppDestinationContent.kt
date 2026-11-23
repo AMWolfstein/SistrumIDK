@@ -446,6 +446,9 @@ internal fun AppDestinationContent(
                             AppStackPage.SettingsPlayback -> PlaybackSettingsContent(
                                 livingArtworkBackground = settings.livingArtworkBackground,
                                 onLivingArtworkBackgroundChanged = settings.onLivingArtworkBackgroundChanged,
+                                nightMode = settings.nightMode,
+                                onNightModeChanged = settings.onNightModeChanged,
+                                normalizationAvailable = normalizationAvailable,
                                 showFullscreenQualityBadge = showFullscreenQualityBadge,
                                 onShowFullscreenQualityBadgeChanged = onShowFullscreenQualityBadgeChanged,
                                 keepScreenOnForLyrics = keepScreenOnForLyrics,
@@ -469,6 +472,8 @@ internal fun AppDestinationContent(
                                 onBlendArtworkDuringCrossfadeChanged = onBlendArtworkDuringCrossfadeChanged,
                                 repeatOneCrossfade = settings.repeatOneCrossfade,
                                 onRepeatOneCrossfadeChanged = settings.onRepeatOneCrossfadeChanged,
+                                crossfadeSkipSilence = settings.crossfadeSkipSilence,
+                                onCrossfadeSkipSilenceChanged = settings.onCrossfadeSkipSilenceChanged,
                                 crossfadeOnSkip = settings.crossfadeOnSkip,
                                 onCrossfadeOnSkipChanged = settings.onCrossfadeOnSkipChanged,
                                 normalizationAvailable = normalizationAvailable,

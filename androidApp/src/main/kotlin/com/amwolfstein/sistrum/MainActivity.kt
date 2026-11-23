@@ -12,6 +12,8 @@ import androidx.window.layout.WindowLayoutInfo
 import androidx.window.layout.FoldingFeature
 import com.amwolfstein.sistrum.ui.navigation.PlayerFoldingFeature
 import com.amwolfstein.sistrum.ui.navigation.PlayerFoldOrientation
+import android.media.AudioDeviceCallback
+import android.media.AudioDeviceInfo
 import android.os.Bundle
 import android.os.Build
 import android.Manifest
@@ -43,6 +45,8 @@ import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.tooling.preview.Preview
 import kotlinx.coroutines.flow.flow
+import com.amwolfstein.sistrum.diagnostics.Diagnostics
+import com.amwolfstein.sistrum.player.media3.SilentMixerProbe
 import kotlinx.coroutines.flow.flowOf
 import kotlinx.coroutines.launch
 import android.os.Handler
@@ -167,10 +171,29 @@ class MainActivity : ComponentActivity() {
         super.onSaveInstanceState(outState)
     }
 
+    /** New outputs (headphones, Bluetooth) get their mixer block measured silently before anything plays on them. */
+    private val outputDeviceCallback = object : AudioDeviceCallback() {
+        override fun onAudioDevicesAdded(addedDevices: Array<out AudioDeviceInfo>) {
+            if (addedDevices.any { it.isSink }) SilentMixerProbe.measureIfUnknown(this@MainActivity, delayMs = 700L)
+        }
+    }
+
+    override fun onStart() {
+        super.onStart()
+        SilentMixerProbe.measureIfUnknown(this, delayMs = 300L)
+        getSystemService(AudioManager::class.java)?.registerAudioDeviceCallback(outputDeviceCallback, null)
+    }
+
+    override fun onStop() {
+        getSystemService(AudioManager::class.java)?.unregisterAudioDeviceCallback(outputDeviceCallback)
+        super.onStop()
+    }
+
     override fun onCreate(savedInstanceState: Bundle?) {
         enableEdgeToEdge()
         super.onCreate(savedInstanceState)
         updateRequestedOrientation(resources.configuration)
+        Diagnostics.init(applicationContext)
         LocalLibraryRuntime.initialize(applicationContext)
         lastFm = AndroidLastFmRuntime.initialize(applicationContext, LocalLibraryRuntime.libraryStore())
         handleLastFmIntent(intent)
@@ -249,6 +272,7 @@ class MainActivity : ComponentActivity() {
                 initialValue = com.amwolfstein.sistrum.player.CrossfadeSettings(0, 4, true),
             )
             val livingArtworkBackground by playbackPreferences.livingArtworkBackground.collectAsStateWithLifecycle(initialValue = true)
+            val nightMode by playbackPreferences.nightMode.collectAsStateWithLifecycle(initialValue = false)
             val showFullscreenQualityBadge by playbackPreferences.showFullscreenQualityBadge.collectAsStateWithLifecycle(initialValue = true)
             val keepScreenOnForLyrics by playbackPreferences.keepScreenOnForLyrics.collectAsStateWithLifecycle(initialValue = false)
             val normalizationSettings by normalizationPreferences.settings.collectAsStateWithLifecycle(
@@ -465,6 +489,10 @@ class MainActivity : ComponentActivity() {
                     onLivingArtworkBackgroundChanged = { enabled -> preferenceScope.launch { playbackPreferences.setLivingArtworkBackground(enabled) } },
                     repeatOneCrossfade = crossfadeSettings.repeatOneCrossfade,
                     onRepeatOneCrossfadeChanged = { enabled -> preferenceScope.launch { playbackPreferences.setRepeatOneCrossfade(enabled) } },
+                    nightMode = nightMode,
+                    onNightModeChanged = { enabled -> preferenceScope.launch { playbackPreferences.setNightMode(enabled) } },
+                    crossfadeSkipSilence = crossfadeSettings.crossfadeSkipSilence,
+                    onCrossfadeSkipSilenceChanged = { enabled -> preferenceScope.launch { playbackPreferences.setCrossfadeSkipSilence(enabled) } },
                     crossfadeOnSkip = crossfadeSettings.crossfadeOnSkip,
                     onCrossfadeOnSkipChanged = { enabled -> preferenceScope.launch { playbackPreferences.setCrossfadeOnSkip(enabled) } },
                     showFullscreenQualityBadge = showFullscreenQualityBadge,

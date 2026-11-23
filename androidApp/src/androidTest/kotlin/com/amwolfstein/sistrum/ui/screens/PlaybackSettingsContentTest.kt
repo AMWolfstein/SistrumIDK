@@ -49,6 +49,7 @@ class PlaybackSettingsContentTest {
                 Box(Modifier.requiredSize(320.dp, 560.dp).background(colors.background).testTag("playback_page")) {
                     PlaybackSettingsContent(
                         showFullscreenQualityBadge = true, onShowFullscreenQualityBadgeChanged = {},
+                        nightMode = false, onNightModeChanged = {}, normalizationAvailable = true,
                         keepScreenOnForLyrics = false, onKeepScreenOnForLyricsChanged = {},
                         onSongTransitionSelected = {}, onVolumeNormalizationSelected = {}, onEqualizerSelected = {},
                         modifier = Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(20.dp),
@@ -83,6 +84,7 @@ class PlaybackSettingsContentTest {
             SistrumTheme(themeMode = theme) {
                 PlaybackSettingsContent(
                     showFullscreenQualityBadge = true, onShowFullscreenQualityBadgeChanged = {},
+                    nightMode = false, onNightModeChanged = {}, normalizationAvailable = true,
                     keepScreenOnForLyrics = false, onKeepScreenOnForLyricsChanged = {},
                     onSongTransitionSelected = {}, onVolumeNormalizationSelected = {}, onEqualizerSelected = {},
                     livingArtworkBackground = living, onLivingArtworkBackgroundChanged = { living = it },

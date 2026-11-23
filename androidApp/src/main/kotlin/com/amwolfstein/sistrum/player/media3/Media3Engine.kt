@@ -29,8 +29,15 @@ import java.util.concurrent.TimeUnit
 import kotlin.math.max
 import kotlin.math.min
 import kotlinx.coroutines.delay
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.Job
+import kotlinx.coroutines.cancel
+import kotlinx.coroutines.launch
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.emptyFlow
+import kotlinx.coroutines.flow.first
+import kotlinx.coroutines.flow.flowOf
 import com.amwolfstein.sistrum.player.EqualizerSettings
 import com.amwolfstein.sistrum.player.NormalizationSettings
 import com.amwolfstein.sistrum.player.equalizerDspConfig
@@ -65,11 +72,17 @@ internal class Media3Engine(
     private val gainResolverProvider: suspend () -> GainResolver = {
         GainResolver(MeasuredGainSource(AlbumLoudnessLookup { null }), TagGainSource())
     },
+    private val nightMode: Flow<Boolean> = flowOf(false),
 ) : PlayerEngine {
 
     override val kind: EngineKind = EngineKind.Media3
 
     override val events: Flow<EngineEvent> = emptyFlow()
+
+    private val nightModeScope = CoroutineScope(Job() + Dispatchers.Default)
+    private var nightModeJob: Job? = null
+    @Volatile private var nightModeEnabled = false
+    private val readNightMode = { nightModeEnabled }
 
     /** Each listener owns its source; the outgoing listener must never advance the queue. */
     private inner class Slot(val p: ExoPlayer, var item: PlaybackItem, val gain: PlayerStreamGain) {
@@ -315,6 +328,13 @@ internal class Media3Engine(
         startPaused: Boolean,
     ) {
         check(!closed) { "engine is closed" }
+        if (nightModeJob == null) {
+            // Read the persisted value before creating A; both A/B renderers read this one state.
+            nightModeEnabled = nightMode.first()
+            nightModeJob = nightModeScope.launch {
+                nightMode.collect { nightModeEnabled = it }
+            }
+        }
         val resolver = gainResolver ?: gainResolverProvider().also { gainResolver = it }
         ensureLimiter()
         releaseCurrentPlayer()
@@ -323,7 +343,7 @@ internal class Media3Engine(
                 resetFadeLeadWindow()
                 val gainState = PlayerStreamGain(resolver, normalizationSettings, item, startPositionMs)
                 streamGain = gainState
-                val p = factory.newPlayer(gainState)
+                val p = factory.newPlayer(gainState, nightMode = readNightMode)
                 p.addAnalyticsListener(gainState)
                 player = p
                 currentItem = item
@@ -669,7 +689,7 @@ internal class Media3Engine(
     override fun setCrossfade(durationMs: Long, repeatOneCrossfade: Boolean, crossfadeOnSkip: Boolean) {
         factory.call {
             transitionSettings = TransitionSettings(durationMs.coerceAtLeast(0L), repeatOneCrossfade = repeatOneCrossfade,
-                crossfadeOnManualSkip = crossfadeOnSkip)
+                crossfadeOnManualSkip = crossfadeOnSkip, crossfadeSkipSilence = transitionSettings.crossfadeSkipSilence)
             execute(transition.updateSettings(transitionSettings), fallbackAfterRelease = true)
             if (transitionSettings.crossfadeMs == 0L && transition.phase != TransitionPhase.Transitioning) {
                 pendingNext?.let { appendGapless(it) }
@@ -680,6 +700,30 @@ internal class Media3Engine(
             }
             scheduleTransitionTick()
         }
+    }
+
+    override fun setCrossfadeSkipSilence(enabled: Boolean) {
+        factory.call {
+            transitionSettings = transitionSettings.copy(crossfadeSkipSilence = enabled)
+            execute(transition.updateSettings(transitionSettings))
+        }
+    }
+
+    override fun automaticFadeDurationMs(current: PlaybackItem, positionMs: Long, durationMs: Long,
+        repeatOne: Boolean, crossfadeSeconds: Int): Long? = factory.call {
+        // The retained maximum lead can put the decision a whole buffer ahead of processing.
+        // A measured tail needs the current clock so its fade ends at the audible boundary.
+        val decisionPositionMs = if (transitionSettings.crossfadeSkipSilence && !repeatOne &&
+            (current.silence?.tailMs ?: 0L) > 0L) {
+            val slot = currentSlot
+            val processedMs = slot?.let { processedPositionMs(it, it.gain.processor?.processingPosition) }
+            if (processedMs == null) {
+                Log.w("Media3Engine", "Silence fade deferred provider=Media3 track=${current.trackId}: missing processing clock")
+                return@call null
+            }
+            processedMs
+        } else positionMs
+        transition.automaticFadeDurationMs(current, decisionPositionMs, durationMs, repeatOne)
     }
 
     override fun beginCrossfade(durationMs: Long): Boolean {
@@ -759,6 +803,7 @@ internal class Media3Engine(
     override fun close() {
         if (closed) return
         closed = true
+        nightModeScope.cancel()
         releaseCurrentPlayer()
         factory.call { pendingEvents.clear() }
         limiter?.close()
@@ -837,7 +882,7 @@ internal class Media3Engine(
                     incomingWarmupAttempted = false
                     incomingSlot?.let { startIncomingWarmup(it) }
                 } else {
-                    startFade(durationMs)
+                    startFade(durationMs, command.positionMs)
                     if (skipRequestDurationMs != null) skipFadeStarted = true
                 }
             }
@@ -871,7 +916,7 @@ internal class Media3Engine(
     private fun prepareIncoming(item: PlaybackItem) {
         try {
             val gain = PlayerStreamGain(checkNotNull(gainResolver), normalizationSettings, item)
-            val p = factory.newPlayer(gain)
+            val p = factory.newPlayer(gain, nightMode = readNightMode)
             // Paused preroll is silent; the actual incoming curve is armed on the start flush.
             gain.holdIncoming()
             val slot = Slot(p, item, gain)
@@ -992,7 +1037,7 @@ internal class Media3Engine(
         return slot.gain.positionOriginMs + clock.frames * 1000L / clock.sampleRate
     }
 
-    private fun startFade(durationMs: Long) {
+    private fun startFade(durationMs: Long, positionMs: Long = 0L) {
         resetFadeLeadWindow()
         stopIncomingWarmup()
         val outgoing = checkNotNull(currentSlot)
@@ -1003,7 +1048,10 @@ internal class Media3Engine(
         val processedMs = processedPositionMs(outgoing, clock) ?: outgoing.p.currentPosition
         val outgoingDurationMs = outgoing.p.duration
         val effective = if (skipRequestDurationMs == null && outgoingDurationMs != C.TIME_UNSET) {
-            min(durationMs, outgoingDurationMs - processedMs).coerceAtLeast(1L)
+            val tailMs = if (transitionSettings.crossfadeSkipSilence && outgoing.item.trackId != incoming.item.trackId) {
+                outgoing.item.silence?.tailMs ?: 0L
+            } else 0L
+            min(durationMs, outgoingDurationMs - tailMs - processedMs).coerceAtLeast(1L)
         } else durationMs
         Log.i("Media3Engine", "fade requestedMs=$durationMs effectiveMs=$effective " +
             "processedMs=$processedMs outgoingDurationMs=$outgoingDurationMs")
@@ -1013,11 +1061,18 @@ internal class Media3Engine(
         val now = SystemClock.elapsedRealtime()
         fadeNotBeforeMs = now + effective + outgoingLeadMsForTest
         fadeDrainDeadlineMs = 0L
+        // Validate before either curve is armed: a skipped lead must not let B publish EOF
+        // while A is still fading. Keep the original timeline when the remainder is too short.
+        val incomingPositionMs = incomingFadePositionMs(positionMs, incoming.p.duration, effective)
+        if (positionMs > 0L && incomingPositionMs == 0L) {
+            Log.w("Media3Engine", "Silence seek fallback provider=Media3 track=${incoming.item.trackId} " +
+                "leadMs=$positionMs durationMs=${incoming.p.duration} fadeMs=$effective: " +
+                "incoming remainder cannot cover fade; restarting at zero")
+        }
         outgoing.gain.processor?.startFade(FadeDirection.Out, effective)
         incoming.gain.fadeInAfterFlush(effective)
         // Replacing the single-item timeline forces a sink flush, even at paused position zero
         // where seekTo(0) may be optimized away. Arm the curve on that flush, after silent preroll.
-        val incomingPositionMs = 0L
         incoming.gain.positionOriginMs = incomingPositionMs
         incoming.p.setMediaItem(mediaItem(incoming.item), incomingPositionMs)
         incoming.p.prepare()
@@ -1302,3 +1357,7 @@ internal class Media3Engine(
         const val SESSION_VERIFY_POLL_MS = 50L
     }
 }
+
+/** Only a known incoming remainder covering the whole fade permits a silence seek. */
+internal fun incomingFadePositionMs(leadMs: Long, durationMs: Long, fadeMs: Long): Long =
+    if (leadMs > 0L && durationMs != C.TIME_UNSET && durationMs - leadMs >= fadeMs) leadMs else 0L

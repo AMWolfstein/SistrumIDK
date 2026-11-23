@@ -25,6 +25,7 @@ import android.os.IBinder
 import android.os.Looper
 import android.os.SystemClock
 import android.util.Log
+import com.amwolfstein.sistrum.diagnostics.Diagnostics
 import java.util.UUID
 import android.util.LruCache
 import kotlinx.coroutines.CoroutineExceptionHandler
@@ -120,6 +121,7 @@ class PlaybackService : Service() {
 
     override fun onCreate() {
         super.onCreate()
+        Diagnostics.init(applicationContext)
         myGeneration = ++instanceGeneration
         val teardownToAwait = previousTeardown
         LocalLibraryRuntime.initialize(applicationContext)
@@ -187,7 +189,7 @@ class PlaybackService : Service() {
                                 AlbumLoudnessLookup { null }
                             }
                             GainResolver(MeasuredGainSource(albums), TagGainSource())
-                        })
+                        }, nightMode = playbackPreferences.nightMode)
                     },
                 ),
             )::create,
@@ -203,6 +205,7 @@ class PlaybackService : Service() {
             listeningTracker = listeningTracker,
             nextArtworkCrossfadeId = { ++nextArtworkCrossfadeId },
             decodeFailures = DecodeFailureLog.forContext(applicationContext),
+            silenceProfile = { id -> LoudnessStore(LocalLibraryRuntime.database()).silenceProfile(id) },
         )
         coordinator.onIdle = { if (serviceShouldStopWhenSettled(state.value)) mainHandler.post { settle() } }
 
@@ -219,7 +222,7 @@ class PlaybackService : Service() {
                 coordinator.withCommandLock {
                     coordinator.onPlaybackSettings(
                         settings.seconds, settings.blendArtworkDuringCrossfade,
-                        settings.repeatOneCrossfade, settings.crossfadeOnSkip,
+                        settings.repeatOneCrossfade, settings.crossfadeOnSkip, settings.crossfadeSkipSilence,
                     )
                 }
             }
