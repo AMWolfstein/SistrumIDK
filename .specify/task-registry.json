@@ -1,8 +1,8 @@
 {
   "missions": {},
-  "next_completion": 22,
+  "next_completion": 23,
   "next_mission": 1,
-  "next_tor": 22,
+  "next_tor": 23,
   "tasks": {
     "TOR001": {
       "completion": 1,
@@ -339,6 +339,22 @@
       "record": ".specify/quick-tasks/TOR021.md",
       "status": "complete",
       "title": "Fix Arabic text fitting and add decoder diagnostics"
+    },
+    "TOR022": {
+      "completion": 22,
+      "evidence": {
+        "checks": "39 focused host tests; DevDebug instrumentation Kotlin compilation; Git whitespace",
+        "result": "PASS",
+        "reviewer": "tor_review",
+        "round": 3
+      },
+      "final": false,
+      "kind": "TOR",
+      "mission": null,
+      "nonce": "47213e5baad74c14b6b2465678f0cd15",
+      "record": ".specify/quick-tasks/TOR022.md",
+      "status": "complete",
+      "title": "Fix library sorting and alphabetical track index"
     }
   },
   "version": 1

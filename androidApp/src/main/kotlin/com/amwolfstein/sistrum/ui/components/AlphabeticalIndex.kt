@@ -1,39 +1,33 @@
 package com.amwolfstein.sistrum.ui.components
 
-import androidx.compose.foundation.layout.Column
-import androidx.compose.foundation.layout.Box
-import androidx.compose.foundation.layout.fillMaxWidth
-import androidx.compose.foundation.layout.padding
-import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.gestures.awaitEachGesture
 import androidx.compose.foundation.gestures.awaitFirstDown
 import androidx.compose.foundation.gestures.verticalDrag
+import androidx.compose.foundation.layout.BoxWithConstraints
+import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.lazy.LazyListState
+import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
-import androidx.compose.runtime.LaunchedEffect
-import androidx.compose.runtime.getValue
-import androidx.compose.runtime.mutableStateOf
-import androidx.compose.runtime.remember
-import androidx.compose.runtime.setValue
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.Alignment
 import androidx.compose.ui.hapticfeedback.HapticFeedbackType
 import androidx.compose.ui.input.pointer.pointerInput
-import androidx.compose.ui.layout.onGloballyPositioned
-import androidx.compose.ui.layout.onSizeChanged
-import androidx.compose.ui.res.stringResource
+import androidx.compose.ui.layout.Layout
+import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.LocalHapticFeedback
+import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.style.TextAlign
-import androidx.compose.ui.unit.IntSize
+import androidx.compose.ui.unit.Constraints
 import androidx.compose.ui.unit.dp
-import androidx.compose.ui.layout.positionInParent
-import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.Text
-import androidx.compose.foundation.lazy.LazyListState
+import androidx.compose.ui.unit.sp
 import com.amwolfstein.sistrum.R
 import com.amwolfstein.sistrum.ui.libraryAlphabeticalIndexLabel
 import com.amwolfstein.sistrum.ui.theme.LocalSistrumColors
+import kotlinx.coroutines.launch
 
 internal data class AlphabeticalIndexEntry(val label: String, val itemIndex: Int)
 
@@ -54,9 +48,14 @@ internal fun alphabeticalIndexItemIndexAt(
     labelsTop: Float,
     labelsHeight: Int,
     entries: List<AlphabeticalIndexEntry>,
-): Int? = entries.takeIf { labelsHeight > 0 }?.let {
-    it[((y - labelsTop) / labelsHeight * it.size).toInt().coerceIn(0, it.lastIndex)].itemIndex
+): Int? = entries.takeIf { labelsHeight > 0 && it.isNotEmpty() }?.let {
+    val pixel = (y - labelsTop).toInt().coerceIn(0, labelsHeight - 1)
+    it[pixel * it.size / labelsHeight].itemIndex
 }
+
+// Match the touch calculation's floor division at every pixel boundary.
+internal fun alphabeticalIndexSlotTop(index: Int, height: Int, count: Int): Int =
+    (index * height + count - 1) / count
 
 /** Floating fast-scroll rail; its parent keeps it outside LazyColumn content. */
 @Composable
@@ -67,57 +66,70 @@ internal fun AlphabeticalIndex(
 ) {
     if (entries.isEmpty()) return
 
-    var size by remember { mutableStateOf(IntSize.Zero) }
-    var labelsTop by remember { mutableStateOf(0f) }
-    var labelsHeight by remember { mutableStateOf(0) }
-    var selectedEntry by remember(entries) { mutableStateOf<Int?>(null) }
+    val scope = rememberCoroutineScope()
     val colors = LocalSistrumColors.current
     val hapticFeedback = LocalHapticFeedback.current
     val indexDescription = "${stringResource(R.string.alphabetical_index)}: ${entries.joinToString { it.label }}"
-    LaunchedEffect(selectedEntry) { selectedEntry?.let { listState.scrollToItem(it) } }
+    val labelStyle = MaterialTheme.typography.labelSmall
 
-    fun selectAt(y: Float, haptic: Boolean = false) {
-        if (size.height == 0) return
-        val entry = alphabeticalIndexItemIndexAt(y, labelsTop, labelsHeight, entries) ?: return
-        if (entry == selectedEntry) return
-        selectedEntry = entry
-        if (haptic) hapticFeedback.performHapticFeedback(HapticFeedbackType.Confirm)
-    }
-
-    Box(
-        modifier = modifier
-            .width(18.dp)
-            .onSizeChanged { size = it }
-            .semantics { contentDescription = indexDescription }
-            .pointerInput(entries) {
-                awaitEachGesture {
-                    val down = awaitFirstDown(requireUnconsumed = false)
-                    selectAt(down.position.y)
-                    verticalDrag(down.id) { change ->
-                        selectAt(change.position.y, haptic = true)
-                        change.consume()
-                    }
-                }
-            }
-    ) {
-        Column(
+    BoxWithConstraints(modifier) {
+        val railHeight = with(LocalDensity.current) {
+            minOf(maxHeight, labelStyle.lineHeight.toDp() * entries.size)
+        }
+        val slotHeight = with(LocalDensity.current) { (railHeight / entries.size).toSp() }
+        val fittedStyle = labelStyle.copy(
+            fontSize = minOf(labelStyle.fontSize.value, slotHeight.value * 0.8f).sp,
+            lineHeight = slotHeight,
+        )
+        Layout(
             modifier = Modifier
-                .align(Alignment.CenterEnd)
                 .width(18.dp)
-                .padding(vertical = 2.dp)
-                .onGloballyPositioned { coordinates ->
-                    labelsTop = coordinates.positionInParent().y
-                    labelsHeight = coordinates.size.height
+                .height(railHeight)
+                .semantics { contentDescription = indexDescription }
+                .pointerInput(entries, listState, hapticFeedback) {
+                    awaitEachGesture {
+                        val down = awaitFirstDown(requireUnconsumed = false)
+                        var selectedEntry: Int? = null
+
+                        fun selectAt(y: Float, haptic: Boolean = false) {
+                            val entry = alphabeticalIndexItemIndexAt(y, 0f, size.height, entries) ?: return
+                            if (entry == selectedEntry) return
+                            selectedEntry = entry
+                            scope.launch { listState.scrollToItem(entry) }
+                            if (haptic) hapticFeedback.performHapticFeedback(HapticFeedbackType.Confirm)
+                        }
+
+                        selectAt(down.position.y)
+                        verticalDrag(down.id) { change ->
+                            selectAt(change.position.y, haptic = true)
+                            change.consume()
+                        }
+                    }
                 },
-        ) {
-            entries.forEach { entry ->
-                Text(
-                text = entry.label,
-                modifier = Modifier.fillMaxWidth(),
-                    style = MaterialTheme.typography.labelSmall,
-                    color = colors.primary,
-                    textAlign = TextAlign.Center,
-                )
+            content = {
+                entries.forEach { entry ->
+                    Text(
+                        text = entry.label,
+                        style = fittedStyle,
+                        color = colors.primary,
+                        maxLines = 1,
+                        softWrap = false,
+                        textAlign = TextAlign.Center,
+                    )
+                }
+            },
+        ) { labels, constraints ->
+            val width = constraints.maxWidth
+            val height = constraints.maxHeight
+            val placements = labels.mapIndexed { index, label ->
+                val top = alphabeticalIndexSlotTop(index, height, labels.size)
+                val bottom = alphabeticalIndexSlotTop(index + 1, height, labels.size)
+                val slot = bottom - top
+                val text = label.measure(Constraints(minWidth = width, maxWidth = width, maxHeight = slot))
+                text to (top + (slot - text.height) / 2)
+            }
+            layout(width, height) {
+                placements.forEach { (text, y) -> text.placeRelative(0, y) }
             }
         }
     }

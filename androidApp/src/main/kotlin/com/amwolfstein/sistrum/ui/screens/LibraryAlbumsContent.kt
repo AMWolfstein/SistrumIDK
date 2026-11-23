@@ -17,6 +17,8 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.dp
 import com.amwolfstein.sistrum.R
+import com.amwolfstein.sistrum.ui.alphabeticalArtist
+import com.amwolfstein.sistrum.ui.alphabeticalTitle
 import com.amwolfstein.sistrum.ui.components.AlbumRow
 import com.amwolfstein.sistrum.ui.components.AlbumContextMenu
 import com.amwolfstein.sistrum.ui.components.DiscGridItem
@@ -99,8 +101,8 @@ internal fun LibraryAlbumsContent(
                 )
             },
             alphabeticalIndexKey = when (uiState.sortOption) {
-                AlbumSortOption.Name -> { album -> album.sortTitle.ifBlank { album.title } }
-                AlbumSortOption.Artist -> { album -> album.sortArtist.ifBlank { album.artist } }
+                AlbumSortOption.Name -> { album -> album.alphabeticalTitle }
+                AlbumSortOption.Artist -> { album -> album.alphabeticalArtist }
                 else -> null
             },
             alphabeticalIndexItemsPerLazyItem = if (uiState.layoutMode == AlbumLayoutMode.Grid) columns else 1,

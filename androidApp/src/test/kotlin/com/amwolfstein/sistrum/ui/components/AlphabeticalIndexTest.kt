@@ -47,4 +47,17 @@ class AlphabeticalIndexTest {
         assertEquals(3, alphabeticalIndexItemIndexAt(230f, 200f, 60, entries))
         assertEquals(4, alphabeticalIndexItemIndexAt(250f, 200f, 60, entries))
     }
+
+    @Test
+    fun compactMixedScriptRailMapsEveryVisualSlotToItsItem() {
+        val labels = ('A'..'Z').toList() + ('ا'..'ي').filter(Char::isLetter) + '#'
+        val entries = labels.mapIndexed { index, label -> AlphabeticalIndexEntry(label.toString(), index + 2) }
+        val height = 239
+        entries.forEachIndexed { index, entry ->
+            val top = alphabeticalIndexSlotTop(index, height, entries.size)
+            val bottom = alphabeticalIndexSlotTop(index + 1, height, entries.size)
+            assertEquals(entry.itemIndex, alphabeticalIndexItemIndexAt(top.toFloat(), 0f, height, entries))
+            assertEquals(entry.itemIndex, alphabeticalIndexItemIndexAt(bottom - 0.1f, 0f, height, entries))
+        }
+    }
 }

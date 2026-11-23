@@ -11,6 +11,7 @@ import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.Dispatchers
 import com.amwolfstein.sistrum.sync.AndroidLibrarySyncStore
 import com.amwolfstein.sistrum.sync.LibraryComposer
+import com.amwolfstein.sistrum.ui.alphabeticalName
 import com.amwolfstein.sistrum.ui.libraryAlphabeticalComparator
 
 enum class ComposerSortOption {
@@ -84,10 +85,10 @@ internal fun sortComposers(
     order: SortOrder,
 ): List<LibraryComposer> {
     val comparator = when (option) {
-        ComposerSortOption.Name -> compareBy<LibraryComposer, String>(libraryAlphabeticalComparator) { it.sortName }
+        ComposerSortOption.Name -> compareBy<LibraryComposer, String>(libraryAlphabeticalComparator) { it.alphabeticalName }
             .thenBy { it.id }
         ComposerSortOption.DateAdded -> compareBy<LibraryComposer> { it.createdAt }
-            .thenBy(libraryAlphabeticalComparator) { it.sortName }
+            .thenBy(libraryAlphabeticalComparator) { it.alphabeticalName }
             .thenBy { it.id }
     }
     val sorted = composers.sortedWith(comparator)

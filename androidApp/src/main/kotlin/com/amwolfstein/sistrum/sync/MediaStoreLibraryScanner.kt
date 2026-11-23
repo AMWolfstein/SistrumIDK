@@ -324,7 +324,6 @@ internal class MediaStoreLibraryScanner(
                 tracks += LocalTrack(
                     id = trackId,
                     title = title,
-                    sortTitle = text(ColumnTitleKey) ?: "",
                     artists = artistsOf(artistName),
                     album = LocalAlbumRef(
                         id = "local:album:$key",
@@ -574,7 +573,6 @@ internal class MediaStoreLibraryScanner(
         const val ColumnId = MediaStore.Audio.Media._ID
         const val ColumnData = MediaStore.Audio.Media.DATA
         const val ColumnTitle = MediaStore.Audio.Media.TITLE
-        const val ColumnTitleKey = MediaStore.Audio.Media.TITLE_KEY
         const val ColumnArtist = MediaStore.Audio.Media.ARTIST
         const val ColumnAlbumArtist = MediaStore.Audio.Media.ALBUM_ARTIST
         const val ColumnAlbum = MediaStore.Audio.Media.ALBUM
@@ -599,7 +597,6 @@ internal class MediaStoreLibraryScanner(
             ColumnId,
             ColumnData,
             ColumnTitle,
-            ColumnTitleKey,
             ColumnArtist,
             ColumnAlbumArtist,
             ColumnAlbum,

@@ -15,6 +15,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.dp
 import com.amwolfstein.sistrum.R
+import com.amwolfstein.sistrum.ui.alphabeticalName
 import com.amwolfstein.sistrum.ui.components.ComposerRow
 import com.amwolfstein.sistrum.ui.components.HeroCard
 import com.amwolfstein.sistrum.ui.components.LibraryVirtualList
@@ -68,7 +69,7 @@ internal fun LibraryComposersContent(
                 placeholder = stringResource(R.string.filter_placeholder_search),
             )
         },
-        alphabeticalIndexKey = if (uiState.sortOption == ComposerSortOption.Name) ({ composer -> composer.sortName.ifBlank { composer.name } }) else null,
+        alphabeticalIndexKey = if (uiState.sortOption == ComposerSortOption.Name) ({ composer -> composer.alphabeticalName }) else null,
         emptyContent = {
             Column(
                 modifier = Modifier

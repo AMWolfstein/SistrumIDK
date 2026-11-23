@@ -15,6 +15,8 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.dp
 import dev.chrisbanes.haze.HazeState
+import com.amwolfstein.sistrum.ui.alphabeticalArtist
+import com.amwolfstein.sistrum.ui.alphabeticalTitle
 import com.amwolfstein.sistrum.ui.components.MaterialSymbols
 import com.amwolfstein.sistrum.R
 import com.amwolfstein.sistrum.sync.LibraryTrack
@@ -86,8 +88,8 @@ internal fun LibraryTracksContent(
             )
         },
         alphabeticalIndexKey = when (uiState.sortOption) {
-            TrackSortOption.Name -> { track -> track.sortTitle.ifBlank { track.title } }
-            TrackSortOption.Artist -> { track -> track.sortArtists.ifBlank { track.artists } }
+            TrackSortOption.Name -> { track -> track.alphabeticalTitle }
+            TrackSortOption.Artist -> { track -> track.alphabeticalArtist }
             else -> null
         },
         emptyContent = {

@@ -13,6 +13,8 @@ import kotlinx.coroutines.launch
 import com.amwolfstein.sistrum.sync.AndroidLibrarySyncStore
 import com.amwolfstein.sistrum.sync.LibraryAlbum
 import com.amwolfstein.sistrum.sync.LibraryTrack
+import com.amwolfstein.sistrum.ui.alphabeticalArtist
+import com.amwolfstein.sistrum.ui.alphabeticalTitle
 import com.amwolfstein.sistrum.ui.libraryAlphabeticalComparator
 import com.amwolfstein.sistrum.player.PlaybackController
 
@@ -124,14 +126,14 @@ internal fun sortAlbums(
     order: SortOrder,
 ): List<LibraryAlbum> {
     val comparator = when (option) {
-        AlbumSortOption.Name -> compareBy<LibraryAlbum, String>(libraryAlphabeticalComparator) { it.sortTitle }
-            .thenBy(libraryAlphabeticalComparator) { it.sortArtist }
+        AlbumSortOption.Name -> compareBy<LibraryAlbum, String>(libraryAlphabeticalComparator) { it.alphabeticalTitle }
+            .thenBy(libraryAlphabeticalComparator) { it.alphabeticalArtist }
             .thenBy { it.id }
-        AlbumSortOption.Artist -> compareBy<LibraryAlbum, String>(libraryAlphabeticalComparator) { it.sortArtist }
-            .thenBy(libraryAlphabeticalComparator) { it.sortTitle }
+        AlbumSortOption.Artist -> compareBy<LibraryAlbum, String>(libraryAlphabeticalComparator) { it.alphabeticalArtist }
+            .thenBy(libraryAlphabeticalComparator) { it.alphabeticalTitle }
             .thenBy { it.id }
         AlbumSortOption.DateAdded -> compareBy<LibraryAlbum> { it.createdAt }
-            .thenBy(libraryAlphabeticalComparator) { it.sortTitle }
+            .thenBy(libraryAlphabeticalComparator) { it.alphabeticalTitle }
             .thenBy { it.id }
     }
     return albums.sortedWith(comparator).let { if (order == SortOrder.Descending) it.reversed() else it }
