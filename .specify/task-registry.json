@@ -1,8 +1,8 @@
 {
   "missions": {},
-  "next_completion": 23,
+  "next_completion": 24,
   "next_mission": 1,
-  "next_tor": 23,
+  "next_tor": 24,
   "tasks": {
     "TOR001": {
       "completion": 1,
@@ -355,6 +355,22 @@
       "record": ".specify/quick-tasks/TOR022.md",
       "status": "complete",
       "title": "Fix library sorting and alphabetical track index"
+    },
+    "TOR023": {
+      "completion": 23,
+      "evidence": {
+        "checks": "10 targeted host tests; DevDebug instrumentation Kotlin compilation; Git whitespace",
+        "result": "PASS",
+        "reviewer": "tor_review",
+        "round": 2
+      },
+      "final": false,
+      "kind": "TOR",
+      "mission": null,
+      "nonce": "92c278678e18418a8773533c8970d7be",
+      "record": ".specify/quick-tasks/TOR023.md",
+      "status": "complete",
+      "title": "Fit the alphabetical index inside the library viewport"
     }
   },
   "version": 1

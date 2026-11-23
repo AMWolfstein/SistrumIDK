@@ -60,4 +60,20 @@ class AlphabeticalIndexTest {
             assertEquals(entry.itemIndex, alphabeticalIndexItemIndexAt(bottom - 0.1f, 0f, height, entries))
         }
     }
+
+    @Test
+    fun denseRailKeepsEndpointsAndSpreadsReadableLabels() {
+        assertEquals(listOf(0, 1, 2), alphabeticalIndexVisibleSlots(3, 4))
+        assertEquals(listOf(0, 2, 4, 5, 7, 9), alphabeticalIndexVisibleSlots(10, 6))
+        assertEquals(listOf(0), alphabeticalIndexVisibleSlots(10, 1))
+    }
+    @Test
+    fun tapsChoosePrintedSlotsWhileDraggingCanReachUnprintedSlots() {
+        val entries = List(54) { index -> AlphabeticalIndexEntry(index.toString(), index + 2) }
+        val printedEntries = alphabeticalIndexVisibleSlots(entries.size, 27).map(entries::get)
+
+        assertEquals(2, alphabeticalIndexItemIndexAt(15.9f, 0f, 432, printedEntries))
+        assertEquals(4, alphabeticalIndexItemIndexAt(16f, 0f, 432, printedEntries))
+        assertEquals(3, alphabeticalIndexItemIndexAt(15.9f, 0f, 432, entries))
+    }
 }

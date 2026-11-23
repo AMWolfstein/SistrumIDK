@@ -22,3 +22,4 @@
 - TOR020 — Port Spec 002 M2 Night mode and silence-aware crossfade
 - TOR021 — Fix Arabic text fitting and add decoder diagnostics
 - TOR022 — Fix library sorting and alphabetical track index
+- TOR023 — Fit the alphabetical index inside the library viewport

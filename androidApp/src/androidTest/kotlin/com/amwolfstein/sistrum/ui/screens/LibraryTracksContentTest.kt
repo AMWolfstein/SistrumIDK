@@ -1,11 +1,19 @@
 package com.amwolfstein.sistrum.ui.screens
 
+import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.PaddingValues
+import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
+import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.test.hasContentDescription
 import androidx.compose.ui.test.assertCountEquals
 import androidx.compose.ui.test.assertIsFocused
 import androidx.compose.ui.test.junit4.v2.createComposeRule
 import androidx.compose.ui.test.onAllNodesWithTag
 import androidx.compose.ui.test.onAllNodesWithText
+import androidx.compose.ui.test.onNodeWithTag
 import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.performClick
 import androidx.compose.ui.test.performTouchInput
@@ -14,6 +22,9 @@ import androidx.compose.ui.test.longClick
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
+import androidx.compose.ui.unit.dp
+import androidx.test.platform.app.InstrumentationRegistry
+import com.amwolfstein.sistrum.R
 import com.amwolfstein.sistrum.settings.ThemeMode
 import com.amwolfstein.sistrum.sync.LibraryTrack
 import com.amwolfstein.sistrum.player.PlaybackQueueSnapshot
@@ -82,6 +93,41 @@ class LibraryTracksContentTest {
         composeTestRule.onNodeWithText("Song A").assertExists()
         composeTestRule.onNodeWithText("Song B").assertExists()
         composeTestRule.onAllNodesWithTag("track-row-divider").assertCountEquals(1)
+    }
+
+    @Test
+    fun denseAlphabeticalRailStaysBetweenTheHeaderAndBottomChrome() {
+        val titleInitials = ('A'..'Z').toList() + ('ا'..'ي').filter(Char::isLetter)
+        val tracks = titleInitials.mapIndexed { index, initial ->
+            LibraryTrack(id = "local:$index", title = "$initial Music", artists = "Artist")
+        }
+        val indexDescription = InstrumentationRegistry.getInstrumentation().targetContext
+            .getString(R.string.alphabetical_index)
+        var topInset = 0f
+        var bottomInset = 0f
+        composeTestRule.setContent {
+            with(LocalDensity.current) {
+                topInset = 64.dp.toPx()
+                bottomInset = 80.dp.toPx()
+            }
+            SistrumTheme(themeMode = ThemeMode.Dark) {
+                Box(Modifier.fillMaxWidth().height(320.dp).testTag("tracks-viewport")) {
+                    LibraryTracksContent(
+                        uiState = LibraryTracksUiState(tracks = tracks),
+                        onSortOptionSelected = {},
+                        onToggleSortOrder = {},
+                        contentPadding = PaddingValues(top = 64.dp, bottom = 80.dp),
+                    )
+                }
+            }
+        }
+
+        val viewport = composeTestRule.onNodeWithTag("tracks-viewport").fetchSemanticsNode().boundsInRoot
+        val rail = composeTestRule.onNode(hasContentDescription(indexDescription, substring = true))
+            .fetchSemanticsNode().boundsInRoot
+        assertTrue(rail.top >= viewport.top + topInset - 1f)
+        assertTrue(rail.bottom <= viewport.bottom - bottomInset + 1f)
+        assertTrue(rail.height > 0f)
     }
 
     @Test

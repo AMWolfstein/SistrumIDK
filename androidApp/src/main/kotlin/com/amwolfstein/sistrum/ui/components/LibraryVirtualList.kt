@@ -125,6 +125,11 @@ fun <T> LibraryVirtualList(
             )
         }.orEmpty()
     }
+    val indexPadding = Modifier.padding(
+        top = contentPadding.calculateTopPadding() + 4.dp,
+        bottom = contentPadding.calculateBottomPadding() + 4.dp,
+        end = 4.dp,
+    )
     if (filterContent != null) {
         // Keep the filter in a stable lazy item while its query changes the
         // result set. Replacing the entire list when there are no matches
@@ -171,7 +176,7 @@ fun <T> LibraryVirtualList(
             AlphabeticalIndex(
                 entries = alphabeticalIndexEntries,
                 listState = listState,
-                modifier = Modifier.align(Alignment.CenterEnd),
+                modifier = Modifier.align(Alignment.CenterEnd).then(indexPadding),
             )
         }
         return
@@ -209,7 +214,7 @@ fun <T> LibraryVirtualList(
         AlphabeticalIndex(
             entries = alphabeticalIndexEntries,
             listState = listState,
-            modifier = Modifier.align(Alignment.CenterEnd),
+            modifier = Modifier.align(Alignment.CenterEnd).then(indexPadding),
         )
     }
 }
