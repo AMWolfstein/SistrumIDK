@@ -56,21 +56,31 @@ class DecoderRegistryTest {
     }
 
     @Test
-    fun `m4a alac without a platform decoder is skipped`() {
+    fun `m4a alac without a platform decoder uses Kotlin fallback`() {
         val registry = defaultDecoderRegistry(probeOf("audio/mp4a-latm"))
-        assertNull(registry.resolve(FormatKey("m4a", "alac")))
-        assertEquals("no decoder on this device (ALAC)", registry.skipReason(FormatKey("m4a", "alac")))
+        // 002 T009 / US1 acceptance 3 adds ALAC only when the platform lacks it.
+        assertEquals("kotlin-alac", registry.resolve(FormatKey("m4a", "alac"))?.id)
+        assertNull(registry.skipReason(FormatKey("m4a", "alac")))
     }
 
     @Test
     fun `lossless formats without a provider report an unsupported format`() {
         val registry = defaultDecoderRegistry(probeAll)
-        assertNull(registry.resolve(FormatKey("dsf", "dsf")))
-        assertEquals("unsupported format (DSD)", registry.skipReason(FormatKey("dsf", "dsf")))
-        assertEquals("unsupported format (DSD)", registry.skipReason(FormatKey("dff", "dff")))
-        assertEquals("unsupported format (APE)", registry.skipReason(FormatKey("ape", "ape")))
-        assertEquals("unsupported format (WavPack)", registry.skipReason(FormatKey("wv", "wv")))
-        assertEquals("unsupported format (WMA)", registry.skipReason(FormatKey("wma", "wma")))
+        assertEquals("kotlin-dsd", registry.resolve(FormatKey("dsf", "dsf"))?.id)
+        assertNull(registry.skipReason(FormatKey("dsf", "dsf")))
+        assertEquals("kotlin-dsd", registry.resolve(FormatKey("dff", "dff"))?.id)
+        assertNull(registry.skipReason(FormatKey("dff", "dff")))
+        // T005 registers APE/Musepack as required by 002 FR-001.
+        assertEquals("kotlin-ape", registry.resolve(FormatKey("ape", "ape"))?.id)
+        assertNull(registry.skipReason(FormatKey("ape", "ape")))
+        assertEquals("kotlin-musepack", registry.resolve(FormatKey("mpc", "mpc"))?.id)
+        assertNull(registry.skipReason(FormatKey("mpc", "mpc")))
+        // T004 adds WavPack to the previously unsupported formats (002 FR-001).
+        assertEquals("kotlin-wavpack", registry.resolve(FormatKey("wv", "wv"))?.id)
+        assertNull(registry.skipReason(FormatKey("wv", "wv")))
+        // T006 offers the ASF WMA family (002 FR-001).
+        assertEquals("kotlin-wma", registry.resolve(FormatKey("wma", "wma"))?.id)
+        assertNull(registry.skipReason(FormatKey("wma", "wma")))
     }
 
     @Test

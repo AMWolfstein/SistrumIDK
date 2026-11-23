@@ -7,6 +7,11 @@ import android.os.HandlerThread
 import android.os.Looper
 import android.os.Process
 import android.os.SystemClock
+import android.util.Log
+import com.amwolfstein.sistrum.player.DecodeFailureEntry
+import com.amwolfstein.sistrum.player.DecodeFailureLog
+import com.amwolfstein.sistrum.player.DecodeFailureSink
+import java.util.concurrent.CancellationException
 import androidx.annotation.OptIn
 import androidx.media3.common.C
 import androidx.media3.common.MediaItem
@@ -16,6 +21,8 @@ import androidx.media3.common.TrackSelectionParameters
 import androidx.media3.common.Tracks
 import androidx.media3.common.util.ExperimentalApi
 import androidx.media3.common.util.UnstableApi
+import androidx.media3.extractor.DefaultExtractorsFactory
+import androidx.media3.extractor.ExtractorsFactory
 import androidx.media3.exoplayer.DefaultRenderersFactory
 import androidx.media3.exoplayer.ExoPlayer
 import androidx.media3.exoplayer.Renderer
@@ -34,7 +41,8 @@ import com.amwolfstein.sistrum.player.decoders.DecoderRegistry
 import com.amwolfstein.sistrum.player.decoders.FormatKey
 import com.amwolfstein.sistrum.player.decoders.ProcessCodecProbe
 import com.amwolfstein.sistrum.player.decoders.defaultDecoderProviders
-import com.amwolfstein.sistrum.player.decoders.defaultDecoderRegistry
+import com.amwolfstein.sistrum.player.decoders.TableDecoderRegistry
+import com.amwolfstein.sistrum.player.decoders.DefaultDecoderTable
 import com.amwolfstein.sistrum.player.media3.ProviderExtractorsFactory
 import com.amwolfstein.sistrum.player.media3.ProviderRecorder
 import com.amwolfstein.sistrum.player.media3.replacePlatformAudioRenderer
@@ -49,11 +57,12 @@ import com.amwolfstein.sistrum.player.media3.replacePlatformAudioRenderer
  * decoded, fails, or [isCancelled] turns true (checked per buffer).
  */
 @OptIn(UnstableApi::class, ExperimentalApi::class)
-internal class OfflineDecoder(
+internal open class OfflineDecoder(
     private val context: Context,
     private val providers: List<DecoderProvider> = defaultDecoderProviders(ProcessCodecProbe),
-    private val registry: DecoderRegistry = defaultDecoderRegistry(ProcessCodecProbe),
+    private val registry: DecoderRegistry = TableDecoderRegistry(DefaultDecoderTable, providers),
     private val threadPriority: Int = Process.THREAD_PRIORITY_BACKGROUND,
+    private val decodeFailures: DecodeFailureSink = DecodeFailureLog.forContext(context),
 ) : PcmDecoder {
 
     /** The [HandlerThread]s of the most recent [decode]: application first, playback second. */
@@ -66,6 +75,48 @@ internal class OfflineDecoder(
      * true (checked per buffer).
      */
     override fun decode(
+        path: String,
+        key: FormatKey?,
+        consumer: PcmConsumer,
+        isCancelled: () -> Boolean,
+        startUs: Long,
+    ): DecodeOutcome {
+        return recordOutcome(path, key, decodeFile(path, key, consumer, isCancelled, startUs))
+    }
+
+    /** Records only failures; the existing analysis job still receives the same typed outcome. */
+    internal fun recordOutcome(path: String, key: FormatKey?, result: DecodeOutcome): DecodeOutcome {
+        if (result is DecodeOutcome.Failed) {
+            try {
+                decodeFailures.record(DecodeFailureEntry(
+                    System.currentTimeMillis(), File(path).name, key?.format.orEmpty(), key?.codec.orEmpty(),
+                    result.providerId ?: "unknown", result.reason,
+                ))
+            } catch (error: CancellationException) {
+                throw error
+            } catch (error: Exception) {
+                Log.w("OfflineDecoder", "${result.providerId ?: "unknown"}: could not record decode failure", error)
+            }
+        }
+        return result
+    }
+
+    internal fun extractorsFactory(
+        recorder: ProviderRecorder,
+        base: ExtractorsFactory = DefaultExtractorsFactory(),
+    ): ProviderExtractorsFactory = ProviderExtractorsFactory(providers, base, recorder)
+
+    internal fun audioRenderers(sink: AudioSink, handler: Handler, listener: AudioRendererEventListener): List<Renderer> =
+        providers.flatMap { it.audioRenderers(context, sink, handler, listener) }
+
+    internal fun failure(error: Throwable, providerId: String?): DecodeOutcome {
+        if (error is CancellationException) return DecodeOutcome.Cancelled
+        val cause = generateSequence(error) { it.cause }.last()
+        if (cause is CancellationException) return DecodeOutcome.Cancelled
+        return DecodeOutcome.Failed(providerId, cause.message ?: cause.javaClass.simpleName)
+    }
+
+    internal open fun decodeFile(
         path: String,
         key: FormatKey?,
         consumer: PcmConsumer,
@@ -106,6 +157,7 @@ internal class OfflineDecoder(
                 cancelRequested,
                 playerRef,
                 startUs,
+                key?.let { registry.resolve(it)?.id },
             )
         }
         try {
@@ -134,6 +186,7 @@ internal class OfflineDecoder(
         cancelRequested: AtomicBoolean,
         playerRef: AtomicReference<ExoPlayer?>,
         startUs: Long,
+        selectedProviderId: String?,
     ) {
         val recorder = ProviderRecorder()
         val uriString = Uri.fromFile(File(path)).toString()
@@ -158,7 +211,7 @@ internal class OfflineDecoder(
             try {
                 playerRef.get()?.release()
             } catch (t: Throwable) {
-                // best-effort cleanup
+                Log.w("OfflineDecoder", "${recorder.providerFor(uriString) ?: selectedProviderId}: release failed", t)
             }
             playbackThread.quitSafely()
             appThread.quitSafely()
@@ -169,7 +222,7 @@ internal class OfflineDecoder(
             override fun run() {
                 if (outcome.get() != null) return
                 if (SystemClock.elapsedRealtime() - lastProgressMs.get() > STALL_TIMEOUT_MS) {
-                    complete(DecodeOutcome.Failed(recorder.providerFor(uriString), "decode stalled"))
+                    complete(DecodeOutcome.Failed(recorder.providerFor(uriString) ?: selectedProviderId, "decode stalled"))
                 } else {
                     handler.postDelayed(this, STALL_CHECK_INTERVAL_MS)
                 }
@@ -179,7 +232,7 @@ internal class OfflineDecoder(
         val listener = object : Player.Listener {
             override fun onPlaybackStateChanged(playbackState: Int) {
                 when (playbackState) {
-                    Player.STATE_ENDED -> handler.post { complete(buildCompleted(sink, recorder.providerFor(uriString))) }
+                    Player.STATE_ENDED -> handler.post { complete(buildCompleted(sink, recorder.providerFor(uriString) ?: selectedProviderId)) }
                     Player.STATE_IDLE -> if (cancelled.get() || cancelRequested.get()) handler.post { complete(DecodeOutcome.Cancelled) }
                 }
             }
@@ -189,17 +242,16 @@ internal class OfflineDecoder(
                 val audio = tracks.groups.filter { it.type == C.TRACK_TYPE_AUDIO }
                 if (audio.isNotEmpty() && audio.none { it.isSelected }) {
                     val format = audio.first().getTrackFormat(0).sampleMimeType
-                    handler.post { complete(DecodeOutcome.Failed(recorder.providerFor(uriString), "no decoder for $format")) }
+                    handler.post { complete(DecodeOutcome.Failed(recorder.providerFor(uriString) ?: selectedProviderId, "no decoder for $format")) }
                 }
             }
 
             override fun onPlayerError(error: PlaybackException) {
-                handler.post { complete(DecodeOutcome.Failed(recorder.providerFor(uriString), error.message ?: error.errorCodeName)) }
+                handler.post { complete(failure(error, recorder.providerFor(uriString) ?: selectedProviderId)) }
             }
         }
 
         try {
-            val providerRenderers = providers.flatMap { it.audioRenderers(context) }
             val renderersFactory = object : DefaultRenderersFactory(context) {
                 override fun buildAudioSink(
                     context: Context,
@@ -237,7 +289,7 @@ internal class OfflineDecoder(
                         eventListener,
                         out,
                     )
-                    out.addAll(providerRenderers)
+                    out.addAll(audioRenderers(audioSink, eventHandler, eventListener))
                 }
             }
             val trackSelector = DefaultTrackSelector(context).apply {
@@ -259,7 +311,7 @@ internal class OfflineDecoder(
                 .setTrackSelector(trackSelector)
                 .setHandleAudioBecomingNoisy(false)
                 .setMediaSourceFactory(
-                    DefaultMediaSourceFactory(context, ProviderExtractorsFactory(providers, recorder = recorder)),
+                    DefaultMediaSourceFactory(context, extractorsFactory(recorder)),
                 )
                 .experimentalSetDynamicSchedulingEnabled(false)
                 .setRenderersFactory(renderersFactory)
@@ -272,7 +324,7 @@ internal class OfflineDecoder(
             p.playWhenReady = true
             handler.postDelayed(stallWatchdog, STALL_CHECK_INTERVAL_MS)
         } catch (t: Throwable) {
-            complete(DecodeOutcome.Failed(recorder.providerFor(uriString), t.message ?: t.javaClass.simpleName))
+            complete(failure(t, recorder.providerFor(uriString) ?: selectedProviderId))
         }
     }
 

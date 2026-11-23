@@ -89,6 +89,10 @@ kotlin {
 }
 dependencies {
     implementation(project(":sharedLogic"))
+    implementation(project(":codecs"))
+    implementation(project(":metadata"))
+    implementation(project(":analysis"))
+    implementation(project(":dsp"))
 
     implementation(libs.androidx.window)
     implementation(libs.androidx.activity.compose)
@@ -178,6 +182,7 @@ android {
     }
     packaging {
         resources {
+            merges += "META-INF/THIRD-PARTY-NOTICES"
             excludes += "/META-INF/{AL2.0,LGPL2.1}"
             excludes += "/META-INF/INDEX.LIST"
         }
@@ -221,5 +226,16 @@ android {
 
     testOptions {
         unitTests.isReturnDefaultValues = true
+        unitTests.all { test ->
+            // The suite supplies Media3's strict parser setup and runs these tests once.
+            test.exclude(
+                "**/KotlinDecodingExtractorTest.class",
+                "**/ExtractorRandomAccessSourceTest.class",
+                "**/KotlinDecodingExtractorLifecycleTest.class",
+            )
+            val oracleDir = providers.environmentVariable("SISTRUM_ORACLE_DIR")
+                .orElse(providers.systemProperty("user.home").map { "$it/.cache/sistrum-waxflow-oracle" })
+            test.systemProperty("oracle.owned", oracleDir.get() + "/owned")
+        }
     }
 }

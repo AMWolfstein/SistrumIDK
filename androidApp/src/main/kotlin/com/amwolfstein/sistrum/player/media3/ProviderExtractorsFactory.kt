@@ -17,7 +17,11 @@ import androidx.media3.extractor.SeekMap
 import androidx.media3.extractor.SniffFailure
 import androidx.media3.extractor.TrackOutput
 import androidx.media3.extractor.mp3.Mp3Extractor
+import androidx.media3.extractor.wav.WavExtractor
+import com.amwolfstein.sistrum.player.decoders.kotlin.KotlinPcmVariantsProvider
+import androidx.media3.common.MimeTypes
 import com.amwolfstein.sistrum.player.decoders.DecoderProvider
+import com.amwolfstein.sistrum.player.decoders.FormatKey
 import java.io.EOFException
 import java.io.IOException
 
@@ -181,14 +185,57 @@ internal class ProviderExtractorsFactory(
     private val providers: List<DecoderProvider>,
     private val base: ExtractorsFactory = DefaultExtractorsFactory(),
     private val recorder: ProviderRecorder,
+    private val maxOutputChannels: () -> Int = { 8 },
 ) : ExtractorsFactory {
+
+    // WavExtractor cannot decode MS-ADPCM, and G.711 needs an available platform
+    // codec. Route those unsupported paths to Kotlin; PCM/IMA stay platform-first.
+    private fun withPcmFallback(extractor: Extractor): Extractor =
+        if (extractor.underlyingImplementation is WavExtractor && providers.any { it.id == "kotlin-pcm-variants" }) {
+            object : Extractor by extractor {
+                override fun sniff(input: ExtractorInput): Boolean {
+                    val codec = KotlinPcmVariantsProvider.wavCodec(input)
+                    val platform = providers.firstOrNull { it.id == "platform" }
+                    if (codec == "msadpcm" || codec != null && platform?.isAvailable(FormatKey("wav", codec)) != true) return false
+                    return extractor.sniff(input)
+                }
+                override fun getUnderlyingImplementation(): Extractor = extractor.underlyingImplementation
+            }
+        } else extractor
+
+    // MP4 extraction still belongs to Media3, but ALAC decode failures must name
+    // the software renderer when the platform lacks the codec.
+    internal fun withAlacAttribution(extractor: Extractor, uri: String): Extractor {
+        if (providers.none { it.id == "kotlin-alac" && it.isAvailable(FormatKey("m4a", "alac")) }) return extractor
+        return object : Extractor by extractor {
+            override fun init(output: ExtractorOutput) {
+                extractor.init(object : ExtractorOutput {
+                    override fun track(id: Int, type: Int): TrackOutput =
+                        object : ForwardingTrackOutput(output.track(id, type)) {
+                            override fun format(format: Format) {
+                                if (format.sampleMimeType == MimeTypes.AUDIO_ALAC) recorder.record(uri, "kotlin-alac")
+                                super.format(format)
+                            }
+                        }
+                    override fun endTracks() = output.endTracks()
+                    override fun seekMap(seekMap: SeekMap) = output.seekMap(seekMap)
+                })
+            }
+            override fun getUnderlyingImplementation(): Extractor = extractor.underlyingImplementation
+        }
+    }
+
+    private fun configured(extractor: Extractor): Extractor = extractor.also {
+        (it.underlyingImplementation as? com.amwolfstein.sistrum.player.decoders.kotlin.KotlinDecodingExtractor)
+            ?.maxOutputChannels = maxOutputChannels
+    }
 
     override fun createExtractors(): Array<Extractor> {
         val extractors = base.createExtractors().toMutableList()
         for (provider in providers) {
-            for (factory in provider.extractors()) extractors += factory()
+            for (factory in provider.extractors()) extractors += configured(factory())
         }
-        return extractors.map(::withLameProvenance).toTypedArray()
+        return extractors.map { withLameProvenance(withPcmFallback(it)) }.toTypedArray()
     }
 
     override fun createExtractors(
@@ -198,11 +245,11 @@ internal class ProviderExtractorsFactory(
         val key = uri.toString()
         val extractors = mutableListOf<Extractor>()
         for (extractor in base.createExtractors(uri, responseHeaders)) {
-            extractors += tagSniff(withLameProvenance(extractor)) { recorder.record(key, "platform") }
+            extractors += tagSniff(withAlacAttribution(withLameProvenance(withPcmFallback(extractor)), key)) { recorder.record(key, "platform") }
         }
         for (provider in providers) {
             for (factory in provider.extractors()) {
-                extractors += tagSniff(withLameProvenance(factory())) { recorder.record(key, provider.id) }
+                extractors += tagSniff(withLameProvenance(configured(factory()))) { recorder.record(key, provider.id) }
             }
         }
         return extractors.toTypedArray()

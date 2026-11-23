@@ -18,3 +18,4 @@
 - TOR016 — Port Media3 M8 default engine and playback fixes
 - TOR017 — Port Media3 M9 Auto normalization
 - TOR018 — Port Spec 002 Phase A Kotlin audio modules
+- TOR019 — Port Spec 002 M1 Kotlin playback decoders

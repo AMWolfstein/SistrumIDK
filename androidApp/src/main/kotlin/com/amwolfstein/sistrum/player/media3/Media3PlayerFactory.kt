@@ -218,7 +218,6 @@ internal class Media3PlayerFactory(
         if (!dspChainEnabled && gainUnavailableLogged.compareAndSet(false, true)) {
             Log.i("Media3Engine", "DSP chain disabled; per-track normalization gain is not applied")
         }
-        val providerRenderers = providers.flatMap { it.audioRenderers(context) }
         val renderersFactory = object : DefaultRenderersFactory(context) {
             override fun buildAudioSink(
                 context: Context,
@@ -291,7 +290,7 @@ internal class Media3PlayerFactory(
                     eventListener,
                     out,
                 )
-                out.addAll(providerRenderers)
+                out.addAll(providers.flatMap { it.audioRenderers(context, audioSink, eventHandler, eventListener) })
             }
         }
         val builder = ExoPlayer.Builder(context)
@@ -302,7 +301,28 @@ internal class Media3PlayerFactory(
             .setMediaSourceFactory(
                 DefaultMediaSourceFactory(
                     context,
-                    ProviderExtractorsFactory(providers, recorder = providerRecorder),
+                    ProviderExtractorsFactory(providers, recorder = providerRecorder, maxOutputChannels = {
+                        val sdk = android.os.Build.VERSION.SDK_INT
+                        try {
+                            val counts = if (android.os.Build.VERSION.SDK_INT >= 33) {
+                                val manager = context.getSystemService(android.media.AudioManager::class.java)
+                                manager.getAudioDevicesForAttributes(
+                                    android.media.AudioAttributes.Builder()
+                                        .setUsage(android.media.AudioAttributes.USAGE_MEDIA)
+                                        .setContentType(android.media.AudioAttributes.CONTENT_TYPE_MUSIC).build())
+                                    .map { it.channelCounts }
+                            } else emptyList()
+                            if (sdk < 33 || counts.none { it.isNotEmpty() }) {
+                                Log.w("KotlinChannelMapper", "media route channel count unavailable; retaining source layout")
+                            }
+                            routeChannelLimit(counts, sdk)
+                        } catch (error: java.util.concurrent.CancellationException) {
+                            throw error
+                        } catch (error: Exception) {
+                            Log.w("KotlinChannelMapper", "media route query failed; retaining source layout", error)
+                            8
+                        }
+                    }),
                 )
             )
             // On by default in 1.11: the playback loop then sleeps ~250 ms between updates, so the position the
@@ -524,3 +544,7 @@ private class MeasuringAudioOutputProvider(
         })
     }
 }
+
+
+internal fun routeChannelLimit(deviceChannelCounts: List<IntArray>, sdkInt: Int): Int =
+    if (sdkInt < 33) 8 else (deviceChannelCounts.mapNotNull { it.maxOrNull() }.minOrNull() ?: 8).coerceIn(1, 8)

@@ -1,6 +1,13 @@
 package com.amwolfstein.sistrum.player.decoders
 
 import com.amwolfstein.sistrum.player.decoders.aiff.KotlinAiffProvider
+import com.amwolfstein.sistrum.player.decoders.kotlin.KotlinAlacProvider
+import com.amwolfstein.sistrum.player.decoders.kotlin.KotlinWavPackProvider
+import com.amwolfstein.sistrum.player.decoders.kotlin.KotlinApeProvider
+import com.amwolfstein.sistrum.player.decoders.kotlin.KotlinPcmVariantsProvider
+import com.amwolfstein.sistrum.player.decoders.kotlin.KotlinDsdProvider
+import com.amwolfstein.sistrum.player.decoders.kotlin.KotlinWmaProvider
+import com.amwolfstein.sistrum.player.decoders.kotlin.KotlinMusepackProvider
 
 /** The `codec` of a [DecoderTableEntry] that matches any codec of its format. */
 const val AnyCodec: String = "*"
@@ -106,8 +113,8 @@ val DefaultDecoderTable: DecoderTable = DecoderTable(
         DecoderTableEntry("aac", "aac", listOf("platform"), listOf("audio/mp4a-latm"), "AAC"),
         DecoderTableEntry("m4a", "aac", listOf("platform"), listOf("audio/mp4a-latm"), "AAC"),
         DecoderTableEntry("mp4", "aac", listOf("platform"), listOf("audio/mp4a-latm"), "AAC"),
-        DecoderTableEntry("m4a", "alac", listOf("platform"), listOf("audio/alac"), "ALAC"),
-        DecoderTableEntry("mp4", "alac", listOf("platform"), listOf("audio/alac"), "ALAC"),
+        DecoderTableEntry("m4a", "alac", listOf("platform", "kotlin-alac"), listOf("audio/alac"), "ALAC"),
+        DecoderTableEntry("mp4", "alac", listOf("platform", "kotlin-alac"), listOf("audio/alac"), "ALAC"),
         DecoderTableEntry("m4a", "flac", listOf("platform"), listOf("audio/flac"), "FLAC"),
         DecoderTableEntry("mp4", "flac", listOf("platform"), listOf("audio/flac"), "FLAC"),
         DecoderTableEntry("m4a", "opus", listOf("platform"), listOf("audio/opus"), "Opus"),
@@ -135,7 +142,11 @@ val DefaultDecoderTable: DecoderTable = DecoderTable(
         DecoderTableEntry("flac", "flac", listOf("platform"), listOf("audio/flac"), "FLAC"),
         DecoderTableEntry("ogg", "ogg", listOf("platform"), listOf("audio/vorbis", "audio/opus", "audio/flac"), "Ogg"),
         DecoderTableEntry("opus", "opus", listOf("platform"), listOf("audio/opus"), "Opus"),
-        DecoderTableEntry("wav", "wav", listOf("platform"), emptyList(), "WAV"),
+        DecoderTableEntry("wav", "alaw", listOf("platform", "kotlin-pcm-variants"), listOf("audio/g711-alaw"), "A-law"),
+        DecoderTableEntry("wav", "ulaw", listOf("platform", "kotlin-pcm-variants"), listOf("audio/g711-mlaw"), "µ-law"),
+        DecoderTableEntry("wav", "ima", listOf("platform"), emptyList(), "IMA ADPCM"),
+        DecoderTableEntry("wav", "msadpcm", listOf("kotlin-pcm-variants"), emptyList(), "MS-ADPCM"),
+        DecoderTableEntry("wav", "wav", listOf("platform", "kotlin-pcm-variants"), emptyList(), "WAV"),
         DecoderTableEntry(
             "mka",
             AnyCodec,
@@ -143,6 +154,9 @@ val DefaultDecoderTable: DecoderTable = DecoderTable(
             listOf("audio/vorbis", "audio/opus", "audio/flac", "audio/mpeg", "audio/mp4a-latm"),
             "Matroska",
         ),
+        DecoderTableEntry("aiff", "ima4", listOf("kotlin-aiff"), emptyList(), "AIFF-C IMA4"),
+        DecoderTableEntry("aiff", "alaw", listOf("kotlin-aiff"), emptyList(), "AIFF-C A-law"),
+        DecoderTableEntry("aiff", "ulaw", listOf("kotlin-aiff"), emptyList(), "AIFF-C µ-law"),
         DecoderTableEntry("aiff", "aiff", listOf("kotlin-aiff"), emptyList(), "AIFF"),
         DecoderTableEntry("m4a", "eac3-joc", listOf("platform"), listOf("audio/eac3-joc"), "E-AC-3 JOC"),
         DecoderTableEntry("mp4", "eac3-joc", listOf("platform"), listOf("audio/eac3-joc"), "E-AC-3 JOC"),
@@ -168,12 +182,12 @@ val DefaultDecoderTable: DecoderTable = DecoderTable(
         ),
         DecoderTableEntry("ac3", "ac3", listOf("platform"), listOf("audio/ac3"), "AC-3"),
         DecoderTableEntry("eac3", "eac3", listOf("platform"), listOf("audio/eac3"), "E-AC-3"),
-        DecoderTableEntry("ape", "ape", emptyList(), emptyList(), "APE"),
-        DecoderTableEntry("wv", "wv", emptyList(), emptyList(), "WavPack"),
-        DecoderTableEntry("dsf", "dsf", emptyList(), emptyList(), "DSD"),
-        DecoderTableEntry("dff", "dff", emptyList(), emptyList(), "DSD"),
-        DecoderTableEntry("wma", "wma", emptyList(), emptyList(), "WMA"),
-        DecoderTableEntry("mpc", "mpc", emptyList(), emptyList(), "Musepack"),
+        DecoderTableEntry("ape", "ape", listOf("kotlin-ape"), emptyList(), "APE"),
+        DecoderTableEntry("wv", "wv", listOf("kotlin-wavpack"), emptyList(), "WavPack"),
+        DecoderTableEntry("dsf", "dsf", listOf("kotlin-dsd"), emptyList(), "DSD"),
+        DecoderTableEntry("dff", "dff", listOf("kotlin-dsd"), emptyList(), "DSD"),
+        DecoderTableEntry("wma", "wma", listOf("kotlin-wma"), emptyList(), "WMA"),
+        DecoderTableEntry("mpc", "mpc", listOf("kotlin-musepack"), emptyList(), "Musepack"),
         DecoderTableEntry("tta", "tta", emptyList(), emptyList(), "TTA"),
     ),
 )
@@ -184,7 +198,7 @@ val DefaultDecoderTable: DecoderTable = DecoderTable(
  * (T038) so the table lookup and the player's extractors cannot drift apart.
  */
 fun defaultDecoderProviders(probe: CodecProbe): List<DecoderProvider> =
-    listOf(PlatformProvider(DefaultDecoderTable, probe), KotlinAiffProvider())
+    listOf(PlatformProvider(DefaultDecoderTable, probe), KotlinWavPackProvider(), KotlinApeProvider(), KotlinMusepackProvider(), KotlinWmaProvider(), KotlinDsdProvider(), KotlinPcmVariantsProvider(), KotlinAlacProvider(probe), KotlinAiffProvider())
 
 /** The table-backed registry over [defaultDecoderProviders]. */
 fun defaultDecoderRegistry(probe: CodecProbe): DecoderRegistry =

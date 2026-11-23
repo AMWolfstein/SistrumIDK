@@ -9,6 +9,10 @@ import com.amwolfstein.sistrum.player.decoders.DecoderTableEntry
 import com.amwolfstein.sistrum.player.decoders.FormatKey
 import com.amwolfstein.sistrum.player.decoders.TableDecoderRegistry
 import com.amwolfstein.sistrum.player.decoders.defaultDecoderRegistry
+import org.junit.Assert.assertSame
+import org.junit.Assert.assertThrows
+import java.util.concurrent.CancellationException
+import com.amwolfstein.sistrum.player.decoders.DecoderRegistry
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertNull
 import org.junit.Test
@@ -25,13 +29,13 @@ class ScanGateTest {
         (value and 0xFF).toByte(),
     )
 
-    /** A minimal FORM/COMM AIFF/AIFC header, enough for `aiffRefusal` to decide. */
+    /** A minimal FORM/COMM AIFF/AIFC header, enough for the AIFF decoder to decide. */
     private fun aiffHeader(form: String, bits: Int = 16, compression: String? = null): ByteArray {
         val comm = ByteArrayOutputStream()
         comm.write(u16(1))
         comm.write(u32(0))
         comm.write(u16(bits))
-        comm.write(ByteArray(10))
+        comm.write(byteArrayOf(0x40, 0x0e, 0xac.toByte(), 0x44, 0, 0, 0, 0, 0, 0))
         if (form == "AIFC") comm.write((compression ?: "NONE").toByteArray(Charsets.US_ASCII))
         val body = comm.toByteArray()
 
@@ -74,18 +78,21 @@ class ScanGateTest {
     fun `registry gate skips formats the registry cannot play`() {
         val gate = RegistryScanGate(defaultDecoderRegistry(CodecProbe { true }))
         assertEquals(
-            Admission.Skipped("dsf", "dsf", "unsupported format (DSD)"),
-            gate.admit("dsf", "dsf") { ByteArray(it) },
+            Admission.Skipped("tta", "tta", "unsupported format (TTA)"),
+            gate.admit("tta", "tta") { ByteArray(it) },
         )
-        assertEquals(
-            Admission.Skipped("wma", "wma", "unsupported format (WMA)"),
-            gate.admit("wma", "wma") { ByteArray(it) },
-        )
+        // Spec 002 T006/T007: DSD and WMA now have Kotlin providers, so the scan admits them.
+        assertEquals(Admission.Admitted("kotlin-dsd"), gate.admit("dsf", "dsf") { ByteArray(it) })
+        assertEquals(Admission.Admitted("kotlin-wma"), gate.admit("wma", "wma") { ByteArray(it) })
 
+        // Spec 002 T009: without a platform ALAC decoder the Kotlin ALAC fallback plays it.
         val withoutAlac = RegistryScanGate(defaultDecoderRegistry(CodecProbe { it != "audio/alac" }))
+        assertEquals(Admission.Admitted("kotlin-alac"), withoutAlac.admit("m4a", "alac") { ByteArray(it) })
+
+        val withoutAc3 = RegistryScanGate(defaultDecoderRegistry(CodecProbe { it != "audio/ac3" }))
         assertEquals(
-            Admission.Skipped("m4a", "alac", "no decoder on this device (ALAC)"),
-            withoutAlac.admit("m4a", "alac") { ByteArray(it) },
+            Admission.Skipped("ac3", "ac3", "no decoder on this device (AC-3)"),
+            withoutAc3.admit("ac3", "ac3") { ByteArray(it) },
         )
     }
 
@@ -93,15 +100,20 @@ class ScanGateTest {
     fun `registry gate names the refusal and asks for the provider's header size`() {
         val gate = RegistryScanGate(defaultDecoderRegistry(CodecProbe { true }))
         var requested = 0
+        // T012a: float and compressed AIFF-C use the same decoder; MACE stays refused.
         assertEquals(
-            Admission.Skipped("aiff", "aiff", "compressed AIFF-C (ima4)"),
-            gate.admit("aiff", "aiff") { n -> requested = n; aiffHeader("AIFC", compression = "ima4") },
+            Admission.Admitted("kotlin-aiff"),
+            gate.admit("aiff", "aiff") { aiffHeader("AIFC", compression = "ima4") },
         )
-        assertEquals(4096, requested)
         assertEquals(
-            Admission.Skipped("aiff", "aiff", "float AIFF-C (fl32)"),
+            Admission.Admitted("kotlin-aiff"),
             gate.admit("aiff", "aiff") { aiffHeader("AIFC", compression = "fl32") },
         )
+        assertEquals(
+            Admission.Skipped("aiff", "aiff", "aiff: this build does not read MAC3 (compression type \"MAC3\") from an AIFF-C"),
+            gate.admit("aiff", "aiff") { n -> requested = n; aiffHeader("AIFC", compression = "MAC3") },
+        )
+        assertEquals(4096, requested)
     }
 
     @Test
@@ -123,6 +135,35 @@ class ScanGateTest {
         val gate = RegistryScanGate(TableDecoderRegistry(table, listOf(throwing)))
 
         assertEquals(Admission.Admitted("boom"), gate.admit("x", "x") { ByteArray(it) })
+    }
+
+    @Test fun cancellationPropagatesFromEveryAdmissionBoundary() {
+        for (boundary in listOf("resolve", "skipReason", "header", "refusal")) {
+            val cancellation = CancellationException(boundary)
+            val provider = object : DecoderProvider {
+                override val id = "test-provider"
+                override fun isAvailable(key: FormatKey) = true
+                override fun extractors(): List<() -> Extractor> = emptyList()
+                override val refusalHeaderBytes = 16
+                override fun refusal(header: ByteArray): String? {
+                    if (boundary == "refusal") throw cancellation
+                    return null
+                }
+            }
+            val registry = object : DecoderRegistry {
+                override fun resolve(key: FormatKey): DecoderProvider? {
+                    if (boundary == "resolve") throw cancellation
+                    return if (boundary == "skipReason") null else provider
+                }
+                override fun skipReason(key: FormatKey): String? = throw cancellation
+            }
+            assertSame(cancellation, assertThrows(CancellationException::class.java) {
+                RegistryScanGate(registry).admit("x", "x") {
+                    if (boundary == "header") throw cancellation
+                    ByteArray(it)
+                }
+            })
+        }
     }
 
     @Test

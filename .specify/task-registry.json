@@ -1,8 +1,8 @@
 {
   "missions": {},
-  "next_completion": 19,
+  "next_completion": 20,
   "next_mission": 1,
-  "next_tor": 19,
+  "next_tor": 20,
   "tasks": {
     "TOR001": {
       "completion": 1,
@@ -291,6 +291,22 @@
       "record": ".specify/quick-tasks/TOR018.md",
       "status": "complete",
       "title": "Port Spec 002 Phase A Kotlin audio modules"
+    },
+    "TOR019": {
+      "completion": 19,
+      "evidence": {
+        "checks": "DevDebug host and instrumentation Kotlin compilation; codec test compilation; Java resource merge; TSV equality; Git whitespace",
+        "result": "PASS",
+        "reviewer": "tor_review",
+        "round": 1
+      },
+      "final": false,
+      "kind": "TOR",
+      "mission": null,
+      "nonce": "fb7421739d90449e97c395bd0e928ad9",
+      "record": ".specify/quick-tasks/TOR019.md",
+      "status": "complete",
+      "title": "Port Spec 002 M1 Kotlin playback decoders"
     }
   },
   "version": 1
