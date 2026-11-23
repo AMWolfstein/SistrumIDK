@@ -18,6 +18,7 @@ import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
 import kotlinx.coroutines.withContext
 import com.amwolfstein.sistrum.R
+import com.amwolfstein.sistrum.analysis.LoudnessAnalysisScheduler
 import com.amwolfstein.sistrum.player.decoders.ProcessCodecProbe
 import com.amwolfstein.sistrum.player.decoders.defaultDecoderRegistry
 import com.amwolfstein.sistrum.player.engine.EngineKind
@@ -91,6 +92,8 @@ internal object LibraryScanRunner {
                         Log.i("SistrumScan", "Skipped $total file(s) by reason: $byReason")
                     }
                     separatorPreferences.setAppliedSignature(separators.signature)
+                    runCatching { LoudnessAnalysisScheduler.get(context).onScanCompleted() }
+                        .onFailure { Log.w("SistrumScan", "Failed to schedule loudness analysis", it) }
                     // FR-065a: hidden tracks (no decoder on this device) are kept but not shown, so they don't count.
                     val visibleTracks = result.snapshot.tracks.filter { it.decoderUnavailable.isBlank() }
                     val albums = visibleTracks.map { it.album.id }.distinct().size

@@ -50,6 +50,9 @@ import android.os.Looper
 import android.provider.Settings
 import android.view.WindowInsetsController
 import android.view.KeyEvent
+import com.amwolfstein.sistrum.analysis.LoudnessAnalysisScheduler
+import com.amwolfstein.sistrum.player.engine.EngineSelectionPreferences
+import com.amwolfstein.sistrum.player.engine.EngineKind
 import com.amwolfstein.sistrum.settings.ThemeMode
 import com.amwolfstein.sistrum.settings.ThemePreferences
 import com.amwolfstein.sistrum.device.DeviceIdentity
@@ -102,6 +105,7 @@ class MainActivity : ComponentActivity() {
         )
     }
     private lateinit var lastFm: LastFmService
+    private var analysisNotificationPermissionRequested = false
     private var systemMusicVolumeState by mutableFloatStateOf(0f)
     private val viewModel: MainViewModel by viewModels {
         MainViewModel.Factory(ThemePreferences(applicationContext))
@@ -158,6 +162,11 @@ class MainActivity : ComponentActivity() {
         super.attachBaseContext(newBase.withLatinDigits())
     }
 
+    override fun onSaveInstanceState(outState: Bundle) {
+        outState.putBoolean("analysis_notification_requested", analysisNotificationPermissionRequested)
+        super.onSaveInstanceState(outState)
+    }
+
     override fun onCreate(savedInstanceState: Bundle?) {
         enableEdgeToEdge()
         super.onCreate(savedInstanceState)
@@ -169,6 +178,7 @@ class MainActivity : ComponentActivity() {
         // Start the service once per app process so it can rebuild the last
         // private playback session before Compose observes its StateFlows.
         startService(Intent(this, PlaybackService::class.java))
+        analysisNotificationPermissionRequested = savedInstanceState?.getBoolean("analysis_notification_requested") ?: false
         systemMusicVolumeState = currentSystemMusicVolume()
         if (Build.VERSION.SDK_INT >= 33 && checkSelfPermission(Manifest.permission.POST_NOTIFICATIONS) != PackageManager.PERMISSION_GRANTED) {
             requestPermissions(arrayOf(Manifest.permission.POST_NOTIFICATIONS), NotificationPermissionRequest)
@@ -251,11 +261,19 @@ class MainActivity : ComponentActivity() {
             LaunchedEffect(lyricsSettings.romanizationEnabled) {
                 romanizationViewModel.setAllowed(lyricsSettings.romanizationEnabled)
             }
-            // Avoid clearing a valid preference while Room is still loading the active manifest.
-            val normalizationAvailable by LocalLibraryRuntime.libraryStore().analysisAvailable.collectAsStateWithLifecycle(initialValue = true)
+            val enginePreferences = remember { EngineSelectionPreferences(applicationContext) }
+            // Unknown selection must not clear saved settings while DataStore is loading.
+            val selectedEngine by enginePreferences.engine.collectAsStateWithLifecycle(initialValue = null)
+            val normalizationAvailable = selectedEngine == EngineKind.Media3
+            val analysisScheduler = remember { LoudnessAnalysisScheduler.get(applicationContext) }
+            val analysisProgress by analysisScheduler.progress.collectAsStateWithLifecycle()
+            val nowRunning by analysisScheduler.nowRunning.collectAsStateWithLifecycle(initialValue = false)
+            LaunchedEffect(activePage) {
+                if (activePage == AppStackPage.SettingsVolumeNormalization) analysisScheduler.loadProgress()
+            }
             val limiterState by LimiterStatus.state.collectAsStateWithLifecycle()
-            LaunchedEffect(normalizationAvailable) {
-                if (!normalizationAvailable) normalizationPreferences.disable()
+            LaunchedEffect(selectedEngine) {
+                if (selectedEngine == EngineKind.Native) normalizationPreferences.disable()
             }
             val playbackState by playbackController.state.collectAsStateWithLifecycle()
             val playbackQueue by playbackController.queue.collectAsStateWithLifecycle()
@@ -449,6 +467,19 @@ class MainActivity : ComponentActivity() {
                     onShowFullscreenQualityBadgeChanged = { enabled -> preferenceScope.launch { playbackPreferences.setShowFullscreenQualityBadge(enabled) } },
                     keepScreenOnForLyrics = keepScreenOnForLyrics,
                     onKeepScreenOnForLyricsChanged = { enabled -> preferenceScope.launch { playbackPreferences.setKeepScreenOnForLyrics(enabled) } },
+                    analysisProgress = analysisProgress,
+                    nowRunning = nowRunning,
+                    onAnalyzeNow = {
+                        if (Build.VERSION.SDK_INT >= 33 &&
+                            checkSelfPermission(Manifest.permission.POST_NOTIFICATIONS) != PackageManager.PERMISSION_GRANTED &&
+                            !analysisNotificationPermissionRequested
+                        ) {
+                            analysisNotificationPermissionRequested = true
+                            requestPermissions(arrayOf(Manifest.permission.POST_NOTIFICATIONS), NotificationPermissionRequest)
+                        }
+                        analysisScheduler.analyzeNow()
+                    },
+                    onStopAnalysis = analysisScheduler::cancelAnalyzeNow,
                     normalizationAvailable = normalizationAvailable,
                     normalization = normalizationSettings,
                     limiterState = limiterState,

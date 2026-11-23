@@ -46,6 +46,11 @@ import kotlinx.coroutines.channels.Channel
 import kotlinx.coroutines.withContext
 import kotlinx.coroutines.withTimeoutOrNull
 import com.amwolfstein.sistrum.MainActivity
+import com.amwolfstein.sistrum.analysis.LoudnessStore
+import com.amwolfstein.sistrum.player.normalization.AlbumLoudnessLookup
+import com.amwolfstein.sistrum.player.normalization.GainResolver
+import com.amwolfstein.sistrum.player.normalization.MeasuredGainSource
+import com.amwolfstein.sistrum.player.normalization.TagGainSource
 import com.amwolfstein.sistrum.R
 import com.amwolfstein.sistrum.sync.LocalLibraryRuntime
 import com.amwolfstein.sistrum.sync.LibraryTrack
@@ -173,7 +178,17 @@ class PlaybackService : Service() {
                 selection = EngineSelectionPreferences(applicationContext).engine,
                 builders = playbackEngineBuilders(
                     native = { LegacyNativeEngine() },
-                    media3 = { Media3Engine(media3PlayerFactory) },
+                    media3 = {
+                        Media3Engine(media3PlayerFactory, gainResolverProvider = {
+                            val albums = try {
+                                LoudnessStore(LocalLibraryRuntime.database()).albumLoudnessSnapshot()
+                            } catch (error: Exception) {
+                                Log.w("Media3Engine", "Unable to read album loudness; using track gain", error)
+                                AlbumLoudnessLookup { null }
+                            }
+                            GainResolver(MeasuredGainSource(albums), TagGainSource())
+                        })
+                    },
                 ),
             )::create,
             resolver = PlaybackItemResolver { id -> AndroidPlaybackRuntime.controller().resolve(id) },

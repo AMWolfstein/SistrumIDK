@@ -475,6 +475,10 @@ internal fun AppDestinationContent(
                                 limiterState = limiterState,
                                 onNormalizationChanged = onNormalizationChanged,
                                 modifier = settingsPageModifier,
+                                analysisProgress = settings.analysisProgress,
+                                nowRunning = settings.nowRunning,
+                                onAnalyzeNow = settings.onAnalyzeNow,
+                                onStopAnalysis = settings.onStopAnalysis,
                             )
                             AppStackPage.SettingsEqualizer -> EqualizerContent(
                                 settings = equalizer,

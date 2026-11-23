@@ -13,3 +13,4 @@
 - TOR011 — Port Media3 M3 selectable playback engine
 - TOR012 — Port Media3 M4 decoder registry and scanning
 - TOR013 — Port Media3 M5 float DSP and shared limiter
+- TOR014 — Port Media3 M6 measured loudness normalization

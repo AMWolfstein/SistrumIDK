@@ -109,6 +109,7 @@ dependencies {
     implementation(libs.vico.compose)
     implementation(libs.media3.exoplayer)
     implementation(libs.media3.common)
+    implementation(libs.androidx.work.runtime.ktx)
     implementation(libs.markwon.core)
     implementation(libs.markwon.image)
     implementation(libs.markwon.html)
@@ -124,6 +125,7 @@ dependencies {
     testImplementation(libs.room.testing)
     testImplementation(libs.media3.test.utils)
     androidTestImplementation(libs.androidx.testExt.junit)
+    androidTestImplementation(libs.androidx.work.testing)
     androidTestImplementation(libs.compose.uiTestJunit4)
     androidTestImplementation(libs.androidx.espresso.core)
     debugImplementation(libs.compose.uiTooling)
@@ -215,6 +217,8 @@ android {
             version = "3.22.1"
         }
     }
+    sourceSets.getByName("androidTest").assets.srcDir("src/test/resources/waxflow")
+
     testOptions {
         unitTests.isReturnDefaultValues = true
     }

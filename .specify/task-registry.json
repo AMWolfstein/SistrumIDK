@@ -1,8 +1,8 @@
 {
   "missions": {},
-  "next_completion": 14,
+  "next_completion": 15,
   "next_mission": 1,
-  "next_tor": 14,
+  "next_tor": 15,
   "tasks": {
     "TOR001": {
       "completion": 1,
@@ -211,6 +211,22 @@
       "record": ".specify/quick-tasks/TOR013.md",
       "status": "complete",
       "title": "Port Media3 M5 float DSP and shared limiter"
+    },
+    "TOR014": {
+      "completion": 14,
+      "evidence": {
+        "checks": "DevDebug host and instrumentation Kotlin compilation; Bash syntax; Git whitespace",
+        "result": "PASS",
+        "reviewer": "tor_review",
+        "round": 1
+      },
+      "final": false,
+      "kind": "TOR",
+      "mission": null,
+      "nonce": "1b96d3eeee04488c9a6c4ba87865ab78",
+      "record": ".specify/quick-tasks/TOR014.md",
+      "status": "complete",
+      "title": "Port Media3 M6 measured loudness normalization"
     }
   },
   "version": 1

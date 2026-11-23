@@ -182,6 +182,10 @@ internal data class SettingsDestinationModel(
     val onEqualizerProfileCreate: (String) -> Unit = {},
     val onEqualizerProfileReset: (String) -> Unit = {},
     val onEqualizerProfileDelete: (String) -> Unit = {},
+    val analysisProgress: com.amwolfstein.sistrum.analysis.AnalysisProgress? = null,
+    val nowRunning: Boolean = false,
+    val onAnalyzeNow: () -> Unit = {},
+    val onStopAnalysis: () -> Unit = {},
 )
 
 internal data class AppDestinationModels(

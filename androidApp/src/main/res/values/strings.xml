@@ -488,4 +488,26 @@
     <string name="app_update_later">Later</string>
     <string name="app_update_action">Update</string>
     <string name="playlist_sync_failed">Could not save changes to this playlist</string>
+    <string name="loudness_analysis_channel">Loudness analysis</string>
+    <string name="loudness_analysis_now_title">Analyzing loudness</string>
+    <string name="loudness_analysis_cancel">Cancel</string>
+    <plurals name="loudness_analysis_now_progress">
+        <item quantity="one">%1$d of %2$d track · uses battery</item>
+        <item quantity="other">%1$d of %2$d tracks · uses battery</item>
+    </plurals>
+
+    <string name="playback_normalization_requires_media3">Requires the new playback engine</string>
+    <string name="playback_normalization_untagged_preamp">Untagged pre-amp</string>
+    <string name="playback_normalization_untagged_caption">For tracks with no loudness data</string>
+    <string name="playback_normalization_preamp_value">%1$s dB</string>
+    <string name="playback_normalization_preamp_minimum">-15 dB</string>
+    <string name="playback_normalization_preamp_maximum">+15 dB</string>
+    <string name="playback_loudness_analysis_charging">Continues automatically while charging</string>
+    <string name="playback_loudness_analysis_now">Analyze now</string>
+    <string name="playback_loudness_analysis_stop">Stop</string>
+    <string name="playback_loudness_analysis_battery">Uses battery</string>
+    <plurals name="playback_loudness_analysis_progress">
+        <item quantity="one">Loudness analysis: %1$d of %2$d track</item>
+        <item quantity="other">Loudness analysis: %1$d of %2$d tracks</item>
+    </plurals>
 </resources>
