@@ -217,7 +217,10 @@ class PlaybackService : Service() {
         preferencesJob = scope.launch {
             playbackPreferences.settings.collectLatest { settings ->
                 coordinator.withCommandLock {
-                    coordinator.onPlaybackSettings(settings.seconds, settings.blendArtworkDuringCrossfade)
+                    coordinator.onPlaybackSettings(
+                        settings.seconds, settings.blendArtworkDuringCrossfade,
+                        settings.repeatOneCrossfade, settings.crossfadeOnSkip,
+                    )
                 }
             }
         }

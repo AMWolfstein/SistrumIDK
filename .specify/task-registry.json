@@ -1,8 +1,8 @@
 {
   "missions": {},
-  "next_completion": 15,
+  "next_completion": 16,
   "next_mission": 1,
-  "next_tor": 15,
+  "next_tor": 16,
   "tasks": {
     "TOR001": {
       "completion": 1,
@@ -227,6 +227,22 @@
       "record": ".specify/quick-tasks/TOR014.md",
       "status": "complete",
       "title": "Port Media3 M6 measured loudness normalization"
+    },
+    "TOR015": {
+      "completion": 15,
+      "evidence": {
+        "checks": "DevDebug host and instrumentation Kotlin compilation; Git whitespace",
+        "result": "PASS",
+        "reviewer": "tor_review",
+        "round": 1
+      },
+      "final": false,
+      "kind": "TOR",
+      "mission": null,
+      "nonce": "a4d4341e1d50497aa3f458e26170ef90",
+      "record": ".specify/quick-tasks/TOR015.md",
+      "status": "complete",
+      "title": "Port Media3 M7 crossfade"
     }
   },
   "version": 1

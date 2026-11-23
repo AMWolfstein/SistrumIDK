@@ -32,8 +32,10 @@ internal class FakePlayerEngine(
 
     var position: Long = 0L
     var duration: Long = DefaultDurationMs
+    var fadeLead: Long = 0L
     var crossfading: Boolean = false
     var beginCrossfadeResult: Boolean = true
+    var crossfadeToResult: Boolean = true
     var failPrepare: Throwable? = null
     var failPreload: Throwable? = null
 
@@ -55,6 +57,9 @@ internal class FakePlayerEngine(
      */
     var emitTransitionOnCrossfade: Boolean = false
 
+    /** Opt-in to an incoming player's position on promotion; native characterization keeps its original position. */
+    var crossfadeIncomingPosition: Long? = null
+
     /** Invoked inside [prepare] before any state changes, so tests can observe the coordinator mid-prepare. */
     var onPrepare: (() -> Unit)? = null
 
@@ -65,6 +70,9 @@ internal class FakePlayerEngine(
     val calls = mutableListOf<String>()
     val seeks = mutableListOf<Long>()
     val crossfades = mutableListOf<Long>()
+    val crossfadeSettingsCalls = mutableListOf<Pair<Long, Boolean>>()
+    val crossfadeOnSkipCalls = mutableListOf<Boolean>()
+    val crossfadeToCalls = mutableListOf<Pair<PlaybackItem, Long>>()
     val focusGains = mutableListOf<Float>()
     val normalizationCalls = mutableListOf<NormalizationSettings>()
     val gainCalls = mutableListOf<Pair<ItemGain, ItemGain?>>()
@@ -135,6 +143,8 @@ internal class FakePlayerEngine(
 
     override fun durationMs(): Long = duration
 
+    override fun fadeLeadMs() = fadeLead
+
     override fun beginCrossfade(durationMs: Long): Boolean {
         calls += "beginCrossfade"
         crossfades += durationMs
@@ -143,6 +153,13 @@ internal class FakePlayerEngine(
         if (emitTransitionOnCrossfade) {
             val incoming = preloadedItem
             preloadedItem = null
+            crossfadeIncomingPosition?.let { incomingPosition ->
+                position = incomingPosition
+                if (incoming != null) {
+                    preparedItem = incoming
+                    duration = durationFor(incoming)
+                }
+            }
             if (incoming != null) pendingEvents += EngineEvent.TransitionStarted(incoming, durationMs)
         }
         return true
@@ -153,6 +170,29 @@ internal class FakePlayerEngine(
     override fun snapCrossfade() {
         calls += "snapCrossfade"
         crossfading = false
+    }
+
+    override suspend fun crossfadeTo(item: PlaybackItem, durationMs: Long): Boolean {
+        crossfadeToCalls += item to durationMs
+        if (!crossfadeToResult) return false
+        preparedItem = item
+        preloadedItem = null
+        duration = durationFor(item)
+        position = 0L
+        crossfading = true
+        return true
+    }
+
+    override fun setCrossfade(durationMs: Long, repeatOneCrossfade: Boolean, crossfadeOnSkip: Boolean) {
+        crossfadeOnSkipCalls += crossfadeOnSkip
+        // LegacyNativeEngine's setter is a no-op. Keep its effect log stable for T015,
+        // while recording settings delivery for tests of the shared coordinator path.
+        if (kind == EngineKind.Native) {
+            crossfadeSettingsCalls += durationMs to repeatOneCrossfade
+            return
+        }
+        calls += "setCrossfade"
+        crossfadeSettingsCalls += durationMs to repeatOneCrossfade
     }
 
     override fun setFocusGain(gain: Float) {
@@ -193,12 +233,16 @@ internal class FakeEngineFactory(
 ) : () -> PlayerEngine {
     val created = mutableListOf<FakePlayerEngine>()
     var kind: EngineKind = EngineKind.Native
+    var fadeLead: Long = 0L
 
     /** Applied to every created engine before it is returned. */
     var onPrepare: (() -> Unit)? = null
 
     /** Applied to every created engine before it is returned. */
     var emitTransitionOnCrossfade: Boolean = false
+
+    /** Applied on promotion to model a Media3 incoming player's position without changing native tests. */
+    var crossfadeIncomingPosition: Long? = null
 
     /** Applied to every created engine before it is returned; used to force prepare failures. */
     var failPrepare: Throwable? = null
@@ -213,8 +257,10 @@ internal class FakeEngineFactory(
 
     override fun invoke(): PlayerEngine = FakePlayerEngine(durationFor).also { engine ->
         engine.kind = kind
+        engine.fadeLead = fadeLead
         engine.onPrepare = onPrepare
         engine.emitTransitionOnCrossfade = emitTransitionOnCrossfade
+        engine.crossfadeIncomingPosition = crossfadeIncomingPosition
         engine.failPrepare = failPrepare
         engine.autoOutputStarted = autoOutputStarted
         engine.failPosition = failPosition

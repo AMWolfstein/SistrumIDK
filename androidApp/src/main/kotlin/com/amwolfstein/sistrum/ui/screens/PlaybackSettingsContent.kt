@@ -1,6 +1,8 @@
 package com.amwolfstein.sistrum.ui.screens
 
 import androidx.compose.foundation.Canvas
+import androidx.compose.foundation.clickable
+import androidx.compose.ui.semantics.Role
 import androidx.compose.foundation.gestures.awaitEachGesture
 import androidx.compose.foundation.gestures.awaitFirstDown
 import androidx.compose.foundation.gestures.horizontalDrag
@@ -354,6 +356,11 @@ internal fun SongTransitionContent(
     onCrossfadeSecondsChanged: (Int) -> Unit,
     blendArtworkDuringCrossfade: Boolean,
     onBlendArtworkDuringCrossfadeChanged: (Boolean) -> Unit,
+    repeatOneCrossfade: Boolean,
+    onRepeatOneCrossfadeChanged: (Boolean) -> Unit,
+    crossfadeOnSkip: Boolean,
+    onCrossfadeOnSkipChanged: (Boolean) -> Unit,
+    normalizationAvailable: Boolean,
     modifier: Modifier = Modifier,
 ) {
     val enabled = crossfadeSeconds > 0
@@ -408,6 +415,38 @@ internal fun SongTransitionContent(
                         )
                     }
                 }
+            }
+        }
+        com.amwolfstein.sistrum.ui.components.Card {
+            CrossfadeOptionRow(
+                labelRes = R.string.playback_crossfade_repeat_one,
+                checked = repeatOneCrossfade,
+                enabled = enabled,
+                onCheckedChange = onRepeatOneCrossfadeChanged,
+            )
+            ActionListDivider(style = ActionListDividerStyle.FullWidth)
+            CrossfadeOptionRow(
+                labelRes = R.string.playback_crossfade_on_skip,
+                subtitleRes = R.string.playback_crossfade_on_skip_description,
+                checked = crossfadeOnSkip,
+                enabled = enabled && normalizationAvailable,
+                onCheckedChange = onCrossfadeOnSkipChanged,
+            )
+            if (!normalizationAvailable) {
+                Text(
+                    stringResource(R.string.playback_normalization_requires_media3),
+                    modifier = Modifier.padding(start = 16.dp, end = 16.dp, bottom = 12.dp),
+                    style = MaterialTheme.typography.bodySmall,
+                    color = LocalSistrumColors.current.textMuted,
+                )
+            }
+        }
+        AnimatedVisibility(
+            visible = enabled,
+            enter = fadeIn(animationSpec = tween(durationMillis = 200)),
+            exit = fadeOut(animationSpec = tween(durationMillis = 150)),
+        ) {
+            Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
                 com.amwolfstein.sistrum.ui.components.Card {
                     ActionList(
                         items = listOf(
@@ -429,6 +468,35 @@ internal fun SongTransitionContent(
                 }
             }
         }
+    }
+}
+
+@Composable
+private fun CrossfadeOptionRow(
+    @StringRes labelRes: Int,
+    checked: Boolean,
+    enabled: Boolean,
+    onCheckedChange: (Boolean) -> Unit,
+    @StringRes subtitleRes: Int? = null,
+) {
+    val colors = LocalSistrumColors.current
+    Row(
+        modifier = Modifier.fillMaxWidth()
+            .clickable(enabled = enabled, role = Role.Switch) { onCheckedChange(!checked) }
+            .padding(horizontal = 16.dp, vertical = 12.dp),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        Column(modifier = Modifier.weight(1f).padding(end = 16.dp)) {
+            Text(
+                stringResource(labelRes),
+                style = MaterialTheme.typography.bodyLarge,
+                color = if (enabled) colors.textMain else colors.textMuted,
+            )
+            subtitleRes?.let {
+                Text(stringResource(it), style = MaterialTheme.typography.bodySmall, color = colors.textMuted)
+            }
+        }
+        Switch(checked = checked, enabled = enabled, onCheckedChange = onCheckedChange)
     }
 }
 

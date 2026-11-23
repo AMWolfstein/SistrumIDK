@@ -14,3 +14,4 @@
 - TOR012 — Port Media3 M4 decoder registry and scanning
 - TOR013 — Port Media3 M5 float DSP and shared limiter
 - TOR014 — Port Media3 M6 measured loudness normalization
+- TOR015 — Port Media3 M7 crossfade

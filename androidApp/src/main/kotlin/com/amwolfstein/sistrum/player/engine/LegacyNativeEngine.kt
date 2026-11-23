@@ -169,6 +169,8 @@ internal class LegacyNativeEngine(
 
     override fun durationMs(): Long = port?.durationMs() ?: 0L
 
+    override fun fadeLeadMs(): Long = 0L
+
     override fun beginCrossfade(durationMs: Long): Boolean {
         drain()
         val current = port ?: return false
@@ -182,6 +184,10 @@ internal class LegacyNativeEngine(
     override fun isCrossfading(): Boolean = port?.isCrossfading() == true
 
     override fun snapCrossfade() { port?.snapCrossfade() }
+
+    override fun setCrossfade(durationMs: Long, repeatOneCrossfade: Boolean, crossfadeOnSkip: Boolean) = Unit
+
+    override suspend fun crossfadeTo(item: PlaybackItem, durationMs: Long): Boolean = false
 
     override fun setFocusGain(gain: Float) {
         focusGain = gain
