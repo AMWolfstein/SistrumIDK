@@ -1,0 +1,41 @@
+# Tasks — Standalone Android Library Upgrade
+
+Inputs: [spec.md](spec.md), [plan.md](plan.md) and [.specify/project-policy.md](../../.specify/project-policy.md). Implementation requires separate authorization.
+
+## Execution
+
+The first action of every task is `python3 workflow/codegraph/code_tools.py update`. Inspect coverage and stop that task if refresh fails. Execute in order, record checks and independent review in [task-log.md](task-log.md), and allow up to three review rounds. After PASS, complete through the workflow helper and make one commit including the relevant records. There is no separate map, review or test task.
+
+## Implementation
+
+- [ ] M001-T001 Rebuild local library scanning and metadata maintenance
+  - **Story** US1. **Depends on** planning commit.
+  - **Paths** `androidApp/src/main/kotlin/com/amwolfstein/sistrum/sync/{MediaStoreLibraryScanner,SyncDatabase,LocalLibraryRuntime,ScanFilterPreferences,TagSeparatorPreferences}.kt`, `androidApp/src/main/kotlin/com/amwolfstein/sistrum/ui/screens/LibraryScanContent.kt`, and Android settings/resources and storage tests.
+  - **Acceptance** Manual, launch and best-effort scheduled scanning share one job. Show progress, cancellation and a summary. Preserve the existing library on missing media, permission errors and interrupted scans. Keep stable IDs on verified moves. Store raw tags and extractor version. Apply separators and optimize search from stored data, allow targeted or forced metadata/art refresh, and import folder artist images with manual override priority.
+  - **Validation** `./gradlew :androidApp:compileDevDebugKotlin :androidApp:testDevDebugUnitTest`. Cover unchanged files, one-time backfill, re-split, duplicate/moved entries, cancel and external storage loss with fixtures. Add Room migration/storage instrumentation coverage and record if it cannot run.
+
+- [ ] M001-T002 Enable on-device analysis for normalization and Mood Radio
+  - **Story** US2. **Depends on** M001-T001.
+  - **Paths** `androidApp/src/main/cpp/{ffmpeg_player.cpp,CMakeLists.txt}`, `androidApp/src/main/kotlin/com/amwolfstein/sistrum/player/{FfmpegDecoder,NormalizationPreferences,PlaybackService}.kt`, `androidApp/src/main/kotlin/com/amwolfstein/sistrum/sync/SyncDatabase.kt`, scan/analysis UI and `sharedLogic/src/commonMain/kotlin/com/amwolfstein/sistrum/mood/MoodRadio.kt`.
+  - **Acceptance** Analyze supported local MP3, AAC/ALAC M4A and Opus using independent background decoding. Validate integrated loudness, true peak and mood inputs, persist revision-keyed results, expose enable/progress/failure/retry controls and bounded workers. A missing or stale result leaves ordinary playback available. Verified results enable normalization and Mood Radio without desktop data.
+  - **Validation** `./gradlew :androidApp:externalNativeBuildDevDebug :androidApp:testDevDebugUnitTest :sharedLogic:testAndroidHostTest`. Compare silence, loudness and mood fixtures with reference outputs, test cancellation, decode errors, stale results, queue refill and gain routing. Document unmeasured playback/device behavior.
+
+- [ ] M001-T003 Add portable playlists and local metadata tools
+  - **Story** US3. **Depends on** M001-T002.
+  - **Paths** `androidApp/src/main/kotlin/com/amwolfstein/sistrum/ui/screens/{LibraryPlaylistsViewModel,PlaylistDetailsViewModel,PlaylistWrites}.kt`, `androidApp/src/main/kotlin/com/amwolfstein/sistrum/sync/SyncDatabase.kt`, `androidApp/src/main/kotlin/com/amwolfstein/sistrum/lyrics/AndroidLyricsService.kt` and relevant Compose menus/resources.
+  - **Acceptance** Smart Playlist rules evaluate local fields. M3U/M3U8 import/export preserves UTF-8 and order and reports unresolved items. File tag and embedded art edits use Android write consent and preserve media and user data if a write fails. Save lyrics as UTF-8 LRC through the system picker.
+  - **Validation** `./gradlew :androidApp:compileDevDebugKotlin :androidApp:testDevDebugUnitTest`. Cover relative paths, unresolved tracks, Unicode, round trips, unsupported writes, declined permission, and post-edit scan. Record SAF provider instrumentation status.
+
+- [ ] M001-T004 Add library and playback personalization
+  - **Story** US4. **Depends on** M001-T003.
+  - **Paths** `androidApp/src/main/kotlin/com/amwolfstein/sistrum/ui/screens/{LibraryContent,SettingsContent,PlaybackSettingsContent}.kt`, `androidApp/src/main/kotlin/com/amwolfstein/sistrum/settings/ThemePreferences.kt`, `androidApp/src/main/kotlin/com/amwolfstein/sistrum/ui/theme/SistrumTheme.kt` and `androidApp/src/main/kotlin/com/amwolfstein/sistrum/ui/navigation/{FullScreenPlayer,FullScreenPlayerArtwork}.kt`.
+  - **Acceptance** Persist section visibility and order while keeping navigation usable. Apply preset/custom hex accent and link Song Transition, Volume Normalization and Equalizer from the full-screen player menu to the existing settings screens. Preserve local Living Artwork and cover transitions.
+  - **Validation** `./gradlew :androidApp:compileDevDebugKotlin :androidApp:testDevDebugUnitTest :androidApp:lintDevDebug`. Check defaults, invalid accent, restart, RTL, contrast, navigation and artwork regression scenarios.
+
+## Final cumulative review
+
+- [ ] M001-T005 [FINAL] Review the standalone library upgrade
+  - **Depends on** M001-T001 through M001-T004 and any authorized mission extras.
+  - **Paths** All cumulative mission changes, [spec.md](spec.md), [plan.md](plan.md), [task-log.md](task-log.md) and this checklist.
+  - **Acceptance** Review migration, stored data, storage permission boundaries and native playback paths against the spec. Resolve actionable findings within this task.
+  - **Validation** `./gradlew :androidApp:externalNativeBuildDevDebug :androidApp:compileDevDebugKotlin :androidApp:testDevDebugUnitTest :androidApp:lintDevDebug :sharedLogic:testAndroidHostTest` and `python3 workflow/work.py validate`. Review the integrated upgrade, scan/edit/rescan, local analysis/playback and UI scenarios. Record device coverage gaps. APK or physical-device work needs owner authorization.

@@ -1,9 +1,66 @@
 {
-  "missions": {},
+  "missions": {
+    "M001": {
+      "next_task": 6,
+      "nonce": "f08ce47355554b03a1ac9f8a7fa9bc51",
+      "path": "specs/001-local-library-upgrade",
+      "title": "Upgrade the standalone Android library"
+    }
+  },
   "next_completion": 9,
-  "next_mission": 1,
+  "next_mission": 2,
   "next_tor": 9,
   "tasks": {
+    "M001-T001": {
+      "completion": null,
+      "final": false,
+      "kind": "T",
+      "mission": "M001",
+      "nonce": "b9a57d2c226c4027aecb02e7794bc4dc",
+      "record": "specs/001-local-library-upgrade/tasks.md",
+      "status": "reserved",
+      "title": "Rebuild local library scanning and metadata maintenance"
+    },
+    "M001-T002": {
+      "completion": null,
+      "final": false,
+      "kind": "T",
+      "mission": "M001",
+      "nonce": "3fa62154f4654db58b28ba186885aab1",
+      "record": "specs/001-local-library-upgrade/tasks.md",
+      "status": "reserved",
+      "title": "Enable on-device analysis for normalization and Mood Radio"
+    },
+    "M001-T003": {
+      "completion": null,
+      "final": false,
+      "kind": "T",
+      "mission": "M001",
+      "nonce": "4e09867e7b9e43c5a441b6ca12f66b32",
+      "record": "specs/001-local-library-upgrade/tasks.md",
+      "status": "reserved",
+      "title": "Add portable playlists and local metadata tools"
+    },
+    "M001-T004": {
+      "completion": null,
+      "final": false,
+      "kind": "T",
+      "mission": "M001",
+      "nonce": "af05efff25a44dbe9c926d325fae0562",
+      "record": "specs/001-local-library-upgrade/tasks.md",
+      "status": "reserved",
+      "title": "Add library and playback personalization"
+    },
+    "M001-T005": {
+      "completion": null,
+      "final": true,
+      "kind": "T",
+      "mission": "M001",
+      "nonce": "a2896461489741d8bb15d1d4d8ff79b9",
+      "record": "specs/001-local-library-upgrade/tasks.md",
+      "status": "reserved",
+      "title": "Review the standalone library upgrade"
+    },
     "TOR001": {
       "completion": 1,
       "evidence": {
