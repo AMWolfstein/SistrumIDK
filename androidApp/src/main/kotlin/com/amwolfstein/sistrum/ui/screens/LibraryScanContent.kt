@@ -21,6 +21,7 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
+import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.pluralStringResource
@@ -28,14 +29,28 @@ import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.dp
 import java.io.File
 import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.CancellationException
+import kotlinx.coroutines.Job
+import kotlinx.coroutines.currentCoroutineContext
+import kotlinx.coroutines.ensureActive
+import kotlinx.coroutines.isActive
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.sync.Mutex
+import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.first
+import kotlinx.coroutines.sync.withLock
 import kotlinx.coroutines.withContext
 import com.amwolfstein.sistrum.R
 import com.amwolfstein.sistrum.sync.LocalLibraryRuntime
 import com.amwolfstein.sistrum.sync.LocalLibraryScanResult
 import com.amwolfstein.sistrum.sync.MediaStoreLibraryScanner
+import com.amwolfstein.sistrum.sync.legacyTracksToPreserve
 import com.amwolfstein.sistrum.sync.ScanFilterPreferences
+import com.amwolfstein.sistrum.sync.ScanSchedule
+import com.amwolfstein.sistrum.ui.components.Card
+import com.amwolfstein.sistrum.ui.components.Selection
+import com.amwolfstein.sistrum.ui.components.SelectionOption
 import com.amwolfstein.sistrum.sync.TagSeparatorPreferences
 import com.amwolfstein.sistrum.ui.components.ActionList
 import com.amwolfstein.sistrum.ui.components.ActionListContainerStyle
@@ -51,6 +66,10 @@ internal data class LibraryScanUiState(
     val artists: Int = 0,
     val completed: Boolean = false,
     val permissionDenied: Boolean = false,
+    val skipped: Int = 0,
+    val failed: Int = 0,
+    val error: Boolean = false,
+    val preserved: Int = 0,
 )
 
 @Composable
@@ -60,23 +79,29 @@ internal fun LibraryScanContent(
     onTagSeparatorsSelected: () -> Unit = {},
 ) {
     val scope = rememberCoroutineScope()
-    var uiState by remember { mutableStateOf(LibraryScanUiState()) }
+    val uiState by libraryScanState.collectAsStateWithLifecycle()
+    var forceRefreshPending by remember { mutableStateOf(false) }
     val colors = LocalSistrumColors.current
     val context = LocalContext.current.applicationContext
+    val scanPreferences = remember { ScanFilterPreferences(context) }
+    val schedule by scanPreferences.schedule.collectAsStateWithLifecycle(initialValue = ScanSchedule.Manual)
 
     val permissionLauncher = rememberLauncherForActivityResult(ActivityResultContracts.RequestPermission()) { granted ->
         if (granted) {
-            launchScan(scope, context) { uiState = it }
+            launchScan(scope, context, forceRefresh = forceRefreshPending) { }
+            forceRefreshPending = false
         } else {
-            uiState = LibraryScanUiState(permissionDenied = true)
+            forceRefreshPending = false
+            libraryScanState.value = LibraryScanUiState(permissionDenied = true)
         }
     }
     val startScan: () -> Unit = {
+        forceRefreshPending = false
         val permission = readMediaPermission()
         if (context.checkSelfPermission(permission) == PackageManager.PERMISSION_GRANTED) {
-            launchScan(scope, context) { uiState = it }
+            launchScan(scope, context) { }
         } else {
-            uiState = LibraryScanUiState()
+            libraryScanState.value = LibraryScanUiState()
             permissionLauncher.launch(permission)
         }
     }
@@ -95,11 +120,76 @@ internal fun LibraryScanContent(
             containerStyle = ActionListContainerStyle.Card,
         )
         Spacer(modifier = Modifier.height(16.dp))
-        when {
-            uiState.isScanning -> Text(
-                text = stringResource(R.string.scan_running),
-                color = colors.textMuted,
+        Card {
+            Selection(
+                labelRes = R.string.scan_schedule,
+                options = listOf(
+                    SelectionOption(ScanSchedule.Manual, R.string.scan_schedule_manual),
+                    SelectionOption(ScanSchedule.OnLaunch, R.string.scan_schedule_launch),
+                    SelectionOption(ScanSchedule.FifteenMinutes, R.string.scan_schedule_15),
+                    SelectionOption(ScanSchedule.ThirtyMinutes, R.string.scan_schedule_30),
+                    SelectionOption(ScanSchedule.Hourly, R.string.scan_schedule_hour),
+                ),
+                selectedValue = schedule,
+                onValueSelected = { value ->
+                    scope.launch {
+                        try {
+                            scanPreferences.setSchedule(value)
+                        } catch (cancelled: CancellationException) {
+                            throw cancelled
+                        } catch (error: Exception) {
+                            Log.w("SistrumScan", "Could not update scan schedule", error)
+                            Toast.makeText(context, R.string.scan_schedule_failed, Toast.LENGTH_LONG).show()
+                        }
+                    }
+                },
             )
+        }
+        Spacer(modifier = Modifier.height(16.dp))
+        if (!uiState.isScanning) {
+            ActionList(
+                items = listOf(
+                    ActionListItem(R.string.scan_refresh_metadata, onClick = {
+                        if (context.checkSelfPermission(readMediaPermission()) == PackageManager.PERMISSION_GRANTED) {
+                            launchScan(scope, context, forceRefresh = true) { }
+                        } else {
+                            forceRefreshPending = true
+                            permissionLauncher.launch(readMediaPermission())
+                        }
+                    }),
+                    ActionListItem(R.string.scan_rebuild_search, onClick = {
+                        scope.launch {
+                            libraryScanMutex.withLock { LocalLibraryRuntime.libraryStore().rebuildLocalSearch() }
+                        }
+                    }),
+                ),
+                containerStyle = ActionListContainerStyle.Card,
+            )
+            Spacer(modifier = Modifier.height(16.dp))
+        }
+        when {
+            uiState.isScanning -> {
+                Text(
+                    text = if (uiState.tracks > 0) stringResource(R.string.scan_progress, uiState.tracks)
+                    else stringResource(R.string.scan_running),
+                    color = colors.textMuted,
+                )
+                Spacer(modifier = Modifier.height(16.dp))
+                ScanButton(
+                    label = stringResource(R.string.scan_cancel),
+                    modifier = Modifier.fillMaxWidth(),
+                    onClick = { activeLibraryScan?.cancel() },
+                )
+            }
+            uiState.error -> {
+                Text(text = stringResource(R.string.scan_failed), color = colors.textMuted)
+                Spacer(modifier = Modifier.height(16.dp))
+                ScanButton(
+                    label = stringResource(R.string.scan_again),
+                    modifier = Modifier.fillMaxWidth(),
+                    onClick = startScan,
+                )
+            }
             uiState.permissionDenied -> {
                 Text(
                     text = stringResource(R.string.scan_permission_denied),
@@ -117,6 +207,16 @@ internal fun LibraryScanContent(
                     text = scanCompleteSummary(uiState.tracks, uiState.albums, uiState.artists),
                     color = colors.textMuted,
                 )
+                Text(
+                    text = stringResource(R.string.scan_diagnostics, uiState.skipped, uiState.failed),
+                    color = colors.textMuted,
+                )
+                if (uiState.preserved > 0) {
+                    Text(
+                        text = stringResource(R.string.scan_preserved_legacy, uiState.preserved),
+                        color = colors.textMuted,
+                    )
+                }
                 Spacer(modifier = Modifier.height(16.dp))
                 ScanButton(
                     label = stringResource(R.string.scan_again),
@@ -156,18 +256,55 @@ internal fun scanCompleteSummary(tracks: Int, albums: Int, artists: Int): String
     pluralStringResource(R.plurals.scan_complete_artists, artists, artists),
 )
 
-internal fun launchScan(scope: CoroutineScope, context: Context, onResult: (LibraryScanUiState) -> Unit) {
+internal val libraryScanMutex = Mutex()
+internal val libraryScanState = MutableStateFlow(LibraryScanUiState())
+private var activeLibraryScan: Job? = null
+
+/** All entry points share one scan, rather than queueing duplicate scans. */
+internal fun launchScan(
+    scope: CoroutineScope,
+    context: Context,
+    forceRefresh: Boolean = false,
+    onResult: (LibraryScanUiState) -> Unit,
+): Job =
     scope.launch {
-        onResult(LibraryScanUiState(isScanning = true))
-        onResult(performScan(context) ?: LibraryScanUiState())
+        if (!libraryScanMutex.tryLock()) {
+            onResult(libraryScanState.first { !it.isScanning })
+            return@launch
+        }
+        val progressActive = java.util.concurrent.atomic.AtomicBoolean(true)
+        activeLibraryScan = currentCoroutineContext()[Job]
+        fun publish(state: LibraryScanUiState) {
+            libraryScanState.value = state
+            onResult(state)
+        }
+        publish(LibraryScanUiState(isScanning = true))
+        try {
+            val result = performScan(context, forceRefresh) { count ->
+                scope.launch {
+                    if (progressActive.get()) publish(LibraryScanUiState(isScanning = true, tracks = count))
+                }
+            }
+            progressActive.set(false)
+            publish(result ?: LibraryScanUiState())
+        } finally {
+            progressActive.set(false)
+            activeLibraryScan = null
+            libraryScanMutex.unlock()
+            if (!currentCoroutineContext().isActive) publish(LibraryScanUiState())
+        }
     }
-}
 
 internal fun readMediaPermission(): String =
     if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) Manifest.permission.READ_MEDIA_AUDIO
     else Manifest.permission.READ_EXTERNAL_STORAGE
 
-private suspend fun performScan(context: Context): LibraryScanUiState? = withContext(Dispatchers.IO) {
+internal suspend fun performScan(
+    context: Context,
+    forceRefresh: Boolean = false,
+    onProgress: (Int) -> Unit,
+): LibraryScanUiState? = withContext(Dispatchers.IO) {
+    val scanContext = currentCoroutineContext()
     runCatching {
         val separatorPreferences = TagSeparatorPreferences(context)
         val separators = separatorPreferences.current()
@@ -178,11 +315,25 @@ private suspend fun performScan(context: Context): LibraryScanUiState? = withCon
         )
         val syncStore = LocalLibraryRuntime.libraryStore()
         val filter = ScanFilterPreferences(context).currentFilter()
-        val result: LocalLibraryScanResult = scanner.scan(prior = syncStore.priorScanState(), filter = filter)
+        val prior = syncStore.priorScanState()
+        val result: LocalLibraryScanResult = scanner.scan(
+            prior = prior,
+            filter = filter,
+            onProgress = onProgress,
+            checkCancelled = { scanContext.ensureActive() },
+            forceRefresh = forceRefresh,
+        )
+        scanContext.ensureActive()
+        check(prior.tracksByTrackId.values.none { state ->
+            val root = externalStorageRoot(state.absolutePath)
+            root != null && !File(root).isDirectory
+        }) { "A previously scanned storage volume is unavailable" }
+        val preservedTrackIds = legacyTracksToPreserve(prior.tracksByTrackId, result.snapshot.tracks, filter)
         val written = syncStore.writeLocalLibrary(
             snapshot = result.snapshot,
             audioRows = result.audio,
             artworkRows = result.artwork,
+            preservedTrackIds = preservedTrackIds,
         )
         if (!written) {
             // An empty result (most often an empty whitelist) would have replaced the whole
@@ -194,6 +345,12 @@ private suspend fun performScan(context: Context): LibraryScanUiState? = withCon
             return@runCatching LibraryScanUiState()
         }
         separatorPreferences.setAppliedSignature(separators.signature)
+        if (LocalLibraryRuntime.deezerArtwork.enabled.value) {
+            val artists = result.snapshot.tracks.flatMap { it.artists }
+                .distinctBy { it.id }
+                .map { com.amwolfstein.sistrum.sync.LibraryArtist(id = it.id, name = it.name) }
+            LocalLibraryRuntime.deezerArtwork.refresh(artists)
+        }
         val albums = result.snapshot.tracks.map { it.album.id }.distinct().size
         val artists = result.snapshot.tracks.flatMap { it.artists }.map { it.id }.distinct().size
         LibraryScanUiState(
@@ -201,6 +358,19 @@ private suspend fun performScan(context: Context): LibraryScanUiState? = withCon
             albums = albums,
             artists = artists,
             completed = true,
+            skipped = result.skipped,
+            failed = result.failed,
+            preserved = preservedTrackIds.size,
         )
-    }.onFailure { Log.w("SistrumScan", "Library scan failed", it) }.getOrNull()
+    }.getOrElse {
+        if (it is CancellationException) throw it
+        Log.w("SistrumScan", "Library scan failed", it)
+        LibraryScanUiState(error = true)
+    }
+}
+/** An absent removable storage root cannot authorize removal of its tracks. */
+internal fun externalStorageRoot(path: String): String? {
+    val parts = path.split('/').filter(String::isNotEmpty)
+    if (parts.size < 3 || parts[0] != "storage") return null
+    return if (parts[1] == "emulated") "/storage/emulated/${parts[2]}" else "/storage/${parts[1]}"
 }

@@ -76,6 +76,12 @@ data class LocalTrack(
     /** The file's content advisory marks it explicit (false when absent or clean). */
     val explicit: Boolean = false,
     val schemaVersion: Int = 0,
+    val rawArtist: String = "",
+    val rawAlbumArtist: String = "",
+    val rawComposer: String = "",
+    val rawGenres: List<String> = emptyList(),
+    val sourceMediaId: Long = 0,
+    val contentHash: String = "",
 )
 
 data class LocalLibrarySnapshot(
@@ -113,6 +119,12 @@ object LocalLibraryJson {
         if (track.explicit) put("explicit", true)
         if (track.album.copyright.isNotBlank()) put("copyright", track.album.copyright)
         if (track.schemaVersion > 0) put("schema_version", track.schemaVersion)
+        if (track.sourceMediaId > 0) put("source_media_id", track.sourceMediaId)
+        if (track.contentHash.isNotEmpty()) put("content_hash", track.contentHash)
+        put("raw_artist", track.rawArtist)
+        put("raw_album_artist", track.rawAlbumArtist)
+        put("raw_composer", track.rawComposer)
+        put("raw_genres", buildJsonArray { track.rawGenres.forEach { add(kotlinx.serialization.json.JsonPrimitive(it)) } })
         put("artists", buildJsonArray {
             track.artists.forEachValid { add(it.toJson()) }
         })

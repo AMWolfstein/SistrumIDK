@@ -48,6 +48,7 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.sync.withLock
 import com.amwolfstein.sistrum.sync.LocalLibraryRuntime
 import com.amwolfstein.sistrum.R
 import com.amwolfstein.sistrum.sync.ArtistSeparator
@@ -189,7 +190,7 @@ internal fun TagSeparatorsContent(modifier: Modifier = Modifier) {
                 Text(
                     text = when {
                         scanState.isScanning -> stringResource(R.string.scan_running)
-                        scanState.completed && !needsRescan -> scanCompleteSummary(scanState.tracks, scanState.albums, scanState.artists)
+                        scanState.completed && !needsRescan -> stringResource(R.string.tag_separators_applied)
                         else -> stringResource(R.string.tag_separators_rescan_notice)
                     },
                     color = colors.textMuted,
@@ -199,10 +200,19 @@ internal fun TagSeparatorsContent(modifier: Modifier = Modifier) {
                         label = stringResource(R.string.tag_separators_rescan),
                         variant = SistrumPillButtonVariant.Primary,
                         onClick = {
-                            if (context.checkSelfPermission(readMediaPermission()) == PackageManager.PERMISSION_GRANTED) {
-                                launchScan(scope, context) { scanState = it }
-                            } else {
-                                scanState = LibraryScanUiState(permissionDenied = true)
+                            scope.launch {
+                                scanState = LibraryScanUiState(isScanning = true)
+                                val applied = libraryScanMutex.withLock {
+                                    LocalLibraryRuntime.libraryStore().resplitLocalLibrary(current)
+                                }
+                                if (applied) {
+                                    preferences.setAppliedSignature(current.signature)
+                                    scanState = LibraryScanUiState(completed = true)
+                                } else if (context.checkSelfPermission(readMediaPermission()) == PackageManager.PERMISSION_GRANTED) {
+                                    launchScan(scope, context) { scanState = it }
+                                } else {
+                                    scanState = LibraryScanUiState(permissionDenied = true)
+                                }
                             }
                         },
                         modifier = Modifier.fillMaxWidth(),

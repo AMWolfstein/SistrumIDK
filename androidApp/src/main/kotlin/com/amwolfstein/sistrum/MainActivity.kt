@@ -42,6 +42,7 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.tooling.preview.Preview
+import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.flow
 import kotlinx.coroutines.flow.flowOf
 import kotlinx.coroutines.launch
@@ -162,6 +163,14 @@ class MainActivity : ComponentActivity() {
         super.onCreate(savedInstanceState)
         updateRequestedOrientation(resources.configuration)
         LocalLibraryRuntime.initialize(applicationContext)
+        lifecycleScope.launch {
+            val schedule = com.amwolfstein.sistrum.sync.ScanFilterPreferences(applicationContext).schedule.first()
+            if (schedule == com.amwolfstein.sistrum.sync.ScanSchedule.OnLaunch &&
+                checkSelfPermission(com.amwolfstein.sistrum.ui.screens.readMediaPermission()) == PackageManager.PERMISSION_GRANTED
+            ) {
+                com.amwolfstein.sistrum.ui.screens.launchScan(lifecycleScope, applicationContext) { }
+            }
+        }
         lastFm = AndroidLastFmRuntime.initialize(applicationContext, LocalLibraryRuntime.libraryStore())
         handleLastFmIntent(intent)
         AndroidPlaybackRuntime.initialize(applicationContext, LocalLibraryRuntime.libraryStore())

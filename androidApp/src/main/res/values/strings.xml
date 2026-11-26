@@ -1,4 +1,26 @@
 <resources>
+    <string name="scan_preserved_legacy">Kept %1$d previous tracks pending verification.</string>
+
+    <string name="scan_schedule_failed">Could not change the automatic scan schedule.</string>
+
+    <string name="tag_separators_applied">Tag separators applied.</string>
+
+    <string name="scan_failed">The scan could not finish. Your existing library was kept.</string>
+
+    <string name="scan_diagnostics">Skipped %1$d, failed to read %2$d</string>
+
+    <string name="scan_refresh_metadata">Refresh tags and artwork</string>
+    <string name="scan_rebuild_search">Rebuild search index</string>
+
+    <string name="scan_schedule">Automatic scan</string>
+    <string name="scan_schedule_manual">Manual only</string>
+    <string name="scan_schedule_launch">On launch</string>
+    <string name="scan_schedule_15">Every 15 minutes</string>
+    <string name="scan_schedule_30">Every 30 minutes</string>
+    <string name="scan_schedule_hour">Every hour</string>
+
+    <string name="integration_deezer">Deezer artist artwork</string>
+
     <string name="app_name">Sistrum</string>
     <string name="destination_home">Home</string>
     <string name="home_greeting_morning">Good morning</string>
@@ -71,6 +93,8 @@
     <string name="settings_scan_library">Scan local library</string>
     <string name="scan_title">Scan local library</string>
     <string name="scan_description">Scan device storage to build a local copy of your music library on this phone.</string>
+    <string name="scan_cancel">Cancel scan</string>
+    <string name="scan_progress">Scanned %1$d tracks…</string>
     <string name="scan_running">Scanning your library…</string>
     <!-- Joins scan_complete_tracks, scan_complete_albums and scan_complete_artists. -->
     <string name="scan_complete">%1$s, %2$s, %3$s</string>

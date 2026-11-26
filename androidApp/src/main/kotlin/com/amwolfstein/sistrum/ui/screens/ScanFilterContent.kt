@@ -82,7 +82,15 @@ internal fun ScanFilterContent(modifier: Modifier = Modifier) {
 
     val folderPickerLauncher = rememberLauncherForActivityResult(ActivityResultContracts.StartActivityForResult()) { result ->
         if (result.resultCode == Activity.RESULT_OK) {
-            result.data?.data?.let { uri -> documentTreePath(uri)?.let { path -> setActiveFolders(activeFolders + path) } }
+            result.data?.data?.let { uri ->
+                val flags = result.data?.flags ?: 0
+                if (flags and Intent.FLAG_GRANT_READ_URI_PERMISSION != 0) {
+                    runCatching {
+                        context.contentResolver.takePersistableUriPermission(uri, Intent.FLAG_GRANT_READ_URI_PERMISSION)
+                    }
+                }
+                documentTreePath(uri)?.let { path -> setActiveFolders(activeFolders + path) }
+            }
         }
     }
 

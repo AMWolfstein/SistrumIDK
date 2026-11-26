@@ -10,6 +10,9 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.material3.Switch
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.getValue
+import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import com.amwolfstein.sistrum.sync.LocalLibraryRuntime
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.layout.ContentScale
@@ -38,11 +41,18 @@ internal fun IntegrationContent(
     onLyricsSelected: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
+    val deezer = LocalLibraryRuntime.deezerArtwork
+    val deezerEnabled by deezer.enabled.collectAsStateWithLifecycle()
     Column(modifier = modifier) {
         ActionList(
             items = listOf(
                 ActionListItem(R.string.lastfm_title, onClick = onLastFmSelected),
                 ActionListItem(R.string.lyrics_title, onClick = onLyricsSelected),
+                ActionListItem(
+                    R.string.integration_deezer,
+                    trailingContent = { Switch(checked = deezerEnabled, onCheckedChange = deezer::setEnabled) },
+                    onClick = { deezer.setEnabled(!deezerEnabled) },
+                ),
             ),
             containerStyle = ActionListContainerStyle.Card,
             dividerStyle = ActionListDividerStyle.FullWidth,

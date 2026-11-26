@@ -7,18 +7,24 @@
       "title": "Upgrade the standalone Android library"
     }
   },
-  "next_completion": 9,
+  "next_completion": 10,
   "next_mission": 2,
   "next_tor": 9,
   "tasks": {
     "M001-T001": {
-      "completion": null,
+      "completion": 9,
+      "evidence": {
+        "checks": "DevDebug compile; 449 app unit tests; 41 shared Android host tests; AndroidTest compile; workflow validation and whitespace",
+        "result": "PASS",
+        "reviewer": "Codex",
+        "round": 2
+      },
       "final": false,
       "kind": "T",
       "mission": "M001",
       "nonce": "b9a57d2c226c4027aecb02e7794bc4dc",
       "record": "specs/001-local-library-upgrade/tasks.md",
-      "status": "reserved",
+      "status": "complete",
       "title": "Rebuild local library scanning and metadata maintenance"
     },
     "M001-T002": {

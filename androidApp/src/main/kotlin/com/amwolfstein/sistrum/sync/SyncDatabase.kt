@@ -212,6 +212,8 @@ internal data class PriorTrackScanRow(
     val trackId: String,
     val rawJson: String,
     val sha256: String?,
+    val absolutePath: String?,
+    val size: Long?,
 )
 
 internal data class ArtworkAssetStateRow(
@@ -313,13 +315,22 @@ internal interface SyncDao {
     @Query("SELECT trackId, playCount FROM sync_tracks") suspend fun trackPlayCounts(): List<TrackPlayCountRow>
 
     @Query("""
-        SELECT t.trackId AS trackId, t.rawJson AS rawJson, audio.sha256 AS sha256
+        SELECT t.trackId AS trackId, t.rawJson AS rawJson, audio.sha256 AS sha256, audio.relativePath AS absolutePath, audio.size AS size
         FROM sync_tracks t
         INNER JOIN sync_plans p ON p.planId = t.planId
         LEFT JOIN sync_assets audio ON audio.planId = t.planId AND audio.assetId = ('audio:' || t.trackId)
         WHERE p.active = 1
     """)
     suspend fun activeTrackScanState(): List<PriorTrackScanRow>
+
+    @Query("SELECT * FROM sync_assets WHERE planId IN (SELECT planId FROM sync_plans WHERE active = 1)")
+    suspend fun activeAssets(): List<SyncAssetEntity>
+
+    @Query("SELECT * FROM sync_tracks WHERE planId IN (SELECT planId FROM sync_plans WHERE active = 1) ORDER BY syncOrder")
+    suspend fun activeTrackEntities(): List<SyncTrackEntity>
+
+    @Query("SELECT * FROM sync_playlists WHERE planId = :planId")
+    suspend fun playlistsForPlan(planId: String): List<SyncPlaylistEntity>
 
     @Query("SELECT COUNT(*) FROM sync_tracks t INNER JOIN sync_plans p ON p.planId = t.planId WHERE p.active = 1")
     suspend fun activeTrackCount(): Int
@@ -530,6 +541,7 @@ data class LibraryAnalysisProgress(val analyzedTracks: Int = 0, val totalTracks:
 internal class AndroidLibrarySyncStore(
     private val database: SyncDatabase,
     private val filesDir: File,
+    private val deezerArtwork: DeezerArtwork? = null,
 ) {
     private val dao = database.syncDao()
     private val artworkWrites = Mutex()
@@ -621,11 +633,13 @@ internal class AndroidLibrarySyncStore(
         activeTrackRows,
         artworkAssets,
         dao.observeArtistArtwork(),
-    ) { rows, artworkAssets, stagedArtwork ->
+        deezerArtwork?.paths ?: flowOf(emptyMap()),
+    ) { rows, artworkAssets, stagedArtwork, deezerPaths ->
         val customArtworkArtistIds = stagedArtwork.mapTo(mutableSetOf(), ArtistArtworkStagingEntity::artistId)
         libraryArtistsFrom(rows, artworkAssets.associate { asset ->
             asset.assetId.removePrefix("artwork:") to asset.relativePath
-        } + stagedArtwork.associate { staging -> staging.artistId to staging.relativePath })
+        } + deezerPaths +
+            stagedArtwork.associate { staging -> staging.artistId to staging.relativePath })
             .map { artist -> if (artist.id in customArtworkArtistIds) artist.copy(hasCustomArtwork = true) else artist }
     }.shareIn(snapshotScope, SharingStarted.WhileSubscribed(5_000), replay = 1)
     val albums: Flow<List<LibraryAlbum>> = combine(
@@ -822,11 +836,17 @@ internal class AndroidLibrarySyncStore(
 
     suspend fun priorScanState(): PriorLibraryScanState {
         val tracksByTrackId = dao.activeTrackScanState().mapNotNull { row ->
-            val sha256 = row.sha256 ?: return@mapNotNull null
+            val sha256 = row.sha256.orEmpty()
             val json = runCatching { LibraryJson.json.parseToJsonElement(row.rawJson) as? JsonObject }.getOrNull()
                 ?: return@mapNotNull null
             row.trackId to PriorTrackScanState(
                 identityHash = sha256,
+                absolutePath = row.absolutePath.orEmpty(),
+                sourceMediaId = json.string("source_media_id")?.toLongOrNull() ?: 0,
+                contentHash = json.string("content_hash").orEmpty(),
+                title = json.string("title").orEmpty(),
+                durationMillis = json.string("duration")?.toLongOrNull() ?: 0,
+                size = row.size ?: 0,
                 schemaVersion = json.int("schema_version"),
                 year = json.int("year"),
                 releaseDate = json.string("release_date").orEmpty(),
@@ -848,6 +868,28 @@ internal class AndroidLibrarySyncStore(
         return PriorLibraryScanState(tracksByTrackId, artworkByArtworkKey)
     }
 
+    /** Rebuild the active search index from its stored library rows. */
+    suspend fun rebuildLocalSearch(): Boolean = database.withTransaction {
+        val tracks = dao.activeTrackEntities()
+        if (tracks.isEmpty()) return@withTransaction false
+        val planId = tracks.first().planId
+        dao.deleteSearchDocuments(planId)
+        dao.insertSearchDocuments(searchDocumentsFor(planId, tracks, dao.playlistsForPlan(planId)))
+        true
+    }
+
+    /** Apply separator changes from the raw tags without reopening audio files. */
+    suspend fun resplitLocalLibrary(settings: TagSeparatorSettings): Boolean = database.withTransaction {
+        val tracks = dao.activeTrackEntities()
+        if (tracks.isEmpty()) return@withTransaction false
+        val updated = tracks.map { resplitLocalTrack(it, settings) ?: return@withTransaction false }
+        val planId = updated.first().planId
+        dao.insertTracks(updated)
+        dao.deleteSearchDocuments(planId)
+        dao.insertSearchDocuments(searchDocumentsFor(planId, updated, dao.playlistsForPlan(planId)))
+        true
+    }
+
     /**
      * Replaces the active library with a locally scanned [snapshot] in one transaction:
      * a fresh `local-<uuid>` plan is written (assets, tracks, search index), activated,
@@ -859,11 +901,27 @@ internal class AndroidLibrarySyncStore(
         snapshot: LocalLibrarySnapshot,
         audioRows: Map<String, LocalScanAudio>,
         artworkRows: List<LocalScanArtwork>,
+        preservedTrackIds: Set<String> = emptySet(),
     ): Boolean {
         val planId = "local-${UUID.randomUUID()}"
-        val artworkKeys = artworkRows.mapTo(mutableSetOf(), LocalScanArtwork::artworkKey)
         val written = database.withTransaction {
             if (snapshot.tracks.isEmpty() && dao.activeTrackCount() > 0) return@withTransaction null
+            val oldTracks = if (preservedTrackIds.isEmpty()) emptyList()
+                else dao.activeTrackEntities().filter { it.trackId in preservedTrackIds }
+            val preservedAssetIds = oldTracks.flatMapTo(mutableSetOf()) { track ->
+                val root = runCatching { LibraryJson.json.parseToJsonElement(track.rawJson) as? JsonObject }.getOrNull()
+                val artistIds = (root?.get("artists") as? JsonArray).orEmpty().mapNotNull { value ->
+                    (value as? JsonObject)?.string("id")?.let { "artwork:artist-local:$it" }
+                }
+                listOfNotNull("audio:${track.trackId}", track.artworkKey?.let(::artworkAssetId)) + artistIds
+            }
+            val newAssetIds = audioRows.keys.mapTo(mutableSetOf()) { "audio:$it" } +
+                artworkRows.map { artworkAssetId(it.artworkKey) }
+            val oldAssets = if (oldTracks.isEmpty()) emptyList() else dao.activeAssets()
+                .filter { it.assetId in preservedAssetIds && it.assetId !in newAssetIds }
+            val artworkKeys = artworkRows.mapTo(mutableSetOf(), LocalScanArtwork::artworkKey).apply {
+                oldAssets.filter { it.kind == "artwork" }.forEach { add(artworkKeyOfAssetId(it.assetId)) }
+            }
             dao.insertPlan(SyncPlanEntity(planId, LocalLibraryOwnerId, localLibraryManifest(planId), "staging", false))
             val playCounts = dao.trackPlayCounts().associate { it.trackId to it.playCount }
             dao.insertAssets(buildList {
@@ -873,6 +931,7 @@ internal class AndroidLibrarySyncStore(
                 artworkRows.forEach { row ->
                     add(SyncAssetEntity(planId, artworkAssetId(row.artworkKey), "artwork", row.sha256, row.size, row.relativePath))
                 }
+                addAll(oldAssets.map { it.copy(planId = planId) })
             })
             val trackEntities = snapshot.tracks.mapIndexed { index, track ->
                 // MediaStore has no per-track play count column; keep the
@@ -895,9 +954,13 @@ internal class AndroidLibrarySyncStore(
                     rawJson = LocalLibraryJson.trackDocumentJson(effectiveTrack),
                 )
             }
-            dao.insertTracks(trackEntities)
+            val preservedTracks = oldTracks.mapIndexed { index, track ->
+                track.copy(planId = planId, syncOrder = snapshot.tracks.size + index)
+            }
+            val allTracks = trackEntities + preservedTracks
+            dao.insertTracks(allTracks)
             dao.deleteSearchDocuments(planId)
-            dao.insertSearchDocuments(searchDocumentsFor(planId, trackEntities, emptyList()))
+            dao.insertSearchDocuments(searchDocumentsFor(planId, allTracks, emptyList()))
             dao.deactivatePlans()
             dao.activatePlan(planId)
             val active = dao.assetPaths(planId).toSet()
@@ -1159,14 +1222,8 @@ internal fun libraryArtistsFrom(
             } ?: candidate
         }
     }
-    // Manually staged artist artwork (set locally by the user) wins as a fallback
-    // when no per-track artwork key resolved; it is keyed by the artist id.
-    return artists.map { (_, artist) ->
-        if (artist.artworkPath == null) {
-            artworkPaths[artist.id]?.let { path -> artist.copy(artworkPath = path) } ?: artist
-        } else {
-            artist
-        }
+    return artists.map { (id, artist) ->
+        artist.copy(artworkPath = artworkPaths[id] ?: artworkPaths["artist-local:$id"] ?: artist.artworkPath)
     }
 }
 
@@ -1342,6 +1399,39 @@ private fun JsonObject.arraySortNames(name: String): String = ((this[name] as? J
 private fun LibraryTrackRow.metadataObject(): JsonObject? = runCatching {
     LibraryJson.json.parseToJsonElement(rawJson) as? JsonObject
 }.getOrNull()
+
+internal fun resplitLocalTrack(track: SyncTrackEntity, settings: TagSeparatorSettings): SyncTrackEntity? {
+    val root = runCatching { LibraryJson.json.parseToJsonElement(track.rawJson) as? JsonObject }.getOrNull()
+        ?: return null
+    val rawArtist = root.string("raw_artist") ?: return null
+    val rawAlbumArtist = root.string("raw_album_artist") ?: return null
+    val rawComposer = root.string("raw_composer") ?: return null
+    val rawGenres = (root["raw_genres"] as? JsonArray)?.mapNotNull { (it as? JsonPrimitive)?.contentOrNull }
+        ?: return null
+
+    fun refs(values: List<Pair<String, String>>): JsonArray = JsonArray(
+        values.filter { it.second.isNotBlank() }.map { (id, name) ->
+            JsonObject(mapOf("id" to JsonPrimitive(id), "name" to JsonPrimitive(name)))
+        },
+    )
+    val artists = localArtistsOf(rawArtist, settings)
+    val updatedRoot = JsonObject(root + mapOf(
+        "artists" to refs(artists.map { it.id to it.name }),
+        "album_artists" to refs(localArtistsOf(rawAlbumArtist, settings).map { it.id to it.name }),
+        "composers" to refs(localComposersOf(rawComposer, settings).map { it.id to it.name }),
+        "genres" to JsonArray(localGenresOf(rawGenres, settings).map { genre ->
+            JsonObject(mapOf(
+                "id" to JsonPrimitive(genre.id),
+                "name" to JsonPrimitive(genre.name),
+                "normalization_key" to JsonPrimitive(genre.name.trim().lowercase()),
+            ))
+        }),
+    ))
+    return track.copy(
+        artists = trackDisplayArtists(artists.map { it.name }.filter(String::isNotBlank).joinToString(", ")),
+        rawJson = LibraryJson.json.encodeToString(updatedRoot),
+    )
+}
 
 private fun searchDocumentsFor(
     planId: String,

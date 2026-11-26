@@ -43,13 +43,34 @@ class LibraryArtistMapperTest {
     }
 
     @Test
-    fun keepsManifestArtworkOverStagedArtistFallback() {
+    fun keepsUserSelectedArtworkOverManifestArtwork() {
         val artists = libraryArtistsFrom(
             tracks = listOf(row("""{"artists":[{"id":"a","name":"Artist A","artwork_key":"artist-a"}]}""")),
             artworkPaths = mapOf("a" to "artist-artwork/staged.jpg", "artist-a" to "artwork/a.jpg"),
         )
 
-        assertEquals("artwork/a.jpg", artists.single().artworkPath)
+        assertEquals("artist-artwork/staged.jpg", artists.single().artworkPath)
+    }
+
+    @Test
+    fun localArtistArtworkKeepsUserSelectedArtworkFirst() {
+        val tracks = listOf(row("""{"artists":[{"id":"a","name":"Artist A"}]}""").copy(id = "local:1"))
+        val localArt = "artwork/latest-song.jpg"
+        assertEquals(localArt, libraryArtistsFrom(tracks, mapOf("artist-local:a" to localArt)).single().artworkPath)
+        assertEquals(
+            "artist-artwork/custom.jpg",
+            libraryArtistsFrom(
+                tracks,
+                mapOf("artist-local:a" to localArt, "a" to "artist-artwork/custom.jpg"),
+            ).single().artworkPath,
+        )
+    }
+
+    @Test
+    fun validatesReleaseDateAndUsesYearOrDateAddedForFallback() {
+        assertEquals("2024-03-01", artistArtworkDate("2024-03", 0, "2025-02-01"))
+        assertEquals("2023-01-01", artistArtworkDate("invalid", 2023, "2025-02-01"))
+        assertEquals("2025-02-01", artistArtworkDate("2024-19-33", 0, "2025-02-01"))
     }
 
     @Test

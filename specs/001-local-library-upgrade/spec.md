@@ -49,7 +49,7 @@ Source folder, track identity, original tag snapshot, analysis result and status
 
 - A second scan of unchanged content reuses its cached metadata. Changing separators on current rows leaves the source files untouched and search reflects the new splits.
 - An existing library keeps its user data through upgrade, cancel, and temporary loss of source access. Unambiguous moved files keep their library IDs.
-- With Deezer off, a scan sends no Deezer requests and shows the latest local song’s artwork when available. Enabling Deezer allows the next scan to update a matched artist’s picture, including an existing cached picture. The picture remains available offline while Deezer is enabled. User-selected pictures retain priority.
+- With Deezer off, a scan sends no Deezer requests and shows any cached Deezer picture, otherwise the latest local song’s artwork when available. Enabling Deezer allows the next scan to update a matched artist’s picture, including an existing cached picture. The cached picture remains visible offline and after Deezer is turned off or the app restarts. User-selected pictures retain priority.
 - A locally analyzed test library can use track normalization and start and refill Mood Radio without desktop data.
 - A UTF-8 playlist round trip preserves resolved entry order and reports unresolved entries. Supported file edits survive a rescan.
 - Library and appearance preferences survive a restart. Local artwork animation, existing navigation and RTL pass regression checks.

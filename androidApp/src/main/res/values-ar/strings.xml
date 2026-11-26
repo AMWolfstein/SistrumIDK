@@ -1,4 +1,26 @@
 <resources>
+    <string name="scan_preserved_legacy">تم الاحتفاظ بـ%1$d أغنية سابقة لحين التحقق.</string>
+
+    <string name="scan_schedule_failed">تعذر تغيير موعد الفحص التلقائي.</string>
+
+    <string name="tag_separators_applied">تم تطبيق فواصل البيانات.</string>
+
+    <string name="scan_failed">تعذر إكمال الفحص. تم الاحتفاظ بالمكتبة الحالية.</string>
+
+    <string name="scan_diagnostics">تم تخطي %1$d، وتعذرت قراءة %2$d</string>
+
+    <string name="scan_refresh_metadata">تحديث بيانات الأغاني والأغلفة</string>
+    <string name="scan_rebuild_search">إعادة بناء فهرس البحث</string>
+
+    <string name="scan_schedule">الفحص التلقائي</string>
+    <string name="scan_schedule_manual">يدوي فقط</string>
+    <string name="scan_schedule_launch">عند فتح التطبيق</string>
+    <string name="scan_schedule_15">كل ١٥ دقيقة</string>
+    <string name="scan_schedule_30">كل ٣٠ دقيقة</string>
+    <string name="scan_schedule_hour">كل ساعة</string>
+
+    <string name="integration_deezer">صور الفنانين من Deezer</string>
+
     <string name="app_name">Sistrum</string>
     <string name="destination_home">الرئيسية</string>
     <string name="home_greeting_morning">صباح الخير</string>
@@ -83,6 +105,8 @@
     <string name="settings_scan_library">فحص المكتبة</string>
     <string name="scan_title">فحص المكتبة</string>
     <string name="scan_description">افحص وحدة تخزين الجهاز لإنشاء نسخة محلية من مكتبتك الموسيقية على هذا الهاتف.</string>
+    <string name="scan_cancel">إلغاء الفحص</string>
+    <string name="scan_progress">تم فحص %1$d أغنية…</string>
     <string name="scan_running">جارٍ فحص مكتبتك…</string>
     <string name="scan_complete">%1$s، %2$s، %3$s</string>
     <plurals name="scan_complete_tracks">

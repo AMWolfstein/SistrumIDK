@@ -10,6 +10,15 @@ import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.map
 
 private val Context.scanFilterPreferencesDataStore by preferencesDataStore(name = "scan_filter")
+internal enum class ScanSchedule(val intervalMillis: Long?) {
+    Manual(null),
+    OnLaunch(null),
+    FifteenMinutes(15 * 60_000L),
+    ThirtyMinutes(30 * 60_000L),
+    Hourly(60 * 60_000L),
+}
+
+private val ScanScheduleKey = stringPreferencesKey("schedule")
 private val ScanModeKey = stringPreferencesKey("mode")
 private val WhitelistedFoldersKey = stringSetPreferencesKey("whitelisted_folders")
 private val BlacklistedFoldersKey = stringSetPreferencesKey("blacklisted_folders")
@@ -23,6 +32,16 @@ internal class ScanFilterPreferences(private val context: Context) {
             whitelistedFolders = preferences[WhitelistedFoldersKey].orEmpty(),
             blacklistedFolders = preferences[BlacklistedFoldersKey].orEmpty(),
         )
+    }
+
+    val schedule: Flow<ScanSchedule> = context.scanFilterPreferencesDataStore.data.map { preferences ->
+        preferences[ScanScheduleKey]?.let { raw -> runCatching { ScanSchedule.valueOf(raw) }.getOrNull() }
+            ?: ScanSchedule.Manual
+    }
+
+    suspend fun setSchedule(value: ScanSchedule) {
+        scheduleLibraryScan(context, value)
+        context.scanFilterPreferencesDataStore.edit { it[ScanScheduleKey] = value.name }
     }
 
     suspend fun currentFilter(): MediaScanFilter = filter.first()

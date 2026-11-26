@@ -8,3 +8,4 @@
 - TOR006 — Port selected SistrumKotlin fixes and Android features
 - TOR007 — Port SistrumKotlin Android features and localization
 - TOR008 — Rebrand Android as Sistrum V0.1.0
+- M001-T001 — Rebuild local library scanning and metadata maintenance

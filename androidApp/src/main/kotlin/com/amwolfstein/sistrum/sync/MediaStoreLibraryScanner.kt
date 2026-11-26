@@ -11,6 +11,7 @@ import android.net.Uri
 import android.os.Build
 import android.os.ext.SdkExtensions
 import android.provider.MediaStore
+import android.provider.DocumentsContract
 import android.util.Log
 import android.util.Size
 import java.io.File
@@ -60,6 +61,8 @@ internal data class LocalLibraryScanResult(
     val snapshot: LocalLibrarySnapshot,
     val audio: Map<String, LocalScanAudio>,
     val artwork: List<LocalScanArtwork>,
+    val skipped: Int = 0,
+    val failed: Int = 0,
 )
 
 /** A previously scanned track's identity/metadata, read back before a rescan so
@@ -76,6 +79,12 @@ internal data class PriorTrackScanState(
     val explicit: Boolean = false,
     /** The codec [MediaStoreLibraryScanner] sniffed for this file (see realCodec). */
     val codec: String = "",
+    val absolutePath: String = "",
+    val sourceMediaId: Long = 0,
+    val contentHash: String = "",
+    val title: String = "",
+    val durationMillis: Long = 0,
+    val size: Long = 0,
 )
 
 /** A previously copied album artwork file, read back so unchanged albums skip
@@ -112,11 +121,20 @@ internal class MediaStoreLibraryScanner(
     fun scan(
         prior: PriorLibraryScanState = PriorLibraryScanState(),
         filter: MediaScanFilter = MediaScanFilter(),
+        onProgress: (Int) -> Unit = {},
+        checkCancelled: () -> Unit = {},
+        forceRefresh: Boolean = false,
     ): LocalLibraryScanResult {
         val genresByTrack = genresByTrackId()
         val audio = linkedMapOf<String, LocalScanAudio>()
         val tracks = mutableListOf<LocalTrack>()
         val albumRepresentatives = linkedMapOf<String, AlbumArtworkCandidate>()
+        var skipped = 0
+        var failed = 0
+        val priorByMediaId = prior.tracksByTrackId.entries.mapNotNull { (id, state) ->
+            val mediaId = state.sourceMediaId.takeIf { it > 0 } ?: id.removePrefix("local:").toLongOrNull()
+            mediaId?.let { it to (id to state) }
+        }.toMap()
 
         queryWithAudioFormatFallback(deviceHasAudioFormatColumns()) { projection ->
             contentResolver.query(
@@ -135,12 +153,21 @@ internal class MediaStoreLibraryScanner(
             fun tag(name: String): String? = mediaStoreTagValue(text(name))
 
             while (cursor.moveToNext()) {
-                val mediaId = number(ColumnId) ?: continue
-                val data = text(ColumnData) ?: continue
-                if (!filter.allows(data)) continue
-                val title = text(ColumnTitle) ?: ""
-                if (title.isBlank()) continue
-                val trackId = "local:$mediaId"
+                checkCancelled()
+                val id = number(ColumnId)
+                val path = text(ColumnData)
+                val name = text(ColumnTitle)
+                if (isNewIncompleteMediaRow(id, path, name, priorByMediaId.keys)) {
+                    skipped++
+                    continue
+                }
+                val (mediaId, data, title) = requireCompleteMediaRow(id, path, name)
+                if (!filter.allows(data)) {
+                    skipped++
+                    continue
+                }
+                val previous = priorByMediaId[mediaId]
+                val priorTrack = previous?.second
                 val artistName = tag(ColumnArtist) ?: ""
                 val albumArtistName = tag(ColumnAlbumArtist) ?: artistName
                 val albumName = tag(ColumnAlbum) ?: ""
@@ -152,14 +179,34 @@ internal class MediaStoreLibraryScanner(
                 val mime = text(ColumnMimeType) ?: ""
 
                 val newIdentityHash = identityHash("$data|$size|$dateModified")
-                val priorTrack = prior.tracksByTrackId[trackId]
                 // Skip re-parsing embedded tags (the expensive file-read work) when the
                 // file itself hasn't changed and it was already parsed at the current
                 // schema version; otherwise a bumped schema forces one full re-parse so
                 // newly added fields get backfilled without a manual rescan.
-                val unchanged = priorTrack != null &&
+                val unchanged = !forceRefresh && priorTrack != null &&
                     priorTrack.identityHash == newIdentityHash &&
                     priorTrack.schemaVersion >= CurrentMetadataSchemaVersion
+                val contentHash = if (unchanged && priorTrack?.contentHash?.isNotBlank() == true) {
+                    priorTrack.contentHash
+                } else {
+                    try {
+                        fileSha256(File(data), checkCancelled)
+                    } catch (cancelled: java.util.concurrent.CancellationException) {
+                        throw cancelled
+                    } catch (_: Exception) {
+                        failed++
+                        ""
+                    }
+                }
+                val sourceReused = priorTrack != null &&
+                    (priorTrack.absolutePath.isBlank() ||
+                        (priorTrack.absolutePath != data &&
+                            (priorTrack.contentHash.isBlank() || contentHash.isBlank() || priorTrack.contentHash != contentHash)))
+                val trackId = when {
+                    sourceReused -> "local:$mediaId:${identityHash(data).take(16)}"
+                    previous != null -> previous.first
+                    else -> "local:$mediaId"
+                }
                 val embeddedTags = if (unchanged) null else EmbeddedTagReader.embeddedTrackTags(data)
                 val year = if (unchanged) priorTrack.year else embeddedTags?.year ?: 0
                 val releaseDate = if (unchanged) priorTrack.releaseDate else embeddedTags?.releaseDate.orEmpty()
@@ -221,7 +268,7 @@ internal class MediaStoreLibraryScanner(
                     bitDepth = number(ColumnBitsPerSample)?.toInt() ?: 0,
                     // Sniffing an M4A's codec opens the file with MediaExtractor; an
                     // unchanged file keeps the codec found last time.
-                    codec = reusableCodec(priorTrack, newIdentityHash) ?: realCodec(format, mime, data),
+                    codec = (if (forceRefresh) null else reusableCodec(priorTrack, newIdentityHash)) ?: realCodec(format, mime, data),
                     fileSize = size,
                     releaseDate = releaseDate,
                     bpm = bpm,
@@ -229,7 +276,14 @@ internal class MediaStoreLibraryScanner(
                     isrc = isrc,
                     explicit = explicit,
                     schemaVersion = CurrentMetadataSchemaVersion,
+                    rawArtist = artistName,
+                    rawAlbumArtist = albumArtistName,
+                    rawComposer = tag(ColumnComposer).orEmpty(),
+                    rawGenres = genresByTrack[mediaId].orEmpty(),
+                    sourceMediaId = mediaId,
+                    contentHash = contentHash,
                 )
+                if (tracks.size % 32 == 0) onProgress(tracks.size)
             }
         } ?: error("MediaStore audio query returned no cursor")
 
@@ -240,6 +294,7 @@ internal class MediaStoreLibraryScanner(
             albumRepresentatives.map { (key, candidate) ->
                 artworkPool.submit(Callable { copyArtworkOrReuse(key, candidate, prior.artworkByArtworkKey[albumArtworkKey(key)]) })
             }.mapNotNull { future ->
+                checkCancelled()
                 try {
                     future.get()
                 } catch (e: ExecutionException) {
@@ -249,7 +304,35 @@ internal class MediaStoreLibraryScanner(
         } finally {
             artworkPool.shutdownNow()
         }
-        val sorted = tracks.sortedWith(
+        // Select artwork from each artist's latest actual track. Album artwork is
+        // cached separately and can have a different representative track.
+        val artistTracks = linkedMapOf<String, MutableList<LocalTrack>>()
+        tracks.forEach { track ->
+            track.artists.forEach { artist -> artistTracks.getOrPut(artist.id) { mutableListOf() }.add(track) }
+        }
+        val artistArtwork = artistTracks.mapNotNull { (artistId, candidates) ->
+            checkCancelled()
+            val sortedCandidates = artistArtworkCandidates(candidates)
+            sortedCandidates.firstNotNullOfOrNull { track ->
+                val path = audio[track.id]?.absolutePath ?: return@firstNotNullOfOrNull null
+                val mediaId = track.sourceMediaId.takeIf { it > 0 } ?: return@firstNotNullOfOrNull null
+                copyArtwork(
+                    albumKey = "",
+                    mediaUri = ContentUris.withAppendedId(MediaStore.Audio.Media.EXTERNAL_CONTENT_URI, mediaId),
+                    absolutePath = path,
+                    artworkKey = "artist-local:$artistId",
+                    songOnly = true,
+                )
+            } ?: sortedCandidates.filter { track -> track.albumArtists.any { it.id == artistId } }.firstNotNullOfOrNull { track ->
+                val path = audio[track.id]?.absolutePath ?: return@firstNotNullOfOrNull null
+                folderArtistArtwork(path, "artist-local:$artistId")
+            }
+        }
+        val movedIds = movedTrackIds(tracks, prior.tracksByTrackId)
+        val remappedTracks = tracks.map { track -> movedIds[track.id]?.let { track.copy(id = it) } ?: track }
+        val remappedAudio = audio.mapKeys { (id, _) -> movedIds[id] ?: id }
+            .mapValues { (id, value) -> value.copy(trackId = id) }
+        val sorted = remappedTracks.sortedWith(
             compareBy<LocalTrack> { it.album.title.lowercase() }
                 .thenBy { it.discNumber }
                 .thenBy { it.trackNumber }
@@ -257,8 +340,10 @@ internal class MediaStoreLibraryScanner(
         )
         return LocalLibraryScanResult(
             snapshot = LocalLibrarySnapshot(scannedAtMillis = System.currentTimeMillis(), tracks = sorted),
-            audio = audio,
-            artwork = artwork,
+            audio = remappedAudio,
+            artwork = artwork + artistArtwork,
+            skipped = skipped,
+            failed = failed,
         )
     }
 
@@ -355,14 +440,23 @@ internal class MediaStoreLibraryScanner(
         return copyArtwork(albumKey, candidate.mediaUri, candidate.absolutePath)
     }
 
-    private fun copyArtwork(albumKey: String, mediaUri: Uri, absolutePath: String): LocalScanArtwork? {
+    private fun copyArtwork(
+        albumKey: String,
+        mediaUri: Uri,
+        absolutePath: String,
+        artworkKey: String = albumArtworkKey(albumKey),
+        songOnly: Boolean = false,
+    ): LocalScanArtwork? {
         // Prefer the file's own tag bytes (some MediaStore providers return a
         // generic generated thumbnail instead of FLAC/ID3 embedded art), then
         // MediaStore's embedded picture, then a generated representative.
         val bitmap = embeddedArtworkFromFile(absolutePath)
-            ?: embeddedArtwork(mediaUri)
-            ?: generatedArtwork(mediaUri)
+            ?: (if (songOnly) embeddedArtworkFromMedia(mediaUri) else embeddedArtwork(mediaUri) ?: generatedArtwork(mediaUri))
             ?: return null
+        return saveArtwork(bitmap, artworkKey)
+    }
+
+    private fun saveArtwork(bitmap: Bitmap, artworkKey: String): LocalScanArtwork? {
         var temporary: File? = null
         try {
             artworkDir.mkdirs()
@@ -375,7 +469,7 @@ internal class MediaStoreLibraryScanner(
             val file = File(artworkDir, "$hash.jpg")
             if (!file.isFile) check(pending.renameTo(file)) { "Unable to save album artwork" }
             return LocalScanArtwork(
-                artworkKey = albumArtworkKey(albumKey),
+                artworkKey = artworkKey,
                 relativePath = "artwork/${file.name}",
                 sha256 = hash,
                 size = size,
@@ -386,6 +480,54 @@ internal class MediaStoreLibraryScanner(
         }
     }
 
+    /** Look for a granted artist image beside the track and in its parent folder. */
+    private fun folderArtistArtwork(trackPath: String, artworkKey: String): LocalScanArtwork? {
+        val directory = File(trackPath).parentFile ?: return null
+        val folders = listOfNotNull(directory, directory.parentFile)
+        for (folder in folders) {
+            for (name in listOf("artist.jpg", "artist.jpeg", "artist.png")) {
+                val path = File(folder, name).absolutePath
+                val bytes = readGrantedFolderImage(path) ?: continue
+                val bitmap = decodeSampled(bytes, ArtworkTargetPx) ?: continue
+                return saveArtwork(bitmap, artworkKey)
+            }
+        }
+        return null
+    }
+
+    private fun readGrantedFolderImage(path: String): ByteArray? {
+        for (permission in contentResolver.persistedUriPermissions) {
+            if (!permission.isReadPermission) continue
+            val tree = permission.uri
+            if (tree.authority != "com.android.externalstorage.documents") continue
+            val treeId = runCatching { DocumentsContract.getTreeDocumentId(tree) }.getOrNull() ?: continue
+            val volume = treeId.substringBefore(':')
+            val relative = treeId.substringAfter(':', "")
+            val base = if (volume == "primary") "/storage/emulated/0" else "/storage/$volume"
+            val rootPath = File(base, relative).absolutePath.trimEnd('/')
+            if (!path.startsWith("$rootPath/")) continue
+            val child = path.removePrefix("$rootPath/")
+            val parentId = treeId.trimEnd('/')
+            val separator = if (parentId.endsWith(":")) "" else "/"
+            val documentId = parentId + separator + child
+            val document = DocumentsContract.buildDocumentUriUsingTree(tree, documentId)
+            val bytes = runCatching {
+                contentResolver.openInputStream(document)?.use { input ->
+                    val output = java.io.ByteArrayOutputStream()
+                    val buffer = ByteArray(8192)
+                    while (output.size() <= 10 * 1024 * 1024) {
+                        val count = input.read(buffer)
+                        if (count < 0) break
+                        output.write(buffer, 0, count)
+                    }
+                    output.toByteArray()
+                }
+            }.getOrNull() ?: continue
+            if (bytes.size <= 10 * 1024 * 1024) return bytes
+        }
+        return null
+    }
+
     /** A 1x1 request returns the file's embedded artwork without scaling, or fails when absent. */
     private fun embeddedArtwork(mediaUri: Uri): Bitmap? {
         if (Build.VERSION.SDK_INT < Build.VERSION_CODES.Q) return null
@@ -393,6 +535,16 @@ internal class MediaStoreLibraryScanner(
             contentResolver.loadThumbnail(mediaUri, EmbeddedThumbnailRequestSize, null)
         }.getOrNull()?.takeIf { it.width > 1 && it.height > 1 }
     }
+
+    /** MediaMetadataRetriever returns actual embedded picture bytes, not generated thumbnails. */
+    private fun embeddedArtworkFromMedia(mediaUri: Uri): Bitmap? = runCatching {
+        contentResolver.openFileDescriptor(mediaUri, "r")?.use { descriptor ->
+            MediaMetadataRetriever().use { retriever ->
+                retriever.setDataSource(descriptor.fileDescriptor)
+                retriever.embeddedPicture?.let { decodeSampled(it, ArtworkTargetPx) }
+            }
+        }
+    }.getOrNull()
 
     /** Reads FLAC METADATA_BLOCK_PICTURE / ID3 APIC bytes directly from the audio file. */
     private fun embeddedArtworkFromFile(path: String): Bitmap? =
@@ -568,6 +720,75 @@ internal fun reusableAlbumArtwork(artworkDir: File, albumKey: String, prior: Pri
     return LocalScanArtwork(albumArtworkKey(albumKey), prior.relativePath, prior.sha256, prior.size)
 }
 
+/** A new incomplete row has no existing library data to remove. */
+internal fun isNewIncompleteMediaRow(id: Long?, path: String?, title: String?, knownIds: Set<Long>): Boolean =
+    id != null && id !in knownIds && (path.isNullOrBlank() || title.isNullOrBlank())
+
+/** A partial MediaStore row cannot establish that an existing source was removed. */
+internal fun requireCompleteMediaRow(id: Long?, path: String?, title: String?): Triple<Long, String, String> {
+    require(id != null && !path.isNullOrBlank() && !title.isNullOrBlank()) { "Incomplete MediaStore audio row" }
+    return Triple(id, path, title)
+}
+
+/** Keep only legacy rows with a plausible unverified move among newly discovered files. */
+internal fun legacyTracksToPreserve(
+    prior: Map<String, PriorTrackScanState>,
+    current: List<LocalTrack>,
+    filter: MediaScanFilter,
+): Set<String> {
+    val currentIds = current.mapTo(mutableSetOf()) { it.id }
+    if (current.isEmpty()) return emptySet()
+    return prior.filter { (id, old) ->
+        id !in currentIds && old.contentHash.isBlank() &&
+            (old.absolutePath.isBlank() || filter.allows(old.absolutePath)) &&
+            current.any { candidate ->
+                old.title.isBlank() || old.durationMillis <= 0 || old.size <= 0 ||
+                    (old.title.trim().equals(candidate.title.trim(), ignoreCase = true) &&
+                        old.durationMillis == candidate.durationMillis &&
+                        old.size == candidate.fileSize)
+            }
+    }.keys
+}
+
+/** Match moved files only when a full content digest is unique on both sides. */
+internal fun movedTrackIds(
+    tracks: List<LocalTrack>,
+    prior: Map<String, PriorTrackScanState>,
+): Map<String, String> {
+    val currentIds = tracks.mapTo(mutableSetOf()) { it.id }
+    val oldByHash = prior.entries.filter { it.value.contentHash.isNotBlank() }.groupBy { it.value.contentHash }
+    val newByHash = tracks.filter { it.contentHash.isNotBlank() }.groupBy { it.contentHash }
+    return tracks.mapNotNull { track ->
+        if (track.id in prior || track.contentHash.isBlank()) return@mapNotNull null
+        val old = oldByHash[track.contentHash]?.singleOrNull() ?: return@mapNotNull null
+        if (old.key in currentIds || newByHash[track.contentHash]?.size != 1) return@mapNotNull null
+        track.id to old.key
+    }.toMap()
+}
+
+internal fun artistArtworkCandidates(tracks: List<LocalTrack>): List<LocalTrack> =
+    tracks.sortedWith(
+        compareByDescending<LocalTrack> { artistArtworkDate(it.releaseDate, it.album.year, it.addedAt) }
+            .thenByDescending { it.addedAt }
+            .thenByDescending { it.id },
+    )
+
+/** Chronological release date, with MediaStore's added date as a fallback. */
+internal fun artistArtworkDate(releaseDate: String, year: Int, addedAt: String): String {
+    val value = releaseDate.trim()
+    val parsed = runCatching {
+        when (value.length) {
+            4 -> java.time.Year.parse(value).atDay(1)
+            7 -> java.time.YearMonth.parse(value).atDay(1)
+            10 -> java.time.LocalDate.parse(value)
+            else -> null
+        }
+    }.getOrNull()
+    return parsed?.toString()
+        ?: year.takeIf { it in 1..9999 }?.let { java.time.Year.of(it).atDay(1).toString() }
+        ?: addedAt
+}
+
 internal fun albumKey(mediaStoreAlbumId: Long?, albumArtist: String, album: String): String =
     mediaStoreAlbumId?.takeIf { it != 0L }?.toString() ?: sha256Hex("$albumArtist|$album").take(12)
 
@@ -610,10 +831,11 @@ internal fun sha256Hex(value: String): String = MessageDigest.getInstance("SHA-2
     .digest(value.encodeToByteArray())
     .joinToString("") { byte -> "%02x".format(byte) }
 
-internal fun fileSha256(file: File): String = file.inputStream().use { input ->
+internal fun fileSha256(file: File, checkCancelled: () -> Unit = {}): String = file.inputStream().use { input ->
     val digest = MessageDigest.getInstance("SHA-256")
     val buffer = ByteArray(DEFAULT_BUFFER_SIZE * 8)
     while (true) {
+        checkCancelled()
         val read = input.read(buffer)
         if (read < 0) break
         if (read > 0) digest.update(buffer, 0, read)

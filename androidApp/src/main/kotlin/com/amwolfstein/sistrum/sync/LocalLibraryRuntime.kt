@@ -8,11 +8,14 @@ import android.content.Context
 internal object LocalLibraryRuntime {
     private lateinit var store: AndroidLibrarySyncStore
     private lateinit var appContext: Context
+    internal lateinit var deezerArtwork: DeezerArtwork
+        private set
 
     fun initialize(context: Context) {
         if (::appContext.isInitialized) return
         appContext = context.applicationContext
-        store = AndroidLibrarySyncStore(SyncDatabase.create(appContext), appContext.filesDir)
+        deezerArtwork = DeezerArtwork(appContext)
+        store = AndroidLibrarySyncStore(SyncDatabase.create(appContext), appContext.filesDir, deezerArtwork)
     }
 
     internal fun libraryStore(): AndroidLibrarySyncStore = store
