@@ -8,7 +8,7 @@
 
 ### US1 — Keep the local library up to date
 
-Choose folders and scan rules, run a scan manually or on a supported schedule, and see progress and failures. Change artist, composer or genre separators and apply them to the library. Import artist pictures stored beside the music. A cancelled scan or unreadable folder leaves existing library entries and user data intact.
+Choose folders and scan rules, run a scan manually or on a supported schedule, and see progress and failures. Change artist, composer or genre separators and apply them to the library. Import artist pictures stored beside the music and optionally fetch missing artist pictures from Deezer. A cancelled scan or unreadable folder leaves existing library entries and user data intact.
 
 ### US2 — Analyze music on the phone
 
@@ -26,7 +26,7 @@ Reorder or hide library sections, choose a preset or custom accent, and open Son
 
 - Missing SD card, revoked permission, empty scan, file moves, and cancellation before committing the scan.
 - Changed separators with older tracks that lack original tags, and files unchanged when the extractor gains a new field.
-- Ambiguous artist artwork, silence, corrupt audio, edits during analysis, and the last playable item in a queue.
+- Ambiguous artist artwork, no connectivity or no reliable Deezer match, silence, corrupt audio, edits during analysis, and the last playable item in a queue.
 - M3U paths that refer to unavailable tracks, unsupported tag formats, and read-only sources.
 - RTL, invalid accent input, and the default theme after an app upgrade.
 
@@ -35,6 +35,7 @@ Reorder or hide library sections, choose a preset or custom accent, and open Son
 - **FR-001** Preserve current favorites, playlists, play history, artwork overrides and track references through migration and rescans.
 - **FR-002** Reuse cached metadata for unchanged files. Persist original tag fields and an extractor version. Support re-splitting, rebuilding search and refreshing tags or artwork as distinct actions.
 - **FR-003** Support folder inclusion/exclusion, scan on launch and best-effort scheduled scans, progress, cancellation, and diagnostic counts for skipped and failed files.
+- **FR-003a** Allow opt-in Deezer lookup for missing artist pictures. Prefer user-selected pictures and local folder pictures. Cache successful matches for offline use. A failed, ambiguous or unavailable lookup leaves the scan and existing artwork intact.
 - **FR-004** Analyze locally with the current FFmpeg stack and bounded background work. Expose progress, individual failures and retries. Invalidate stale results after a source or analysis-version change.
 - **FR-005** Feed validated loudness and mood data into the existing playback features. Preserve fallback and crossfade behavior.
 - **FR-006** Support Smart Playlists, portable M3U/M3U8, supported tag/artwork editing and save-as-LRC.
@@ -48,10 +49,11 @@ Source folder, track identity, original tag snapshot, analysis result and status
 
 - A second scan of unchanged content reuses its cached metadata. Changing separators on current rows leaves the source files untouched and search reflects the new splits.
 - An existing library keeps its user data through upgrade, cancel, and temporary loss of source access. Unambiguous moved files keep their library IDs.
+- With online artwork enabled, a reliable Deezer match fills a missing picture and remains visible offline. Existing user-selected and folder pictures keep priority.
 - A locally analyzed test library can use track normalization and start and refill Mood Radio without desktop data.
 - A UTF-8 playlist round trip preserves resolved entry order and reports unresolved entries. Supported file edits survive a rescan.
 - Library and appearance preferences survive a restart. Local artwork animation, existing navigation and RTL pass regression checks.
 
 ## Assumptions
 
-Android and the current FFmpeg playback engine remain the basis. The LAN browser remote is a desktop reference for a separate decision. Engine migration and audio conversion are outside this mission. Android can defer background scans and analysis.
+Android and the current FFmpeg playback engine remain the basis. Engine migration and audio conversion are outside this mission. Android can defer background scans and analysis.
