@@ -24,6 +24,7 @@ internal fun PlaylistContextMenu(
     onReorder: (() -> Unit)? = null,
     onEdit: () -> Unit = {},
     onDelete: () -> Unit = {},
+    onExport: (() -> Unit)? = null,
     anchor: @Composable () -> Unit,
 ) {
     val playableIds = remember(trackIds) { trackIds.distinct().filter(String::isNotBlank) }
@@ -52,6 +53,9 @@ internal fun PlaylistContextMenu(
             if (canDelete && onReorder != null) {
                 add(ContextActionMenuEntry.Action(stringResource(R.string.playlist_reorder), MaterialSymbols.Menu) { closeAfter(onReorder) })
                 add(ContextActionMenuEntry.Divider)
+            }
+            if (onExport != null) {
+                add(ContextActionMenuEntry.Action(stringResource(R.string.playlist_export), MaterialSymbols.QueueMusic) { closeAfter(onExport) })
             }
             add(ContextActionMenuEntry.Action(stringResource(R.string.playlist_edit), MaterialSymbols.Edit) { closeAfter(onEdit) })
             if (canDelete) {

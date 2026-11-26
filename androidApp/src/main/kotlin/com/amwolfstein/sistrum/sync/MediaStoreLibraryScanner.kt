@@ -26,6 +26,7 @@ import com.amwolfstein.sistrum.library.LocalComposer
 import com.amwolfstein.sistrum.library.LocalGenre
 import com.amwolfstein.sistrum.library.LocalLibrarySnapshot
 import com.amwolfstein.sistrum.library.LocalTrack
+import com.amwolfstein.sistrum.metadata.TrackEdit
 
 /** Audio asset row resolved for a scanned track, keyed by track id in the scan result. */
 internal data class LocalScanAudio(
@@ -63,6 +64,7 @@ internal data class LocalLibraryScanResult(
     val artwork: List<LocalScanArtwork>,
     val skipped: Int = 0,
     val failed: Int = 0,
+    val appliedEdits: Set<String> = emptySet(),
 )
 
 /** A previously scanned track's identity/metadata, read back before a rescan so
@@ -124,6 +126,7 @@ internal class MediaStoreLibraryScanner(
         onProgress: (Int) -> Unit = {},
         checkCancelled: () -> Unit = {},
         forceRefresh: Boolean = false,
+        pendingEdits: List<TrackEdit> = emptyList(),
     ): LocalLibraryScanResult {
         val genresByTrack = genresByTrackId()
         val audio = linkedMapOf<String, LocalScanAudio>()
@@ -183,7 +186,7 @@ internal class MediaStoreLibraryScanner(
                 // file itself hasn't changed and it was already parsed at the current
                 // schema version; otherwise a bumped schema forces one full re-parse so
                 // newly added fields get backfilled without a manual rescan.
-                val unchanged = !forceRefresh && priorTrack != null &&
+                val unchanged = !forceRefresh && pendingEdits.none { it.path == data } && priorTrack != null &&
                     priorTrack.identityHash == newIdentityHash &&
                     priorTrack.schemaVersion >= CurrentMetadataSchemaVersion
                 val contentHash = if (unchanged && priorTrack?.contentHash?.isNotBlank() == true) {
@@ -328,7 +331,8 @@ internal class MediaStoreLibraryScanner(
                 folderArtistArtwork(path, "artist-local:$artistId")
             }
         }
-        val movedIds = movedTrackIds(tracks, prior.tracksByTrackId)
+        val appliedEdits = verifiedTrackEdits(tracks, audio, prior.tracksByTrackId, pendingEdits)
+        val movedIds = reconcileTrackMoves(movedTrackIds(tracks, prior.tracksByTrackId), appliedEdits)
         val remappedTracks = tracks.map { track -> movedIds[track.id]?.let { track.copy(id = it) } ?: track }
         val remappedAudio = audio.mapKeys { (id, _) -> movedIds[id] ?: id }
             .mapValues { (id, value) -> value.copy(trackId = id) }
@@ -344,6 +348,8 @@ internal class MediaStoreLibraryScanner(
             artwork = artwork + artistArtwork,
             skipped = skipped,
             failed = failed,
+            appliedEdits = appliedEdits.values.toSet() +
+                abandonedTrackEdits(tracks, audio, prior.tracksByTrackId, pendingEdits),
         )
     }
 
@@ -749,6 +755,46 @@ internal fun legacyTracksToPreserve(
             }
     }.keys
 }
+
+/** Restore an edited track only when its journal and both file revisions agree. */
+internal fun verifiedTrackEdits(
+    tracks: List<LocalTrack>,
+    audio: Map<String, LocalScanAudio>,
+    prior: Map<String, PriorTrackScanState>,
+    edits: List<TrackEdit>,
+): Map<String, String> {
+    val currentIds = tracks.mapTo(mutableSetOf()) { it.id }
+    return edits.mapNotNull { edit ->
+        val previous = prior[edit.trackId] ?: return@mapNotNull null
+        if (previous.absolutePath != edit.path || edit.oldHash.isBlank() || edit.newHash.isBlank() ||
+            previous.contentHash !in setOf(edit.oldHash, edit.newHash)) return@mapNotNull null
+        val candidates = tracks.filter { track ->
+            audio[track.id]?.absolutePath == edit.path && track.contentHash == edit.newHash
+        }
+        val track = candidates.singleOrNull() ?: return@mapNotNull null
+        if (previous.contentHash == edit.newHash && track.id != edit.trackId) return@mapNotNull null
+        if (track.id != edit.trackId && edit.trackId in currentIds) return@mapNotNull null
+        track.id to edit.trackId
+    }.toMap()
+}
+
+/** Clear a journal entry left before replacement when the original is still intact. */
+internal fun abandonedTrackEdits(
+    tracks: List<LocalTrack>,
+    audio: Map<String, LocalScanAudio>,
+    prior: Map<String, PriorTrackScanState>,
+    edits: List<TrackEdit>,
+): Set<String> = edits.mapNotNull { edit ->
+    val previous = prior[edit.trackId] ?: return@mapNotNull null
+    if (edit.oldHash.isBlank() || previous.absolutePath != edit.path || previous.contentHash != edit.oldHash) return@mapNotNull null
+    val original = tracks.singleOrNull { it.id == edit.trackId && it.contentHash == edit.oldHash }
+        ?: return@mapNotNull null
+    edit.trackId.takeIf { audio[original.id]?.absolutePath == edit.path }
+}.toSet()
+
+/** Approved edits have priority over generic matching for both new and old IDs. */
+internal fun reconcileTrackMoves(generic: Map<String, String>, approved: Map<String, String>): Map<String, String> =
+    generic.filter { (id, previous) -> id !in approved && previous !in approved.values } + approved
 
 /** Match moved files only when a full content digest is unique on both sides. */
 internal fun movedTrackIds(

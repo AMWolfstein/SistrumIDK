@@ -7,7 +7,7 @@
       "title": "Upgrade the standalone Android library"
     }
   },
-  "next_completion": 11,
+  "next_completion": 12,
   "next_mission": 2,
   "next_tor": 9,
   "tasks": {
@@ -44,13 +44,19 @@
       "title": "Enable on-device analysis for normalization and Mood Radio"
     },
     "M001-T003": {
-      "completion": null,
+      "completion": 11,
+      "evidence": {
+        "checks": "DevDebug compile; 469 app unit tests; 45 shared host tests; AndroidTest compile; ffprobe MP3 read-back; workflow validation and whitespace",
+        "result": "PASS",
+        "reviewer": "Codex",
+        "round": 3
+      },
       "final": false,
       "kind": "T",
       "mission": "M001",
       "nonce": "4e09867e7b9e43c5a441b6ca12f66b32",
       "record": "specs/001-local-library-upgrade/tasks.md",
-      "status": "reserved",
+      "status": "complete",
       "title": "Add portable playlists and local metadata tools"
     },
     "M001-T004": {

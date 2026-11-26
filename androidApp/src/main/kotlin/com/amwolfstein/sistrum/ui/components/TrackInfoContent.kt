@@ -221,6 +221,7 @@ internal fun TrackInfoContent(track: LibraryTrack, modifier: Modifier = Modifier
                 Text(track.title, modifier = Modifier.padding(top = 20.dp), style = MaterialTheme.typography.titleLarge.copy(fontWeight = FontWeight.Bold), color = colors.textMain, textAlign = TextAlign.Center, maxLines = 2, overflow = TextOverflow.Ellipsis)
                 if (subtitle.isNotBlank()) Text(subtitle, modifier = Modifier.padding(top = 4.dp), style = MaterialTheme.typography.bodyMedium, color = colors.textMuted, textAlign = TextAlign.Center, maxLines = 2, overflow = TextOverflow.Ellipsis)
                 TrackQualityBadge(quality, Modifier.padding(top = 12.dp))
+                EditTrackMetadata(track)
             }
         }
         if (details.isNotEmpty()) {

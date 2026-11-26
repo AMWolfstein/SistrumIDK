@@ -2,6 +2,7 @@ package com.amwolfstein.sistrum.sync
 
 import com.amwolfstein.sistrum.library.LocalAlbumRef
 import com.amwolfstein.sistrum.library.LocalTrack
+import com.amwolfstein.sistrum.metadata.TrackEdit
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertThrows
 import org.junit.Assert.assertFalse
@@ -72,6 +73,40 @@ class TrackMoveIdentityTest {
         stopped.platformStopped()
         stopped.completed()
         assertEquals(1, finished)
+    }
+
+    @Test
+    fun retainsEditedIdentityOnlyForJournalAndMatchingRevisions() {
+        val old = state("old").copy(absolutePath = "/music/a.mp3")
+        val changed = track("local:8", "new")
+        val audio = mapOf("local:8" to LocalScanAudio("local:8", "/music/a.mp3", "revision", 10))
+        val edit = TrackEdit("local:1", "/music/a.mp3", "old", "new")
+        assertEquals(mapOf("local:8" to "local:1"), verifiedTrackEdits(listOf(changed), audio, mapOf("local:1" to old), listOf(edit)))
+        val committed = track("local:1", "new")
+        val committedAudio = mapOf("local:1" to LocalScanAudio("local:1", "/music/a.mp3", "revision", 10))
+        assertEquals(mapOf("local:1" to "local:1"), verifiedTrackEdits(listOf(committed), committedAudio,
+            mapOf("local:1" to old.copy(contentHash = "new")), listOf(edit)))
+        assertEquals(emptyMap<String, String>(), verifiedTrackEdits(listOf(changed), audio, mapOf("local:1" to old), listOf(edit.copy(newHash = "different"))))
+        assertEquals(emptyMap<String, String>(), verifiedTrackEdits(listOf(changed), audio, mapOf("local:1" to old), listOf(edit.copy(oldHash = "different"))))
+        assertEquals(emptyMap<String, String>(), verifiedTrackEdits(listOf(changed, track("local:1", "other")), audio, mapOf("local:1" to old), listOf(edit)))
+    }
+
+    @Test
+    fun approvedEditReservesIdentityBeforeGenericDuplicateMatch() {
+        val generic = mapOf("local:copy" to "local:old")
+        val approved = mapOf("local:edited" to "local:old")
+        assertEquals(approved, reconcileTrackMoves(generic, approved))
+    }
+
+    @Test
+    fun clearsInterruptedEditOnlyIfOriginalContentIsIntact() {
+        val old = state("old").copy(absolutePath = "/music/a.mp3")
+        val original = track("local:1", "old")
+        val audio = mapOf("local:1" to LocalScanAudio("local:1", "/music/a.mp3", "revision", 10))
+        val edit = TrackEdit("local:1", "/music/a.mp3", "old", "new")
+        assertEquals(setOf("local:1"), abandonedTrackEdits(listOf(original), audio, mapOf("local:1" to old), listOf(edit)))
+        assertEquals(emptySet<String>(), abandonedTrackEdits(listOf(original.copy(contentHash = "other")), audio, mapOf("local:1" to old), listOf(edit)))
+        assertEquals(emptySet<String>(), abandonedTrackEdits(listOf(original), audio, mapOf("local:1" to old.copy(contentHash = "other")), listOf(edit)))
     }
 
     private fun state(hash: String) = PriorTrackScanState(

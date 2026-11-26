@@ -10,3 +10,4 @@
 - TOR008 — Rebrand Android as Sistrum V0.1.0
 - M001-T001 — Rebuild local library scanning and metadata maintenance
 - M001-T002 — Enable on-device analysis for normalization and Mood Radio
+- M001-T003 — Add portable playlists and local metadata tools

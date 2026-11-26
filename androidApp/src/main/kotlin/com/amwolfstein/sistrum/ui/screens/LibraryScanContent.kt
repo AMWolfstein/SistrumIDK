@@ -98,6 +98,7 @@ internal fun LibraryScanContent(
         initialValue = com.amwolfstein.sistrum.sync.LibraryAnalysisProgress(),
     )
     val schedule by scanPreferences.schedule.collectAsStateWithLifecycle(initialValue = ScanSchedule.Manual)
+    val pendingEdits by LocalLibraryRuntime.trackEditJournal.edits.collectAsStateWithLifecycle()
 
     fun updateAnalysisEnabled(enabled: Boolean) {
         scope.launch {
@@ -138,6 +139,11 @@ internal fun LibraryScanContent(
             color = colors.textMuted,
         )
         Spacer(modifier = Modifier.height(16.dp))
+        if (pendingEdits.isNotEmpty()) {
+            Text(stringResource(R.string.track_edit_pending_count, pendingEdits.size), color = colors.textMuted)
+            ScanButton(label = stringResource(R.string.track_edit_refresh), onClick = startScan)
+            Spacer(modifier = Modifier.height(16.dp))
+        }
         ActionList(
             items = listOf(
                 ActionListItem(R.string.scan_filter_title, onClick = onScanFilterSelected),
@@ -409,6 +415,7 @@ internal suspend fun performScan(
             onProgress = onProgress,
             checkCancelled = { scanContext.ensureActive() },
             forceRefresh = forceRefresh,
+            pendingEdits = LocalLibraryRuntime.trackEditJournal.pending(),
         )
         scanContext.ensureActive()
         check(prior.tracksByTrackId.values.none { state ->
@@ -431,6 +438,7 @@ internal suspend fun performScan(
             }
             return@runCatching LibraryScanUiState()
         }
+        LocalLibraryRuntime.trackEditJournal.remove(result.appliedEdits)
         separatorPreferences.setAppliedSignature(separators.signature)
         if (LocalLibraryRuntime.deezerArtwork.enabled.value) {
             val artists = result.snapshot.tracks.flatMap { it.artists }

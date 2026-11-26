@@ -1,6 +1,8 @@
 package com.amwolfstein.sistrum.sync
 
 import android.content.Context
+import com.amwolfstein.sistrum.metadata.TrackEditJournal
+import com.amwolfstein.sistrum.playlist.SmartPlaylistRules
 import com.amwolfstein.sistrum.analysis.LocalAnalysisPreferences
 import com.amwolfstein.sistrum.analysis.LocalAnalysisController
 
@@ -14,15 +16,21 @@ internal object LocalLibraryRuntime {
         private set
     internal lateinit var analysisPreferences: LocalAnalysisPreferences
         private set
+    internal lateinit var trackEditJournal: TrackEditJournal
+        private set
+    internal lateinit var smartPlaylistRules: SmartPlaylistRules
+        private set
     internal lateinit var deezerArtwork: DeezerArtwork
         private set
 
     fun initialize(context: Context) {
         if (::appContext.isInitialized) return
         appContext = context.applicationContext
+        trackEditJournal = TrackEditJournal(appContext)
+        smartPlaylistRules = SmartPlaylistRules(appContext)
         deezerArtwork = DeezerArtwork(appContext)
         analysisPreferences = LocalAnalysisPreferences(appContext)
-        store = AndroidLibrarySyncStore(SyncDatabase.create(appContext), appContext.filesDir, deezerArtwork, analysisPreferences)
+        store = AndroidLibrarySyncStore(SyncDatabase.create(appContext), appContext.filesDir, deezerArtwork, analysisPreferences, smartPlaylistRules)
         analysisController = LocalAnalysisController(store, analysisPreferences)
         analysisController.start()
     }

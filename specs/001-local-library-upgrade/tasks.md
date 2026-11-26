@@ -20,10 +20,10 @@ The first action of every task is `python3 workflow/codegraph/code_tools.py upda
   - **Acceptance** Analyze supported local MP3, AAC/ALAC M4A and Opus using independent background decoding. Validate integrated loudness, true peak and mood inputs, persist revision-keyed results, expose enable/progress/failure/retry controls and bounded workers. A missing or stale result leaves ordinary playback available. Verified results enable normalization and Mood Radio without desktop data.
   - **Validation** `./gradlew :androidApp:externalNativeBuildDevDebug :androidApp:testDevDebugUnitTest :sharedLogic:testAndroidHostTest`. Compare silence, loudness and mood fixtures with reference outputs, test cancellation, decode errors, stale results, queue refill and gain routing. Document unmeasured playback/device behavior.
 
-- [ ] M001-T003 Add portable playlists and local metadata tools
+- [x] M001-T003 Add portable playlists and local metadata tools
   - **Story** US3. **Depends on** M001-T002.
   - **Paths** `androidApp/src/main/kotlin/com/amwolfstein/sistrum/ui/screens/{LibraryPlaylistsViewModel,PlaylistDetailsViewModel,PlaylistWrites}.kt`, `androidApp/src/main/kotlin/com/amwolfstein/sistrum/sync/SyncDatabase.kt`, `androidApp/src/main/kotlin/com/amwolfstein/sistrum/lyrics/AndroidLyricsService.kt` and relevant Compose menus/resources.
-  - **Acceptance** Smart Playlist rules evaluate local fields. M3U/M3U8 import/export preserves UTF-8 and order and reports unresolved items. File tag and embedded art edits use Android write consent and preserve media and user data if a write fails. Save lyrics as UTF-8 LRC through the system picker.
+  - **Acceptance** Smart Playlist rules evaluate local fields. M3U/M3U8 import/export preserves UTF-8 and order and reports unresolved items. File tag and embedded art edits use Android write consent and preserve media and user data if a write fails. Save lyrics as UTF-8 LRC through the system picker. Provide a separate explicit save-inside-audio action for safely supported formats, with synchronized and plain lyrics read-back verification.
   - **Validation** `./gradlew :androidApp:compileDevDebugKotlin :androidApp:testDevDebugUnitTest`. Cover relative paths, unresolved tracks, Unicode, round trips, unsupported writes, declined permission, and post-edit scan. Record SAF provider instrumentation status.
 
 - [ ] M001-T004 Add library and playback personalization

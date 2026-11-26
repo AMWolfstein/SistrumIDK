@@ -8,6 +8,21 @@ import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import android.provider.Settings
+import android.content.ContentUris
+import android.provider.MediaStore
+import androidx.activity.result.IntentSenderRequest
+import com.amwolfstein.sistrum.metadata.editTrack
+import com.amwolfstein.sistrum.metadata.prepareTrackEdit
+import com.amwolfstein.sistrum.metadata.EditTarget
+import com.amwolfstein.sistrum.metadata.Mp3TagUpdate
+import android.widget.Toast
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.contract.ActivityResultContracts
+import androidx.compose.material3.TextButton
+import androidx.compose.runtime.rememberCoroutineScope
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 import androidx.compose.animation.core.Animatable
 import androidx.compose.animation.core.FastOutSlowInEasing
 import androidx.compose.animation.core.LinearEasing
@@ -270,6 +285,35 @@ internal fun FullScreenPlayerLyricsPanel(
     useLargeText: Boolean = false,
     textScale: Float = 1f,
 ) {
+    val context = LocalContext.current
+    val saveScope = rememberCoroutineScope()
+    var pendingLyrics by remember { mutableStateOf<String?>(null) }
+    var pendingEmbeddedLyrics by remember { mutableStateOf<Pair<EditTarget, String>?>(null) }
+    val embeddedPermission = rememberLauncherForActivityResult(ActivityResultContracts.StartIntentSenderForResult()) { result ->
+        val pending = pendingEmbeddedLyrics
+        pendingEmbeddedLyrics = null
+        if (result.resultCode == android.app.Activity.RESULT_OK && pending != null) {
+            saveScope.launch {
+                val outcome = runCatching { editTrack(context, pending.first, Mp3TagUpdate(lyrics = pending.second)) }
+                Toast.makeText(context, if (outcome.isSuccess) R.string.track_edit_refresh_pending else R.string.lyrics_embedded_save_failed, Toast.LENGTH_LONG).show()
+            }
+        }
+    }
+    val lyricsFile = rememberLauncherForActivityResult(ActivityResultContracts.CreateDocument("text/plain")) { uri ->
+        val content = pendingLyrics
+        pendingLyrics = null
+        if (uri != null && content != null) {
+            saveScope.launch {
+                val saved = withContext(Dispatchers.IO) {
+                    runCatching {
+                        val stream = checkNotNull(context.contentResolver.openOutputStream(uri, "wt"))
+                        stream.use { it.write(content.toByteArray(Charsets.UTF_8)) }
+                    }.isSuccess
+                }
+                Toast.makeText(context, if (saved) R.string.lyrics_saved else R.string.lyrics_save_failed, Toast.LENGTH_SHORT).show()
+            }
+        }
+    }
     val parsedLines = remember(lyrics) { lyrics?.let(::parsePlayerLyrics).orEmpty() }
     val syncedLines = remember(parsedLines) { parsedLines.filter { it.timestampSeconds != null } }
     val primary = remember(parsedLines, syncedLines) { (syncedLines.ifEmpty { parsedLines }).map { it.primary } }
@@ -319,6 +363,32 @@ internal fun FullScreenPlayerLyricsPanel(
                     )
                     else PlainLyricsList(parsedLines, Modifier.fillMaxSize(), secondary, showToggle, animateSecondaryChanges)
                 }
+            }
+        }
+        if (!lyrics.isNullOrBlank() && !loading) {
+            Column(modifier = Modifier.align(Alignment.TopEnd)) {
+                TextButton(onClick = {
+                    pendingLyrics = lyrics
+                    lyricsFile.launch("lyrics.lrc")
+                }) { Text(stringResource(R.string.lyrics_save_lrc)) }
+                TextButton(onClick = {
+                    val content = lyrics
+                    saveScope.launch {
+                        val target = runCatching { prepareTrackEdit(context, trackId) }.getOrNull()
+                        if (target == null || !target.path.endsWith(".mp3", ignoreCase = true)) {
+                            Toast.makeText(context, R.string.lyrics_embedded_save_failed, Toast.LENGTH_LONG).show()
+                            return@launch
+                        }
+                        val uri = ContentUris.withAppendedId(MediaStore.Audio.Media.EXTERNAL_CONTENT_URI, target.mediaId)
+                        val request = runCatching { MediaStore.createWriteRequest(context.contentResolver, listOf(uri)) }.getOrNull()
+                        if (request == null) {
+                            Toast.makeText(context, R.string.lyrics_embedded_save_failed, Toast.LENGTH_LONG).show()
+                        } else {
+                            pendingEmbeddedLyrics = target to content
+                            embeddedPermission.launch(IntentSenderRequest.Builder(request.intentSender).build())
+                        }
+                    }
+                }) { Text(stringResource(R.string.lyrics_save_embedded)) }
             }
         }
         if (showToggle) {

@@ -54,6 +54,8 @@ import com.amwolfstein.sistrum.player.DailyTrackListeningStat
 import com.amwolfstein.sistrum.player.DailyPlaybackAttemptStat
 import com.amwolfstein.sistrum.lyrics.LyricsTrack
 import com.amwolfstein.sistrum.mood.MoodRadioTrack
+import com.amwolfstein.sistrum.playlist.SmartPlaylistRules
+import com.amwolfstein.sistrum.playlist.applySmartRules
 import com.amwolfstein.sistrum.library.LocalLibraryJson
 import com.amwolfstein.sistrum.library.LocalLibrarySnapshot
 import com.amwolfstein.sistrum.analysis.LocalTrackAnalysisEntity
@@ -679,6 +681,7 @@ internal class AndroidLibrarySyncStore(
     private val filesDir: File,
     private val deezerArtwork: DeezerArtwork? = null,
     private val analysisPreferences: LocalAnalysisPreferences? = null,
+    private val smartPlaylistRules: SmartPlaylistRules? = null,
 ) {
     private val dao = database.syncDao()
     private val artworkWrites = Mutex()
@@ -844,9 +847,14 @@ internal class AndroidLibrarySyncStore(
         dao.observePlaylists(),
         dao.observeLocalPlaylists(),
         projectedPlaylistMutations,
-    ) { rows, local, pending ->
-        projectPlaylists(rows, local, pending.mapNotNull(PlaylistMutationEntity::toPlaylistMutation))
-            .sortedBy { it.name.lowercase() }
+        tracks,
+        smartPlaylistRules?.rules ?: flowOf(emptyMap()),
+    ) { rows, local, pending, libraryTracks, rules ->
+        applySmartRules(
+            projectPlaylists(rows, local, pending.mapNotNull(PlaylistMutationEntity::toPlaylistMutation)),
+            libraryTracks,
+            rules,
+        ).sortedBy { it.name.lowercase() }
     }.shareIn(snapshotScope, SharingStarted.WhileSubscribed(5_000), replay = 1)
     /**
      * Metadata of the Favorites playlist with its pending mutations (custom artwork) applied.
