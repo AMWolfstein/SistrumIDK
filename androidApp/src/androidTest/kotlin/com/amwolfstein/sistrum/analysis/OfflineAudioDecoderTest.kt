@@ -6,33 +6,26 @@ import org.junit.Assert.assertEquals
 import org.junit.Assert.assertTrue
 import org.junit.Test
 
-/** FFmpeg host ebur128 references for locally generated 1 kHz fixtures. */
+/** Pinned Airmedy FFmpeg 9 analyzer references for locally generated 1 kHz fixtures. */
 class OfflineAudioDecoderTest {
     private val instrumentation = InstrumentationRegistry.getInstrumentation()
 
     @Test
-    fun decodesMp3AacAlacAndOpusWithExpectedLoudness() {
+    fun decodesSupportedFormatsWithExpectedLoudness() {
         val fixtures = listOf(
-            Triple("mono.mp3", -27.2, -26.8),
+            Triple("mono.mp3", -27.16, -23.74),
             Triple("stereo.m4a", -27.1, -26.1),
             Triple("stereo-alac.m4a", -27.1, -27.1),
             Triple("stereo.opus", -27.1, -26.9),
+            Triple("rhythm.flac", -18.623, -4.394),
+            Triple("rhythm.wav", -18.658, -4.394),
         )
         fixtures.forEach { (name, expectedLufs, expectedPeak) ->
             val file = asset(name)
             try {
                 OfflineAudioDecoder().use { decoder ->
                     decoder.open(file)
-                    val buffer = FloatArray(4096)
-                    var samples = 0
-                    while (true) {
-                        val count = decoder.read(buffer)
-                        if (count == 0) break
-                        assertTrue(name, count > 0 && count % 2 == 0)
-                        samples += count
-                    }
-                    assertTrue(name, samples in 280_000..300_000)
-                    val metrics = decoder.metrics()
+                    val metrics = decoder.analyze()
                     assertEquals(name, expectedLufs, metrics[0], .5)
                     assertEquals(name, expectedPeak, metrics[1], .7)
                 }
@@ -48,11 +41,9 @@ class OfflineAudioDecoderTest {
         try {
             OfflineAudioDecoder().use { decoder ->
                 decoder.open(file)
-                val buffer = FloatArray(4096)
-                while (decoder.read(buffer) > 0) Unit
-                val metrics = decoder.metrics()
-                assertTrue(!metrics[0].isFinite())
-                assertTrue(!metrics[1].isFinite())
+                val metrics = decoder.analyze()
+                assertTrue(metrics[0] <= -70.0)
+                assertTrue(!metrics[1].isFinite() || metrics[1] <= 0.0)
             }
         } finally {
             file.delete()
@@ -66,7 +57,7 @@ class OfflineAudioDecoderTest {
             val decoder = OfflineAudioDecoder()
             decoder.open(file)
             decoder.cancel()
-            org.junit.Assert.assertThrows(IllegalStateException::class.java) { decoder.read(FloatArray(4096)) }
+            org.junit.Assert.assertThrows(IllegalStateException::class.java) { decoder.analyze() }
             decoder.close()
             decoder.close()
         } finally {

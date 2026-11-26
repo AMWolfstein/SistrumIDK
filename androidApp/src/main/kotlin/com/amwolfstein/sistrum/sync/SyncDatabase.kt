@@ -436,7 +436,7 @@ internal interface SyncDao {
             AND json_type(a.rawJson, '$.spectral_flux') IN ('integer', 'real')
             AND json_type(a.rawJson, '$.onset_variance') IN ('integer', 'real')
             AND json_type(a.rawJson, '$.loudness_range') IN ('integer', 'real')
-            AND json_extract(a.rawJson, '$.tempo') BETWEEN 60 AND 200
+            AND json_type(a.rawJson, '$.tempo') IN ('integer', 'real')
     """)
     fun observeLocalMoodEligibleIds(version: Int = LocalAnalyzerVersion): Flow<List<String>>
 

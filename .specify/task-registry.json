@@ -7,9 +7,9 @@
       "title": "Upgrade the standalone Android library"
     }
   },
-  "next_completion": 12,
+  "next_completion": 13,
   "next_mission": 2,
-  "next_tor": 9,
+  "next_tor": 10,
   "tasks": {
     "M001-T001": {
       "completion": 9,
@@ -78,6 +78,22 @@
       "record": "specs/001-local-library-upgrade/tasks.md",
       "status": "reserved",
       "title": "Review the standalone library upgrade"
+    },
+    "M001-TOR009": {
+      "completion": 12,
+      "evidence": {
+        "checks": "ARM64 pinned bootstrap and 16 KiB ELF; 19 host native parity fixtures; probe priority; Kotlin vs Go mood; 470 Android unit and 43 shared host tests; AndroidTest compile; workflow validation",
+        "result": "PASS",
+        "reviewer": "Codex",
+        "round": 1
+      },
+      "final": false,
+      "kind": "TOR",
+      "mission": "M001",
+      "nonce": "a9d0a9b77781425e8e02ccfd4782c28f",
+      "record": "specs/001-local-library-upgrade/tasks.md",
+      "status": "complete",
+      "title": "Replace local audio analysis with Airmedy parity"
     },
     "TOR001": {
       "completion": 1,

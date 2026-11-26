@@ -1,3 +1,4 @@
+#include "ffmpeg_shared_mu.h"
 #include <aaudio/AAudio.h>
 #include <jni.h>
 #include <unistd.h>
@@ -233,6 +234,16 @@ namespace {
     bool open_slot(SourceSlot &slot, int fd, int output_rate, float normalization_gain_db, std::string &error) {
         release_slot(slot);
         const std::string path = "/proc/self/fd/" + std::to_string(fd);
+        struct ProbeLock {
+            bool locked = true;
+            ProbeLock() {
+                sistrum_playback_probe_enter();
+                pthread_mutex_lock(&ffmpeg_probe_mu);
+                sistrum_playback_probe_leave();
+            }
+            void unlock() { if (locked) { pthread_mutex_unlock(&ffmpeg_probe_mu); locked = false; } }
+            ~ProbeLock() { unlock(); }
+        } probe_lock;
         if (avformat_open_input(&slot.format, path.c_str(), nullptr, nullptr) < 0 ||
                 avformat_find_stream_info(slot.format, nullptr) < 0) {
             error = "FFmpeg could not open this audio file";
@@ -258,6 +269,7 @@ namespace {
             free_media(slot);
             return false;
         }
+        probe_lock.unlock();
         AVChannelLayout stereo = AV_CHANNEL_LAYOUT_STEREO;
         if (swr_alloc_set_opts2(&slot.resampler, &stereo, AV_SAMPLE_FMT_FLT, output_rate,
                 &slot.codec->ch_layout, slot.codec->sample_fmt, slot.codec->sample_rate, 0, nullptr) < 0 ||

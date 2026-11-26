@@ -87,6 +87,15 @@ class LocalAnalysisPersistenceTest {
         assertEquals(listOf("local:1"), database.syncDao().observeLocalMoodEligibleIds().first())
     }
 
+    @Test
+    fun earlierAnalyzerVersionIsPendingUntilReanalyzed() = runBlocking {
+        scan("revision")
+        assertTrue(store.saveLocalAnalysis(result("revision").copy(analyzerVersion = LocalAnalyzerVersion - 1)))
+        assertEquals(listOf("local:1"), store.pendingLocalAnalyses(-1, 1).first().map { it.trackId })
+        assertTrue(store.saveLocalAnalysis(result("revision")))
+        assertTrue(store.pendingLocalAnalyses(-1, 1).first().isEmpty())
+    }
+
     private suspend fun scan(revision: String) {
         val track = LocalTrack(
             id = "local:1", title = "Track", artists = emptyList(),

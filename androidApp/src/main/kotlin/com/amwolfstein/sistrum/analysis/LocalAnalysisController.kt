@@ -122,31 +122,23 @@ internal class LocalAnalysisController(
         execute = { decoder ->
             Process.setThreadPriority(Process.THREAD_PRIORITY_BACKGROUND)
             decoder.open(file)
-            val extractor = SignalFeatureExtractor()
-            val buffer = FloatArray(8192)
-            while (true) {
-                val count = decoder.read(buffer)
-                if (count == 0) break
-                check(count > 0) { "Audio decoding failed" }
-                extractor.add(buffer, count)
+            val measured = decoder.analyze()
+            check(measured.size == 12 && measured.all(Double::isFinite)) {
+                "Audio analysis produced invalid measurements"
             }
-            val measured = decoder.metrics()
-            check(measured.size == 3 && measured.all(Double::isFinite)) {
-                "No measurable loudness in audio"
-            }
-            val features = extractor.finish(measured[2])
             buildJsonObject {
                 put("loudness_lufs", measured[0])
                 put("true_peak", measured[1])
                 put("loudness_range", measured[2])
-                if (features != null) {
-                    put("rms", features.rmsDb)
-                    put("crest", features.crest)
-                    put("spectral_centroid", features.spectralCentroid)
-                    put("spectral_flux", features.spectralFlux)
-                    put("tempo", features.tempo)
-                    put("onset_variance", features.onsetVariance)
-                }
+                put("rms", measured[3])
+                put("crest", measured[4])
+                put("spectral_centroid", measured[5])
+                put("spectral_flux", measured[6])
+                put("tempo", measured[7])
+                put("onset_variance", measured[8])
+                put("spectral_rolloff", measured[9])
+                put("spectral_flatness", measured[10])
+                put("zcr", measured[11])
             }.toString()
         },
     )

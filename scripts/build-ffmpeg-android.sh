@@ -36,8 +36,8 @@ fi
 NDK_VERSION="30.0.16248370"
 NDK="${SDK_DIR}/ndk/${NDK_VERSION}"
 case "$(uname -s)" in
-    Linux) HOST_OS="linux"; JOBS="$(nproc)" ;;
-    Darwin) HOST_OS="darwin"; JOBS="$(sysctl -n hw.ncpu)" ;;
+    Linux) HOST_OS="linux"; JOBS="${SISTRUM_BUILD_JOBS:-$(nproc)}" ;;
+    Darwin) HOST_OS="darwin"; JOBS="${SISTRUM_BUILD_JOBS:-$(sysctl -n hw.ncpu)}" ;;
     *) echo "Run this script on a supported Linux or macOS Android NDK host." >&2; exit 1 ;;
 esac
 API=31
@@ -54,6 +54,9 @@ if [[ -z "${TOOLCHAIN}" ]]; then
     exit 1
 fi
 
+# Build the libraries needed by the analysis filter graph before replacing FFmpeg artifacts.
+bash "${SCRIPT_DIR}/build-analysis-deps-android.sh"
+
 BUILD_DIR="$(mktemp -d "${TMPDIR:-/tmp}/sistrum-ffmpeg.XXXXXXXX")"
 trap 'rm -rf -- "${BUILD_DIR}"' EXIT
 JNI_OUT="${ANDROID_DIR}/src/main/jniLibs/${ABI}"
@@ -62,13 +65,19 @@ INCLUDE_OUT="${ANDROID_DIR}/build/ffmpeg/include"
 # FFmpeg is the sole decoder. Enable its complete decoder, demuxer and parser
 # registry so every music format supported by the pinned upstream source stays
 # supported without maintaining a fragile allow-list. Programs, encoders,
-# muxers, filters, devices and network protocols remain excluded.
+# muxers, devices and network protocols remain excluded. Audio analysis enables
+# the same filters used by Airmedy Desktop.
 
 SRC="${BUILD_DIR}/src"
 INSTALL="${BUILD_DIR}/install"
 mkdir -p "${SRC}"
 echo "==> Downloading FFmpeg ${FFMPEG_VERSION}..."
 curl --fail --location --retry 3 "${FFMPEG_URL}" -o "${BUILD_DIR}/ffmpeg.tar.gz"
+if command -v sha256sum >/dev/null; then
+    echo "84960df915059e8754fef2cd7c9afeb614062b1b5458ec471eecee619ee04e98  ${BUILD_DIR}/ffmpeg.tar.gz" | sha256sum -c -
+else
+    echo "84960df915059e8754fef2cd7c9afeb614062b1b5458ec471eecee619ee04e98  ${BUILD_DIR}/ffmpeg.tar.gz" | shasum -a 256 -c -
+fi
 tar -xzf "${BUILD_DIR}/ffmpeg.tar.gz" -C "${SRC}" --strip-components=1
 
 echo "==> Building FFmpeg ${FFMPEG_VERSION} for ${ABI}..."
@@ -82,16 +91,17 @@ echo "==> Building FFmpeg ${FFMPEG_VERSION} for ${ABI}..."
         --ar="${TOOLCHAIN}/bin/llvm-ar" --ranlib="${TOOLCHAIN}/bin/llvm-ranlib" --strip="${TOOLCHAIN}/bin/llvm-strip" \
         --disable-everything --disable-autodetect --disable-programs --disable-doc --disable-debug --disable-network \
         --enable-shared --disable-static --enable-small --enable-pic \
-        --enable-avutil --enable-avcodec --enable-avformat --enable-swresample \
+        --enable-avutil --enable-avcodec --enable-avformat --enable-swresample --enable-avfilter \
         --enable-protocol=file --enable-decoders --enable-demuxers --enable-parsers \
-        --disable-avdevice --disable-avfilter --disable-swscale \
+        --disable-avdevice --disable-swscale \
+        --enable-filter=ebur128,aspectralstats,astats,aresample,aformat,anull,abuffer,abuffersink \
         --extra-cflags="-Oz -ffunction-sections -fdata-sections" \
         --extra-ldflags="-Wl,--gc-sections -Wl,-z,max-page-size=16384"
     make -j"${JOBS}"
     make install
 )
 
-LIBRARIES=(libavutil libswresample libavcodec libavformat)
+LIBRARIES=(libavutil libswresample libavcodec libavformat libavfilter)
 for lib in "${LIBRARIES[@]}"; do
     test -f "${INSTALL}/lib/${lib}.so"
 done

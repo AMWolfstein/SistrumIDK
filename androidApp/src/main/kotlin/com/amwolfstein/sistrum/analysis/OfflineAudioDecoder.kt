@@ -16,16 +16,10 @@ internal class OfflineAudioDecoder : Closeable {
         }
     }
 
-    /** Returns the number of interleaved stereo float samples, or zero at EOF. */
-    fun read(output: FloatArray): Int {
+    /** Airmedy filter and aubio results in the native bridge's documented order. */
+    fun analyze(): DoubleArray {
         val current = synchronized(lock) { checkNotNull(handle.takeIf { it != 0L }) }
-        return nativeRead(current, output)
-    }
-
-    /** Integrated LUFS, true peak dBFS, and loudness range. */
-    fun metrics(): DoubleArray {
-        val current = synchronized(lock) { checkNotNull(handle.takeIf { it != 0L }) }
-        return nativeMetrics(current)
+        return nativeAnalyze(current)
     }
 
     fun cancel() = synchronized(lock) {
@@ -43,8 +37,7 @@ internal class OfflineAudioDecoder : Closeable {
 
         @JvmStatic private external fun nativeCreate(): Long
         @JvmStatic private external fun nativeOpen(handle: Long, fd: Int)
-        @JvmStatic private external fun nativeRead(handle: Long, output: FloatArray): Int
-        @JvmStatic private external fun nativeMetrics(handle: Long): DoubleArray
+        @JvmStatic private external fun nativeAnalyze(handle: Long): DoubleArray
         @JvmStatic private external fun nativeCancel(handle: Long)
         @JvmStatic private external fun nativeClose(handle: Long)
     }

@@ -9,7 +9,7 @@ import kotlinx.serialization.json.JsonPrimitive
 import kotlinx.serialization.json.contentOrNull
 import kotlinx.serialization.json.jsonObject
 
-internal const val LocalAnalyzerVersion = 1
+internal const val LocalAnalyzerVersion = 2
 
 @Entity(tableName = "local_track_analysis")
 internal data class LocalTrackAnalysisEntity(
@@ -51,5 +51,5 @@ internal fun localSignalFeatures(row: LocalTrackAnalysisEntity): SignalFeatures?
         tempo = value.finiteDouble("tempo") ?: return null,
         onsetVariance = value.finiteDouble("onset_variance") ?: return null,
         loudnessRange = value.finiteDouble("loudness_range") ?: return null,
-    ).takeIf { it.tempo in 60.0..200.0 }
+    )
 }

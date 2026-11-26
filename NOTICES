@@ -171,9 +171,18 @@ License texts: https://opensource.org/licenses/MIT and
 https://www.apache.org/licenses/LICENSE-2.0
 
 --------------------------------------------------------------------------------
-libebur128 1.2.6
-https://github.com/jiixyj/libebur128/tree/v1.2.6
+Airmedy Desktop audio analysis
+https://github.com/misa198/airmedy/tree/d859940c0629907e377c889fb276904b6a7a4b8c
 --------------------------------------------------------------------------------
-Copyright (c) 2011 Jan Kokemüller. Licensed under the MIT License.
-The complete license is included at
-androidApp/src/main/cpp/third_party/libebur128/COPYING.
+The analyzer is adapted from Airmedy Desktop, licensed under GPL-3.0.
+The project license is included in LICENSE.
+
+aubio 0.4.9
+https://aubio.org/
+--------------------------------------------------------------------------------
+aubio is licensed under GPL-3.0-or-later.
+
+FFTW 3.3.11
+https://www.fftw.org/
+--------------------------------------------------------------------------------
+FFTW is licensed under GPL-2.0-or-later.

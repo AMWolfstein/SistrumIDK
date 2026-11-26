@@ -11,3 +11,4 @@
 - M001-T001 — Rebuild local library scanning and metadata maintenance
 - M001-T002 — Enable on-device analysis for normalization and Mood Radio
 - M001-T003 — Add portable playlists and local metadata tools
+- M001-TOR009 — Replace local audio analysis with Airmedy parity
