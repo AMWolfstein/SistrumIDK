@@ -7,7 +7,7 @@
       "title": "Upgrade the standalone Android library"
     }
   },
-  "next_completion": 10,
+  "next_completion": 11,
   "next_mission": 2,
   "next_tor": 9,
   "tasks": {
@@ -28,13 +28,19 @@
       "title": "Rebuild local library scanning and metadata maintenance"
     },
     "M001-T002": {
-      "completion": null,
+      "completion": 10,
+      "evidence": {
+        "checks": "ARM64 native build; DevDebug compile; 452 app unit tests; 45 shared host tests; AndroidTest compile; host FFmpeg oracle; workflow and whitespace",
+        "result": "PASS",
+        "reviewer": "Codex",
+        "round": 2
+      },
       "final": false,
       "kind": "T",
       "mission": "M001",
       "nonce": "3fa62154f4654db58b28ba186885aab1",
       "record": "specs/001-local-library-upgrade/tasks.md",
-      "status": "reserved",
+      "status": "complete",
       "title": "Enable on-device analysis for normalization and Mood Radio"
     },
     "M001-T003": {

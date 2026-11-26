@@ -9,12 +9,15 @@ import android.widget.Toast
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.material3.Text
+import androidx.compose.material3.Switch
+import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -84,7 +87,30 @@ internal fun LibraryScanContent(
     val colors = LocalSistrumColors.current
     val context = LocalContext.current.applicationContext
     val scanPreferences = remember { ScanFilterPreferences(context) }
+    val analysisPreferences = LocalLibraryRuntime.analysisPreferences
+    val analysisSettings by analysisPreferences.settings.collectAsStateWithLifecycle(
+        initialValue = com.amwolfstein.sistrum.analysis.LocalAnalysisSettings(),
+    )
+    val analysisFailures by LocalLibraryRuntime.libraryStore().localAnalysisFailures.collectAsStateWithLifecycle(
+        initialValue = emptyList(),
+    )
+    val analysisProgress by LocalLibraryRuntime.libraryStore().analysisProgress.collectAsStateWithLifecycle(
+        initialValue = com.amwolfstein.sistrum.sync.LibraryAnalysisProgress(),
+    )
     val schedule by scanPreferences.schedule.collectAsStateWithLifecycle(initialValue = ScanSchedule.Manual)
+
+    fun updateAnalysisEnabled(enabled: Boolean) {
+        scope.launch {
+            try {
+                analysisPreferences.setEnabled(enabled)
+            } catch (cancelled: CancellationException) {
+                throw cancelled
+            } catch (error: Exception) {
+                Log.w("SistrumAnalysis", "Unable to update analysis settings", error)
+                Toast.makeText(context, R.string.library_analysis_schedule_failed, Toast.LENGTH_LONG).show()
+            }
+        }
+    }
 
     val permissionLauncher = rememberLauncherForActivityResult(ActivityResultContracts.RequestPermission()) { granted ->
         if (granted) {
@@ -167,6 +193,67 @@ internal fun LibraryScanContent(
             )
             Spacer(modifier = Modifier.height(16.dp))
         }
+        Card {
+            Column(modifier = Modifier.padding(16.dp)) {
+                ActionList(
+                    items = listOf(
+                        ActionListItem(
+                            R.string.library_analysis_enable,
+                            trailingContent = {
+                                Switch(
+                                    checked = analysisSettings.enabled,
+                                    onCheckedChange = ::updateAnalysisEnabled,
+                                )
+                            },
+                            onClick = { updateAnalysisEnabled(!analysisSettings.enabled) },
+                        ),
+                    ),
+                    containerStyle = ActionListContainerStyle.Plain,
+                )
+                if (analysisSettings.enabled) {
+                    Selection(
+                        labelRes = R.string.library_analysis_workers,
+                        options = listOf(
+                            SelectionOption(1, R.string.library_analysis_one_worker),
+                            SelectionOption(2, R.string.library_analysis_two_workers),
+                        ),
+                        selectedValue = analysisSettings.workers,
+                        onValueSelected = { count -> scope.launch { analysisPreferences.setWorkers(count) } },
+                    )
+                    Text(
+                        text = stringResource(
+                            R.string.library_analysis_progress,
+                            analysisProgress.analyzedTracks,
+                            analysisProgress.totalTracks,
+                            analysisProgress.failedTracks,
+                        ),
+                        color = colors.textMuted,
+                    )
+                    analysisFailures.forEach { failure ->
+                        Row(modifier = Modifier.fillMaxWidth()) {
+                            Column(modifier = Modifier.weight(1f)) {
+                                Text(text = failure.title)
+                                if (failure.failure.isNotBlank()) {
+                                    Text(text = failure.failure, color = colors.textMuted)
+                                }
+                            }
+                            TextButton(onClick = {
+                                scope.launch { LocalLibraryRuntime.libraryStore().retryLocalAnalysisFailure(failure.trackId) }
+                            }) {
+                                Text(text = stringResource(R.string.library_analysis_retry_one))
+                            }
+                        }
+                    }
+                    if (analysisProgress.failedTracks > 0) {
+                        ScanButton(
+                            label = stringResource(R.string.library_analysis_retry),
+                            onClick = { scope.launch { LocalLibraryRuntime.libraryStore().retryLocalAnalysisFailures() } },
+                        )
+                    }
+                }
+            }
+        }
+        Spacer(modifier = Modifier.height(16.dp))
         when {
             uiState.isScanning -> {
                 Text(

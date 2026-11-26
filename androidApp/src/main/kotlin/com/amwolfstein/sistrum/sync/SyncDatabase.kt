@@ -6,6 +6,7 @@ import androidx.room.Database
 import androidx.room.Entity
 import androidx.room.Fts4
 import androidx.room.Insert
+import androidx.room.Index
 import androidx.room.OnConflictStrategy
 import androidx.room.Query
 import androidx.room.Room
@@ -55,6 +56,15 @@ import com.amwolfstein.sistrum.lyrics.LyricsTrack
 import com.amwolfstein.sistrum.mood.MoodRadioTrack
 import com.amwolfstein.sistrum.library.LocalLibraryJson
 import com.amwolfstein.sistrum.library.LocalLibrarySnapshot
+import com.amwolfstein.sistrum.analysis.LocalTrackAnalysisEntity
+import com.amwolfstein.sistrum.analysis.LocalAnalysisCandidate
+import com.amwolfstein.sistrum.analysis.LocalAnalysisFailure
+import com.amwolfstein.sistrum.analysis.LocalAnalyzerVersion
+import com.amwolfstein.sistrum.analysis.LocalAnalysisPreferences
+import com.amwolfstein.sistrum.analysis.MoodModel
+import com.amwolfstein.sistrum.analysis.localAnalysisObject
+import com.amwolfstein.sistrum.analysis.localSignalFeatures
+import com.amwolfstein.sistrum.analysis.finiteDouble
 
 @Entity(tableName = "sync_plans", primaryKeys = ["planId"])
 internal data class SyncPlanEntity(
@@ -75,7 +85,11 @@ internal data class SyncAssetEntity(
     val relativePath: String?,
 )
 
-@Entity(tableName = "sync_tracks", primaryKeys = ["planId", "trackId"])
+@Entity(
+    tableName = "sync_tracks",
+    primaryKeys = ["planId", "trackId"],
+    indices = [Index(value = ["planId", "syncOrder"])],
+)
 internal data class SyncTrackEntity(
     val planId: String,
     val trackId: String,
@@ -360,6 +374,117 @@ internal interface SyncDao {
     """)
     fun observeArtworkAssets(): Flow<List<ArtworkAssetRow>>
 
+    @Insert(onConflict = OnConflictStrategy.REPLACE)
+    suspend fun insertLocalAnalysis(value: LocalTrackAnalysisEntity)
+
+    @Query("DELETE FROM local_track_analysis WHERE status = 'failed'")
+    suspend fun clearLocalAnalysisFailures()
+
+    @Query("DELETE FROM local_track_analysis WHERE status = 'failed' AND trackId = :trackId")
+    suspend fun clearLocalAnalysisFailure(trackId: String)
+
+    @Query("""
+        SELECT a.trackId AS trackId, t.title AS title, a.failure AS failure
+        FROM local_track_analysis a
+        INNER JOIN sync_tracks t ON t.trackId = a.trackId
+        INNER JOIN sync_plans p ON p.planId = t.planId AND p.active = 1
+        INNER JOIN sync_assets audio ON audio.planId = p.planId AND audio.assetId = ('audio:' || t.trackId)
+        WHERE a.sourceRevision = audio.sha256 AND a.analyzerVersion = :version AND a.status = 'failed'
+        ORDER BY t.syncOrder LIMIT 20
+    """)
+    fun observeLocalAnalysisFailures(version: Int = LocalAnalyzerVersion): Flow<List<LocalAnalysisFailure>>
+
+    @Query("""
+        SELECT a.* FROM local_track_analysis a
+        INNER JOIN sync_tracks t ON t.trackId = a.trackId
+        INNER JOIN sync_plans p ON p.planId = t.planId AND p.active = 1
+        INNER JOIN sync_assets audio ON audio.planId = p.planId AND audio.assetId = ('audio:' || t.trackId)
+        WHERE a.sourceRevision = audio.sha256 AND a.analyzerVersion = :version
+    """)
+    suspend fun activeLocalAnalyses(version: Int = LocalAnalyzerVersion): List<LocalTrackAnalysisEntity>
+
+    @Query("""
+        SELECT t.trackId AS trackId, audio.relativePath AS path, audio.sha256 AS sourceRevision,
+               t.syncOrder AS syncOrder
+        FROM sync_tracks t
+        INNER JOIN sync_plans p ON p.planId = t.planId AND p.active = 1
+        INNER JOIN sync_assets audio ON audio.planId = p.planId AND audio.assetId = ('audio:' || t.trackId)
+        LEFT JOIN local_track_analysis a ON a.trackId = t.trackId AND a.sourceRevision = audio.sha256
+            AND a.analyzerVersion = :version
+        WHERE audio.relativePath IS NOT NULL AND audio.sha256 != '' AND a.trackId IS NULL
+            AND t.syncOrder > :afterOrder
+        ORDER BY t.syncOrder LIMIT :limit
+    """)
+    fun observePendingLocalAnalysis(
+        afterOrder: Int,
+        limit: Int,
+        version: Int = LocalAnalyzerVersion,
+    ): Flow<List<LocalAnalysisCandidate>>
+
+    @Query("""
+        SELECT a.trackId FROM local_track_analysis a
+        INNER JOIN sync_tracks t ON t.trackId = a.trackId
+        INNER JOIN sync_plans p ON p.planId = t.planId AND p.active = 1
+        INNER JOIN sync_assets audio ON audio.planId = p.planId AND audio.assetId = ('audio:' || t.trackId)
+        WHERE a.sourceRevision = audio.sha256 AND a.analyzerVersion = :version AND a.status = 'success'
+            AND json_valid(a.rawJson) = 1
+            AND json_type(a.rawJson, '$.rms') IN ('integer', 'real')
+            AND json_type(a.rawJson, '$.crest') IN ('integer', 'real')
+            AND json_type(a.rawJson, '$.spectral_centroid') IN ('integer', 'real')
+            AND json_type(a.rawJson, '$.spectral_flux') IN ('integer', 'real')
+            AND json_type(a.rawJson, '$.onset_variance') IN ('integer', 'real')
+            AND json_type(a.rawJson, '$.loudness_range') IN ('integer', 'real')
+            AND json_extract(a.rawJson, '$.tempo') BETWEEN 60 AND 200
+    """)
+    fun observeLocalMoodEligibleIds(version: Int = LocalAnalyzerVersion): Flow<List<String>>
+
+    @Query("""
+        SELECT COUNT(*) FROM local_track_analysis a
+        INNER JOIN sync_tracks t ON t.trackId = a.trackId
+        INNER JOIN sync_plans p ON p.planId = t.planId AND p.active = 1
+        INNER JOIN sync_assets audio ON audio.planId = p.planId AND audio.assetId = ('audio:' || t.trackId)
+        WHERE a.sourceRevision = audio.sha256 AND a.analyzerVersion = :version AND a.status = :status
+    """)
+    fun observeLocalAnalysisCount(status: String, version: Int = LocalAnalyzerVersion): Flow<Int>
+
+    @Query("""
+        SELECT COUNT(*) FROM sync_tracks t
+        INNER JOIN sync_plans p ON p.planId = t.planId AND p.active = 1
+        WHERE EXISTS (SELECT 1 FROM sync_documents d WHERE d.planId = p.planId AND d.kind = 'analysis' AND d.documentKey = t.trackId)
+           OR EXISTS (
+               SELECT 1 FROM local_track_analysis a
+               INNER JOIN sync_assets audio ON audio.planId = p.planId AND audio.assetId = ('audio:' || t.trackId)
+               WHERE a.trackId = t.trackId AND a.sourceRevision = audio.sha256
+                   AND a.analyzerVersion = :version AND a.status = 'success'
+           )
+    """)
+    fun observeAnalyzedTrackCount(version: Int = LocalAnalyzerVersion): Flow<Int>
+
+    @Query("""
+        SELECT audio.sha256 FROM sync_tracks t
+        INNER JOIN sync_plans p ON p.planId = t.planId AND p.active = 1
+        INNER JOIN sync_assets audio ON audio.planId = p.planId AND audio.assetId = ('audio:' || t.trackId)
+        WHERE t.trackId = :trackId LIMIT 1
+    """)
+    suspend fun activeSourceRevision(trackId: String): String?
+
+    @Query("""
+        SELECT a.* FROM local_track_analysis a
+        INNER JOIN sync_tracks t ON t.trackId = a.trackId
+        INNER JOIN sync_plans p ON p.planId = t.planId AND p.active = 1
+        INNER JOIN sync_assets audio ON audio.planId = p.planId AND audio.assetId = ('audio:' || t.trackId)
+        WHERE a.trackId = :trackId AND a.sourceRevision = audio.sha256 AND a.analyzerVersion = :version
+        LIMIT 1
+    """)
+    suspend fun activeLocalAnalysis(trackId: String, version: Int = LocalAnalyzerVersion): LocalTrackAnalysisEntity?
+
+    @Query("""
+        SELECT d.documentKey, d.rawJson FROM sync_documents d
+        INNER JOIN sync_plans p ON p.planId = d.planId AND p.active = 1
+        WHERE d.kind = 'analysis' AND d.documentKey = :trackId LIMIT 1
+    """)
+    suspend fun activeLegacyAnalysis(trackId: String): AnalysisDocumentRow?
+
     @Query("SELECT content FROM provider_lyrics WHERE trackId = :trackId LIMIT 1") fun observeProviderLyrics(trackId: String): Flow<String?>
 
     @Query("SELECT d.documentKey, d.rawJson FROM sync_documents d INNER JOIN sync_plans p ON p.planId = d.planId WHERE p.active = 1 AND d.kind = 'analysis'")
@@ -375,8 +500,8 @@ internal interface SyncDao {
 }
 
 @Database(
-    entities = [SyncPlanEntity::class, SyncAssetEntity::class, SyncTrackEntity::class, SyncPlaylistEntity::class, LibrarySearchDocumentEntity::class, PlaylistMutationEntity::class, LocalPlaylistEntity::class, PlaylistArtworkStagingEntity::class, ArtistArtworkStagingEntity::class, SyncDocumentEntity::class, ProviderLyricEntity::class, ListeningSessionEntity::class, PlaybackAttemptEntity::class, DailyTrackListeningStatEntity::class, DailyPlaybackAttemptStatEntity::class],
-    version = 13,
+    entities = [SyncPlanEntity::class, SyncAssetEntity::class, SyncTrackEntity::class, SyncPlaylistEntity::class, LibrarySearchDocumentEntity::class, PlaylistMutationEntity::class, LocalPlaylistEntity::class, PlaylistArtworkStagingEntity::class, ArtistArtworkStagingEntity::class, SyncDocumentEntity::class, ProviderLyricEntity::class, ListeningSessionEntity::class, PlaybackAttemptEntity::class, DailyTrackListeningStatEntity::class, DailyPlaybackAttemptStatEntity::class, LocalTrackAnalysisEntity::class],
+    version = 14,
     exportSchema = false,
 )
 internal abstract class SyncDatabase : RoomDatabase() {
@@ -384,9 +509,16 @@ internal abstract class SyncDatabase : RoomDatabase() {
 
     companion object {
         fun create(context: Context): SyncDatabase = Room.databaseBuilder(context, SyncDatabase::class.java, "library-sync.db")
-            .addMigrations(Migration2To3, Migration3To4, Migration4To5, Migration5To6, Migration6To7, Migration7To8, Migration8To9, Migration9To10, Migration10To11, Migration11To12, Migration12To13)
+            .addMigrations(Migration2To3, Migration3To4, Migration4To5, Migration5To6, Migration6To7, Migration7To8, Migration8To9, Migration9To10, Migration10To11, Migration11To12, Migration12To13, Migration13To14)
             .fallbackToDestructiveMigration()
             .build()
+
+        internal val Migration13To14 = object : Migration(13, 14) {
+            override fun migrate(database: SupportSQLiteDatabase) {
+                database.execSQL("CREATE TABLE IF NOT EXISTS local_track_analysis (trackId TEXT NOT NULL PRIMARY KEY, sourceRevision TEXT NOT NULL, analyzerVersion INTEGER NOT NULL, status TEXT NOT NULL, rawJson TEXT NOT NULL, failure TEXT NOT NULL)")
+                database.execSQL("CREATE INDEX IF NOT EXISTS index_sync_tracks_planId_syncOrder ON sync_tracks(planId, syncOrder)")
+            }
+        }
 
         private val Migration2To3 = object : Migration(2, 3) {
             override fun migrate(database: SupportSQLiteDatabase) {
@@ -536,12 +668,17 @@ data class LibraryComposer(
     val sortName: String = "",
 )
 
-data class LibraryAnalysisProgress(val analyzedTracks: Int = 0, val totalTracks: Int = 0)
+data class LibraryAnalysisProgress(
+    val analyzedTracks: Int = 0,
+    val totalTracks: Int = 0,
+    val failedTracks: Int = 0,
+)
 
 internal class AndroidLibrarySyncStore(
     private val database: SyncDatabase,
     private val filesDir: File,
     private val deezerArtwork: DeezerArtwork? = null,
+    private val analysisPreferences: LocalAnalysisPreferences? = null,
 ) {
     private val dao = database.syncDao()
     private val artworkWrites = Mutex()
@@ -554,16 +691,29 @@ internal class AndroidLibrarySyncStore(
         .shareIn(snapshotScope, SharingStarted.WhileSubscribed(5_000), replay = 1)
     private val artworkAssets = dao.observeArtworkAssets()
         .shareIn(snapshotScope, SharingStarted.WhileSubscribed(5_000), replay = 1)
-    val analysisAvailable: Flow<Boolean> = dao.observeAnalysisAvailable()
-    private val analyzedTrackIds: Flow<Set<String>> = dao.observeActiveAnalysisDocuments()
-        .map { documents -> documents.mapTo(mutableSetOf(), AnalysisDocumentRow::documentKey) }
-        .distinctUntilChanged()
-    val libraryAnalysisEnabled: Flow<Boolean> = dao.observeLibraryAnalysisEnabled().map { it == true }.distinctUntilChanged()
-    val moodRadioEligibleTrackIds: Flow<Set<String>> = combine(libraryAnalysisEnabled, dao.observeActiveAnalysisDocuments()) { enabled, documents ->
-        if (!enabled) emptySet() else documents.mapNotNull { document ->
-            val value = runCatching { LibraryJson.json.parseToJsonElement(document.rawJson).jsonObject }.getOrNull()
-            document.documentKey.takeIf { value != null && listOf("energy", "danceability", "brightness", "tempo").all { key -> value[key]?.jsonPrimitive?.contentOrNull?.toDoubleOrNull() != null } }
-        }.toSet()
+    fun pendingLocalAnalyses(afterOrder: Int, limit: Int): Flow<List<LocalAnalysisCandidate>> =
+        dao.observePendingLocalAnalysis(afterOrder, limit)
+
+    val analysisAvailable: Flow<Boolean> =
+        combine(dao.observeAnalysisAvailable(), dao.observeLocalAnalysisCount("success")) { legacy, count ->
+            legacy || count > 0
+        }.distinctUntilChanged()
+    val libraryAnalysisEnabled: Flow<Boolean> = combine(
+        dao.observeLibraryAnalysisEnabled(),
+        analysisPreferences?.settings ?: flowOf(com.amwolfstein.sistrum.analysis.LocalAnalysisSettings()),
+    ) { legacy, local -> legacy == true || local.enabled }.distinctUntilChanged()
+    val analysisChanges: Flow<Int> = dao.observeLocalAnalysisCount("success")
+    val moodRadioEligibleTrackIds: Flow<Set<String>> = combine(
+        libraryAnalysisEnabled, dao.observeActiveAnalysisDocuments(), dao.observeLocalMoodEligibleIds(),
+    ) { enabled, documents, local ->
+        if (!enabled) emptySet() else {
+            val legacy = documents.mapNotNull { document ->
+                val value = runCatching { LibraryJson.json.parseToJsonElement(document.rawJson).jsonObject }.getOrNull()
+                document.documentKey.takeIf { value != null && listOf("energy", "danceability", "brightness", "tempo")
+                    .all { key -> value[key]?.jsonPrimitive?.contentOrNull?.toDoubleOrNull()?.isFinite() == true } }
+            }
+            (legacy + local).toSet()
+        }
     }.distinctUntilChanged()
     val dailyTrackListeningStats: Flow<List<DailyTrackListeningStat>> = dao.observeDailyTrackStats().map { rows ->
         rows.map { DailyTrackListeningStat(it.sourceDeviceId, it.localDate, it.trackId, it.listenedSeconds, it.playCount) }
@@ -575,19 +725,47 @@ internal class AndroidLibrarySyncStore(
         rows.associate { it.trackId to it.lastListenedAt }
     }
 
-    suspend fun analysis(trackId: String): TrackAnalysis? = activeAnalyses()[trackId]
+    suspend fun analysis(trackId: String): TrackAnalysis? {
+        val local = dao.activeLocalAnalysis(trackId)?.let(::localAnalysisObject)?.let(::trackAnalysisFrom)
+        if (local != null) return local
+        val legacy = dao.activeLegacyAnalysis(trackId) ?: return null
+        val value = runCatching { LibraryJson.json.parseToJsonElement(legacy.rawJson).jsonObject }.getOrNull()
+            ?: return null
+        return trackAnalysisFrom(value)
+    }
 
-    suspend fun activeAnalyses(): Map<String, TrackAnalysis> = dao.activeAnalysisDocuments().mapNotNull { document ->
-        val value = runCatching { LibraryJson.json.parseToJsonElement(document.rawJson).jsonObject }.getOrNull() ?: return@mapNotNull null
-        val lufs = value["loudness_lufs"]?.jsonPrimitive?.contentOrNull?.toFloatOrNull() ?: return@mapNotNull null
-        val peak = value["true_peak"]?.jsonPrimitive?.contentOrNull?.toFloatOrNull() ?: return@mapNotNull null
-        document.documentKey to TrackAnalysis(lufs, peak)
-    }.toMap()
+    suspend fun activeAnalyses(): Map<String, TrackAnalysis> {
+        val legacy = dao.activeAnalysisDocuments().mapNotNull { document ->
+            val value = runCatching { LibraryJson.json.parseToJsonElement(document.rawJson).jsonObject }.getOrNull()
+                ?: return@mapNotNull null
+            document.documentKey to (trackAnalysisFrom(value) ?: return@mapNotNull null)
+        }.toMap()
+        val local = dao.activeLocalAnalyses().mapNotNull { row ->
+            val value = localAnalysisObject(row) ?: return@mapNotNull null
+            row.trackId to (trackAnalysisFrom(value) ?: return@mapNotNull null)
+        }.toMap()
+        return legacy + local
+    }
+
+    suspend fun saveLocalAnalysis(value: LocalTrackAnalysisEntity): Boolean = database.withTransaction {
+        if (dao.activeSourceRevision(value.trackId) != value.sourceRevision) return@withTransaction false
+        dao.insertLocalAnalysis(value)
+        true
+    }
+
+    val localAnalysisFailures: Flow<List<LocalAnalysisFailure>> = dao.observeLocalAnalysisFailures()
+
+    suspend fun retryLocalAnalysisFailures() = dao.clearLocalAnalysisFailures()
+
+    suspend fun retryLocalAnalysisFailure(trackId: String) = dao.clearLocalAnalysisFailure(trackId)
+
     suspend fun moodRadioTracks(): List<MoodRadioTrack> {
         val features = dao.activeAnalysisDocuments().associate { document ->
-            val value = runCatching { LibraryJson.json.parseToJsonElement(document.rawJson).jsonObject }.getOrDefault(JsonObject(emptyMap()))
-            document.documentKey to listOf("energy", "danceability", "brightness", "tempo").map { key -> value[key]?.jsonPrimitive?.contentOrNull?.toDoubleOrNull() }
-        }
+            val value = runCatching { LibraryJson.json.parseToJsonElement(document.rawJson).jsonObject }
+                .getOrDefault(JsonObject(emptyMap()))
+            document.documentKey to listOf("energy", "danceability", "brightness", "tempo")
+                .map { key -> value.finiteDouble(key) }
+        } + deriveLocalMoods(dao.activeLocalAnalyses())
         return tracks.first().map { track ->
             val mood = features[track.id].orEmpty()
             val artist = (track.metadataObject()?.get("artists") as? JsonArray)?.firstOrNull() as? JsonObject
@@ -626,9 +804,10 @@ internal class AndroidLibrarySyncStore(
             )
         }
     }.shareIn(snapshotScope, SharingStarted.WhileSubscribed(5_000), replay = 1)
-    val analysisProgress: Flow<LibraryAnalysisProgress> = combine(tracks, analyzedTrackIds) { tracks, analyzedIds ->
-        LibraryAnalysisProgress(tracks.count { it.id in analyzedIds }, tracks.size)
-    }.distinctUntilChanged()
+    val analysisProgress: Flow<LibraryAnalysisProgress> =
+        combine(tracks, dao.observeAnalyzedTrackCount(), dao.observeLocalAnalysisCount("failed")) { tracks, analyzed, failed ->
+            LibraryAnalysisProgress(analyzedTracks = analyzed, totalTracks = tracks.size, failedTracks = failed)
+        }.distinctUntilChanged()
     val artists: Flow<List<LibraryArtist>> = combine(
         activeTrackRows,
         artworkAssets,
@@ -1382,6 +1561,22 @@ private fun PlaylistMutation.dedupeMutationId(): String? = when (operation) {
     PlaylistMutationOperation.SET_ARTWORK, PlaylistMutationOperation.REMOVE_ARTWORK -> "dedupe:artwork:$playlistId"
     PlaylistMutationOperation.UPDATE -> "dedupe:update:$playlistId"
     else -> null
+}
+
+private fun trackAnalysisFrom(value: JsonObject): TrackAnalysis? {
+    val lufs = value.finiteDouble("loudness_lufs")?.toFloat()?.takeIf(Float::isFinite) ?: return null
+    val peak = value.finiteDouble("true_peak")?.toFloat()?.takeIf(Float::isFinite) ?: return null
+    return TrackAnalysis(lufs, peak)
+}
+
+private fun deriveLocalMoods(rows: List<LocalTrackAnalysisEntity>): Map<String, List<Double?>> {
+    val measured = rows.mapNotNull { row -> localSignalFeatures(row)?.let { row.trackId to it } }
+    if (measured.isEmpty()) return emptyMap()
+    val model = MoodModel(measured.map { it.second })
+    return measured.associate { (trackId, features) ->
+        val mood = model.derive(features)
+        trackId to listOf(mood.energy, mood.danceability, mood.brightness, features.tempo)
+    }
 }
 
 private fun JsonObject.string(name: String): String? = (this[name] as? JsonPrimitive)?.contentOrNull

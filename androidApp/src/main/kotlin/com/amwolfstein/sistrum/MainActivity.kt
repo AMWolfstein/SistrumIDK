@@ -158,6 +158,16 @@ class MainActivity : ComponentActivity() {
         super.attachBaseContext(newBase.withLatinDigits())
     }
 
+    override fun onStart() {
+        super.onStart()
+        LocalLibraryRuntime.analysisController.setForeground(true)
+    }
+
+    override fun onStop() {
+        LocalLibraryRuntime.analysisController.setForeground(false)
+        super.onStop()
+    }
+
     override fun onCreate(savedInstanceState: Bundle?) {
         enableEdgeToEdge()
         super.onCreate(savedInstanceState)

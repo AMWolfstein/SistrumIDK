@@ -13,7 +13,11 @@ foreach(library avutil swresample avcodec avformat)
     set_target_properties(${library} PROPERTIES IMPORTED_LOCATION "${FFMPEG_ROOT}/lib${library}.so")
 endforeach()
 
-add_library(sistrum_player SHARED ffmpeg_player.cpp)
+add_library(sistrum_player SHARED
+    ffmpeg_player.cpp
+    offline_analysis_decoder.cpp
+    third_party/libebur128/ebur128.c
+)
 target_include_directories(sistrum_player PRIVATE "${FFMPEG_INCLUDE}")
 target_compile_options(sistrum_player PRIVATE -Oz -ffunction-sections -fdata-sections)
 target_link_options(sistrum_player PRIVATE -Wl,--gc-sections -Wl,-z,max-page-size=16384)

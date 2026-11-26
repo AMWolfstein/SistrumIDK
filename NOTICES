@@ -169,3 +169,11 @@ Bundled romanization components and data:
 
 License texts: https://opensource.org/licenses/MIT and
 https://www.apache.org/licenses/LICENSE-2.0
+
+--------------------------------------------------------------------------------
+libebur128 1.2.6
+https://github.com/jiixyj/libebur128/tree/v1.2.6
+--------------------------------------------------------------------------------
+Copyright (c) 2011 Jan Kokemüller. Licensed under the MIT License.
+The complete license is included at
+androidApp/src/main/cpp/third_party/libebur128/COPYING.

@@ -1,4 +1,15 @@
 <resources>
+    <string name="library_analysis_retry_one">Retry</string>
+
+    <string name="library_analysis_schedule_failed">Could not change library analysis.</string>
+
+    <string name="library_analysis_enable">Analyze library on this device</string>
+    <string name="library_analysis_workers">Analysis workers</string>
+    <string name="library_analysis_one_worker">1 worker</string>
+    <string name="library_analysis_two_workers">2 workers</string>
+    <string name="library_analysis_progress">Analyzed %1$d of %2$d tracks · %3$d failed</string>
+    <string name="library_analysis_retry">Retry failed tracks</string>
+
     <string name="scan_preserved_legacy">Kept %1$d previous tracks pending verification.</string>
 
     <string name="scan_schedule_failed">Could not change the automatic scan schedule.</string>

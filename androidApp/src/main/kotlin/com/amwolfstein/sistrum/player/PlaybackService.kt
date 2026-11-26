@@ -32,6 +32,7 @@ import kotlinx.coroutines.Job
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.cancel
 import kotlinx.coroutines.delay
+import kotlinx.coroutines.flow.collect
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.collectLatest
@@ -43,6 +44,7 @@ import kotlinx.coroutines.withTimeoutOrNull
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
 import com.amwolfstein.sistrum.MainActivity
+import com.amwolfstein.sistrum.analysis.coalesceAnalysisChanges
 import com.amwolfstein.sistrum.R
 import com.amwolfstein.sistrum.sync.LocalLibraryRuntime
 import com.amwolfstein.sistrum.sync.decodeArtworkBitmaps
@@ -113,6 +115,30 @@ class PlaybackService : Service() {
         moodRadioJob = scope.launch {
             LocalLibraryRuntime.libraryStore().libraryAnalysisEnabled.collectLatest { enabled ->
                 if (!enabled) commandMutex.withLock { stopMoodRadio() }
+            }
+        }
+        scope.launch {
+            val store = LocalLibraryRuntime.libraryStore()
+            var previous = emptyMap<String, TrackAnalysis?>()
+            store.analysisChanges.coalesceAnalysisChanges().collect {
+                commandMutex.withLock {
+                    val current = when (val playback = state.value) {
+                        is PlaybackState.Playing -> playback.item
+                        is PlaybackState.Paused -> playback.item
+                        is PlaybackState.Preparing -> playback.item
+                        else -> null
+                    }
+                    if (current == null) {
+                        previous = emptyMap()
+                    } else {
+                        val ids = listOfNotNull(current.trackId, preloadedItem?.trackId).distinct()
+                        val relevant = ids.associateWith { store.analysis(it) }
+                        if (relevant != previous || normalizationSettings.mode == NormalizationMode.Album) {
+                            refreshNormalizationGains()
+                            previous = relevant
+                        }
+                    }
+                }
             }
         }
         preferencesJob = scope.launch {
@@ -753,18 +779,16 @@ class PlaybackService : Service() {
     }
 
     private suspend fun normalizationGain(item: PlaybackItem, nextId: String?): Float {
-        val analyses = LocalLibraryRuntime.libraryStore().activeAnalyses()
-        if (analyses.isEmpty()) {
-            if (normalizationSettings.enabled) normalizationPreferences.disable()
-            return 0f
-        }
+        val store = LocalLibraryRuntime.libraryStore()
+        val currentAnalysis = store.analysis(item.trackId) ?: return 0f
         val next = nextId?.let { AndroidPlaybackRuntime.controller().resolve(it) }
         val continuousAlbum = normalizationSettings.mode == NormalizationMode.Album &&
             item.albumId.isNotEmpty() && item.albumId == next?.albumId
         val albumAnalyses = if (continuousAlbum) {
-            LocalLibraryRuntime.libraryStore().tracks.first().filter { it.albumId == item.albumId }.mapNotNull { analyses[it.id] }
+            val analyses = store.activeAnalyses()
+            store.tracks.first().filter { it.albumId == item.albumId }.mapNotNull { analyses[it.id] }
         } else emptyList()
-        return normalizationGainDb(normalizationSettings, item.analysis, albumAnalyses, continuousAlbum)
+        return normalizationGainDb(normalizationSettings, currentAnalysis, albumAnalyses, continuousAlbum)
     }
 
     private suspend fun refreshNormalizationGains() {
