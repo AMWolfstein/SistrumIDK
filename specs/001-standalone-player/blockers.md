@@ -1,0 +1,46 @@
+# Blocker and decision register
+
+**Mission**: M001 · `specs/001-standalone-player`
+**Baseline**: `cfa44a5` (alpha10) at planning start
+**Upstream pin**: `d859940c0629907e377c889fb276904b6a7a4b8c` (Airmedy master tip)
+**Mornye pin**: `af9a4d6422759541ec57a9ed696b3b47928a1bff` (LGPL-3.0, scanner reference only)
+
+Status values: OPEN (needs work/decision), BLOCKED (cannot proceed), RESOLVED, ACCEPTED (owner-approved limitation).
+
+| ID | Blocker / decision | Evidence | Impact | Owner decision / action | Status |
+|---|---|---|---|---|---|
+| BL-01 | No JDK, Android SDK, NDK, CMake or local.properties on the build host | `java`/`sdkmanager` absent; target audit B1 | No Gradle build, host tests, instrumentation or APK | Installed and verified: Temurin 21.0.13.1, SDK 37.0, build-tools 37.0.0, NDK 30.0.16248370, CMake 3.22.1, fontTools 4.69.1/brotli | RESOLVED |
+| BL-02 | FFmpeg native artifacts are absent | `androidApp/src/main/jniLibs`, `androidApp/build/ffmpeg` missing; `CMakeLists.txt:7-9` | Native build and playback impossible until `scripts/build-ffmpeg-android.sh arm64-v8a` runs | Run helper after SDK/NDK install; record version/flags/size/signature | OPEN |
+| BL-03 | Material Symbols font is generated at preBuild; Python deps missing | `.gitignore` ignores generated ttf; `subset_font.py` needs `fontTools` + `brotli`; target audit B3 | `preBuild` fails before compilation | `fonttools` + `brotli` installed in `.work/fonttools-python`; `local.properties` set | RESOLVED |
+| BL-04 | Romanization data is incomplete | `androidApp/build.gradle.kts:77-81` copies `../internal/infra/romanization/data` (missing); engine opens `pinyin.txt`, `TSCharacters.txt`, `characters.tsv`; only `characters.tsv` is checked in | Chinese/Korean romanization and its test fail today | Port required upstream data files into app-owned assets with notices; remove sibling-path dependency; add packaging test | OPEN |
+| BL-05 | Room DB is a desktop mirror with destructive fallback | `SyncDatabase.kt` version 12, `fallbackToDestructiveMigration`, no exported schema, no 1→2 migration; target audit §2 | A new local schema could silently wipe user data | Export schema, add real migrations, one-time preserve/import of owned playlists/favorites/ratings/listening; never destructive reset | OPEN |
+| BL-06 | FFmpeg build disables filters/network | `scripts/build-ffmpeg-android.sh:77-81` has `--disable-avfilter`, `--disable-network`, only file protocol | Analysis (ebur128/astats) and required DSP filters unavailable | Rebuild FFmpeg 9.0.2 with only required filters enabled; document flags, license, size delta before/after | OPEN |
+| BL-07 | TagLib version/build pinned | TagLib v2.3.2 (`deadc299…`), LGPL-2.1/MPL-1.1 confirmed | Static-link build still to be implemented | Integrate TagLib v2.3.2 in Task T05/T01; verify reproducible build/size/notices | RESOLVED (pin) |
+| BL-08 | Only `arm64-v8a` native ABI | `androidApp/build.gradle.kts:166-168` | x86_64 emulator cannot load `sistrum_player`; device/emulator coverage limited | Keep arm64 per constraint; use arm64 device/emulator image or state limitation explicitly; no arbitrary ABI change | ACCEPTED (constraint) |
+| BL-09 | Release signing is environment-only | `build.gradle.kts` `MOBILE_*` variables; no keystore in repo | Final minified release APK unsigned without owner-provided secrets | Final dev APK is signed by debug key; release signing only if owner supplies variables; never print secrets | OPEN (owner) |
+| BL-10 | No Android device attached; tools absent | `adb` absent, no USB Android device | Instrumentation/physical tests cannot run now | Owner/device needed; emulator arm64 acceptable if installed; document coverage | BLOCKED |
+| BL-11 | Full CodeGraphContext index exceeds adapter 900 s | Repo index took 1,095–1,136 s in prior tasks | Task-start map refresh can time out on this large repo | Use pinned CGC CLI directly for full reindex then `code_tools update` with index reuse; record limitation; do not claim stale coverage | ACCEPTED (workflow tooling) |
+| BL-12 | Upstream is frozen at the Android baseline | `airmedy-upstream` HEAD = `d859940c` (master tip; 0 newer commits) | No newer upstream features exist to reconcile at audit time | Pin `d859940c`; any future upstream change requires owner decision | RESOLVED |
+| BL-13 | Desktop sync/pairing code is deeply wired into sharedLogic and tests | target audit §4 and §4.5 | Cannot be deleted before local replacements exist | Remove in Task K only after local library/playlists/history replacements and tests land | OPEN |
+| BL-14 | Docs contain wrong build commands/JDK/paths | target audit §8 | Do not use docs as acceptance evidence | Fix docs in the task that owns the affected area; record corrections | OPEN |
+| BL-15 | Cleartext/QR permissions are desktop-only; dataSync service is also used by the local scanner | `AndroidManifest.xml:4,15`; T04 uses a `dataSync` foreground service | Do not remove `FOREGROUND_SERVICE_DATA_SYNC` blindly | Remove CAMERA/LAN/multicast and cleartext; keep `FOREGROUND_SERVICE_DATA_SYNC` for local scans and media playback | OPEN |
+| BL-16 | No Room migration test and no exported schema | `room-testing` declared but unused; target audit §7 | Silent data loss risk | Add schema export and migration tests before replacing the schema | OPEN |
+| BL-17 | Mornye is LGPL-3.0 and Flutter/Dart/Rust | `mornye-upstream/COPYING` | Cannot copy code into GPL app without licence analysis | Reimplement scanner behavior in Kotlin/Room; no source copy; keep this as design reference only | ACCEPTED |
+| BL-18 | Analysis golden fixtures | Mission §H/FR-082 | Cannot prove numeric parity without a producer | Build/run the upstream desktop analysis producer outside the target tree on deterministic fixtures; store expected outputs | OPEN |
+| BL-21 | aubio parity decision | Desktop uses aubio; new DSP dependency originally forbidden | Tempo/onset parity at risk | Owner revised: add aubio 0.4.9 + FFTW 3.3.11 (approved), static-link, validate with golden fixtures | RESOLVED |
+| BL-22 | Ratings absent upstream | Audit | Product scope ambiguity | Owner chose Sistrum 0–5 ratings as an extension | RESOLVED |
+| BL-23 | Upstream M3U8/Last.fm defects | Audit | Exact parity vs product quality | Owner chose fixes (all-playlist export, relative/BOM, bounded Last.fm retry); record deviations | RESOLVED |
+| BL-19 | No physical device for final airplane-mode test | Mission §4/FR-133 | Final acceptance cannot be fully proven here | Ask owner to run the final APK test or attach a device; document unverified items | BLOCKED |
+| BL-20 | Tag editing on SAF may be read-only/denied | Mission §C/FR-024 | Some formats/files cannot be written | Implement verified staging + failure/retry; ask owner only if a format cannot be edited losslessly | OPEN |
+
+## Decisions already taken by the owner
+
+- Remote control, LAN servers, browser control, discovery, pairing and desktop sync are intentionally excluded.
+- TagLib plus owner-approved aubio 0.4.9/FFTW 3.3.11 are the only new dependencies; no Go/Wails/Vue/Bleve/miniaudio/Media3/mpv.
+- Mornye overrides the desktop scanner mechanism; Airmedy semantics still govern.
+- Deezer artist artwork is OFF by default and lives below Lyrics; imported images are durable.
+- Preserve existing ReplayGain tags by default.
+- Keep current Android visual identity; adapt desktop mechanisms to mobile equivalents.
+- Upstream `d859940c` is the source authority; `ea1ad18…`/SistrumKotlin is forbidden.
+- iOS is frozen. This is the first mission on `alpha10`; M001 is correct. Other remote branches are out of scope and not used.
+- Native build/APK size optimization is a separate phase after all features, before the final audit/APK; Looper/libmpv-scripts is reference only, no mpv/Media3 migration.
