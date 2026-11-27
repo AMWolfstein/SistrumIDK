@@ -10,7 +10,7 @@ import kotlinx.coroutines.flow.flowOn
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
-import com.amwolfstein.sistrum.sync.AndroidLibrarySyncStore
+import com.amwolfstein.sistrum.sync.LibraryCatalog
 import com.amwolfstein.sistrum.sync.LibraryAlbum
 import com.amwolfstein.sistrum.sync.LibraryTrack
 import com.amwolfstein.sistrum.ui.libraryAlphabeticalComparator
@@ -43,12 +43,12 @@ data class LibraryAlbumsUiState(
 )
 
 internal class LibraryAlbumsViewModel(
-    syncStore: AndroidLibrarySyncStore,
+    syncStore: LibraryCatalog,
     private val playbackController: PlaybackController,
     private val layoutStore: LibraryAlbumsLayoutStore,
 ) : ViewModel() {
     class Factory(
-        private val syncStore: AndroidLibrarySyncStore,
+        private val syncStore: LibraryCatalog,
         private val playbackController: PlaybackController,
         private val layoutStore: LibraryAlbumsLayoutStore,
     ) : androidx.lifecycle.ViewModelProvider.Factory {

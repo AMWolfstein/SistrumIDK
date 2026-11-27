@@ -10,7 +10,7 @@ import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.flowOn
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.Dispatchers
-import com.amwolfstein.sistrum.sync.AndroidLibrarySyncStore
+import com.amwolfstein.sistrum.sync.LibraryCatalog
 import com.amwolfstein.sistrum.player.PlaybackController
 import com.amwolfstein.sistrum.player.PlaybackRequest
 import com.amwolfstein.sistrum.player.PlaybackLogTag
@@ -24,6 +24,7 @@ enum class TrackSortOption {
     Artist,
     PlayCount,
     DateAdded,
+    Rating,
 }
 
 enum class SortOrder {
@@ -36,6 +37,7 @@ data class LibraryTracksUiState(
     val tracks: List<LibraryTrack> = emptyList(),
     val recentTracks: List<LibraryTrack> = emptyList(),
     val filterQuery: String = "",
+    val ratingFilter: Int? = null,
     val sortOption: TrackSortOption = TrackSortOption.Name,
     val sortOrder: SortOrder = SortOrder.Ascending,
 )
@@ -48,11 +50,11 @@ data class HomeUiState(
 )
 
 internal class LibraryTracksViewModel(
-    syncStore: AndroidLibrarySyncStore,
+    syncStore: LibraryCatalog,
     private val playbackController: PlaybackController,
 ) : ViewModel() {
     class Factory(
-        private val syncStore: AndroidLibrarySyncStore,
+        private val syncStore: LibraryCatalog,
         private val playbackController: PlaybackController,
     ) : androidx.lifecycle.ViewModelProvider.Factory {
         @Suppress("UNCHECKED_CAST")
@@ -64,6 +66,7 @@ internal class LibraryTracksViewModel(
     private val sortOptionFlow = MutableStateFlow(TrackSortOption.Name)
     private val sortOrderFlow = MutableStateFlow(SortOrder.Ascending)
     private val filterQueryFlow = MutableStateFlow("")
+    private val ratingFilterFlow = MutableStateFlow<Int?>(null)
 
     val homeUiState: StateFlow<HomeUiState> = combine(syncStore.tracks, syncStore.lastListenedAt) { rawTracks, lastListenedAt ->
             HomeUiState(
@@ -85,9 +88,11 @@ internal class LibraryTracksViewModel(
         sortOptionFlow,
         sortOrderFlow,
         filterQueryFlow,
-    ) { rawTracks, option, order, query ->
+        ratingFilterFlow,
+    ) { rawTracks, option, order, query, minimumRating ->
         val filtered = rawTracks.filter { track ->
-            matchesVisibleTrackTextFilter(query, track)
+            matchesVisibleTrackTextFilter(query, track) &&
+                (minimumRating == null || (track.rating ?: 0) >= minimumRating)
         }
         val sorted = sortTracks(filtered, option, order)
         val recent = rawTracks
@@ -98,6 +103,7 @@ internal class LibraryTracksViewModel(
             tracks = sorted,
             recentTracks = recent,
             filterQuery = query,
+            ratingFilter = minimumRating,
             sortOption = option,
             sortOrder = order,
         )
@@ -113,6 +119,10 @@ internal class LibraryTracksViewModel(
 
     fun setFilterQuery(query: String) {
         filterQueryFlow.value = query
+    }
+
+    fun setRatingFilter(rating: Int?) {
+        ratingFilterFlow.value = rating
     }
 
     fun setSortOrder(order: SortOrder) {
@@ -211,8 +221,20 @@ internal fun sortTracks(
         TrackSortOption.DateAdded -> compareBy<LibraryTrack> { it.createdAt }
             .thenBy(libraryAlphabeticalComparator) { it.sortTitle }
             .thenBy { it.id }
+        TrackSortOption.Rating -> compareBy<LibraryTrack> { it.rating == null }
+            .thenBy { it.rating ?: 0 }
+            .thenBy(libraryAlphabeticalComparator) { it.sortTitle }
+            .thenBy { it.id }
     }
 
+    if (option == TrackSortOption.Rating) {
+        // Unrated tracks stay last in both directions.
+        val rated = tracks.filter { it.rating != null }
+            .sortedWith(compareBy<LibraryTrack> { it.rating }.thenBy(libraryAlphabeticalComparator) { it.sortTitle }.thenBy { it.id })
+        val unrated = tracks.filter { it.rating == null }
+            .sortedWith(compareBy<LibraryTrack, String>(libraryAlphabeticalComparator) { it.sortTitle }.thenBy { it.id })
+        return if (order == SortOrder.Descending) rated.reversed() + unrated else rated + unrated
+    }
     val sorted = tracks.sortedWith(comparator)
     return if (order == SortOrder.Descending) {
         sorted.reversed()

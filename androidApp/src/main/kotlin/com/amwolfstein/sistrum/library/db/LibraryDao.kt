@@ -125,6 +125,63 @@ interface LibraryDao {
     )
     suspend fun deleteOrphanAlbums()
 
+    @Query(
+        "SELECT library_items.*, " +
+            "(SELECT GROUP_CONCAT(name, char(1)) FROM (SELECT artists.name AS name FROM track_artists " +
+            "JOIN artists ON artists.id = track_artists.artistId " +
+            "WHERE track_artists.trackId = library_items.id)) AS artistNames, " +
+            "(SELECT GROUP_CONCAT(name, char(1)) FROM (SELECT artists.name AS name FROM track_album_artists " +
+            "JOIN artists ON artists.id = track_album_artists.artistId " +
+            "WHERE track_album_artists.trackId = library_items.id)) AS albumArtistNames, " +
+            "(SELECT GROUP_CONCAT(name, char(1)) FROM (SELECT genres.name AS name FROM track_genres " +
+            "JOIN genres ON genres.id = track_genres.genreId " +
+            "WHERE track_genres.trackId = library_items.id)) AS genreNames, " +
+            "(SELECT GROUP_CONCAT(name, char(1)) FROM (SELECT composers.name AS name FROM track_composers " +
+            "JOIN composers ON composers.id = track_composers.composerId " +
+            "WHERE track_composers.trackId = library_items.id)) AS composerNames " +
+            "FROM library_items WHERE available = 1",
+    )
+    fun observeLocalTracks(): Flow<List<LocalTrackRow>>
+
+    @Query(
+        "SELECT albums.*, (SELECT artists.name FROM artists WHERE artists.id = albums.primaryAlbumArtistId) AS artistName, " +
+            "(SELECT COUNT(*) FROM library_items WHERE library_items.albumId = albums.id AND available = 1) AS trackCount " +
+            "FROM albums WHERE EXISTS (SELECT 1 FROM library_items WHERE library_items.albumId = albums.id AND available = 1)",
+    )
+    fun observeLocalAlbums(): Flow<List<LocalAlbumRow>>
+
+    @Query(
+        "SELECT artists.*, (SELECT COUNT(DISTINCT trackId) FROM track_artists WHERE artistId = artists.id) AS trackCount " +
+            "FROM artists WHERE trackCount > 0",
+    )
+    fun observeLocalArtists(): Flow<List<LocalArtistRow>>
+
+    @Query(
+        "SELECT genres.*, (SELECT COUNT(DISTINCT trackId) FROM track_genres WHERE genreId = genres.id) AS trackCount " +
+            "FROM genres WHERE trackCount > 0",
+    )
+    fun observeLocalGenres(): Flow<List<LocalGenreRow>>
+
+    @Query(
+        "SELECT composers.*, (SELECT COUNT(DISTINCT trackId) FROM track_composers WHERE composerId = composers.id) AS trackCount " +
+            "FROM composers WHERE trackCount > 0",
+    )
+    fun observeLocalComposers(): Flow<List<LocalComposerRow>>
+
+    @Query("SELECT * FROM artwork_assets")
+    fun observeArtworkAssets(): Flow<List<ArtworkAssetEntity>>
+
+    @Query(
+        "SELECT trackId, MAX(endedAt) AS lastListenedAt FROM listening_sessions GROUP BY trackId",
+    )
+    fun observeLocalLastListened(): Flow<List<LocalListeningRow>>
+
+    @Query("UPDATE library_items SET rating = :rating WHERE id = :trackId")
+    suspend fun updateRating(trackId: String, rating: Int?)
+
+    @Query("UPDATE library_items SET isFavorite = :favorite WHERE id = :trackId")
+    suspend fun updateFavorite(trackId: String, favorite: Boolean)
+
     @Query("SELECT COUNT(*) FROM library_items")
     suspend fun itemCount(): Int
 

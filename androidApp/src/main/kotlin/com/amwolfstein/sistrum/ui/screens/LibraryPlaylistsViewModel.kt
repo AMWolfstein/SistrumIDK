@@ -20,7 +20,7 @@ import kotlinx.coroutines.withContext
 import kotlinx.serialization.json.JsonObject
 import kotlinx.serialization.json.JsonPrimitive
 import kotlinx.serialization.json.contentOrNull
-import com.amwolfstein.sistrum.sync.AndroidLibrarySyncStore
+import com.amwolfstein.sistrum.sync.LibraryCatalog
 import com.amwolfstein.sistrum.sync.LibraryPlaylist
 import com.amwolfstein.sistrum.sync.LibrarySyncProtocol
 import com.amwolfstein.sistrum.sync.LibraryTrack
@@ -44,8 +44,8 @@ internal data class LibraryPlaylistsUiState(
     val isLoaded: Boolean = true,
 )
 
-internal class LibraryPlaylistsViewModel(private val context: Context, syncStore: AndroidLibrarySyncStore) : ViewModel() {
-    class Factory(private val context: Context, private val syncStore: AndroidLibrarySyncStore) : ViewModelProvider.Factory {
+internal class LibraryPlaylistsViewModel(private val context: Context, syncStore: LibraryCatalog) : ViewModel() {
+    class Factory(private val context: Context, private val syncStore: LibraryCatalog) : ViewModelProvider.Factory {
         @Suppress("UNCHECKED_CAST")
         override fun <T : ViewModel> create(modelClass: Class<T>): T =
             LibraryPlaylistsViewModel(context, syncStore) as T

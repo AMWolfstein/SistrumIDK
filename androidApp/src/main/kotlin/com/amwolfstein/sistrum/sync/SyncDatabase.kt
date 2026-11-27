@@ -475,6 +475,8 @@ data class LibraryTrack(
     val audioPath: String? = null,
     val sortTitle: String = "",
     val sortArtists: String = "",
+    /** Sistrum 0–5 rating; null means unrated. */
+    val rating: Int? = null,
 )
 
 internal data class LibraryPlaylistRow(val id: String, val name: String, val trackIdsJson: String, val rawJson: String)
@@ -525,7 +527,10 @@ data class LibraryAnalysisProgress(val analyzedTracks: Int = 0, val totalTracks:
 internal class AndroidLibrarySyncStore(
     private val database: SyncDatabase,
     private val filesDir: File,
-) : LibrarySyncStore, PlaylistMutationStore, PlaylistArtworkStagingStore, ListeningSyncStore {
+) : LibrarySyncStore, PlaylistMutationStore, PlaylistArtworkStagingStore, ListeningSyncStore, LibraryCatalog {
+    /** Ratings are a local Sistrum feature; the legacy mirror has no rating column. */
+    override suspend fun setRating(trackId: String, rating: Int?) = Unit
+
     private val dao = database.syncDao()
     // This store has process lifetime through AndroidSyncRuntime. Sharing avoids one
     // Room query and JSON projection per visible ViewModel.
@@ -553,11 +558,11 @@ internal class AndroidLibrarySyncStore(
     val dailyPlaybackAttemptStats: Flow<List<DailyPlaybackAttemptStat>> = dao.observeDailyAttemptStats().map { rows ->
         rows.map { DailyPlaybackAttemptStat(it.sourceDeviceId, it.localDate, it.attempts, it.completed, it.skipped, it.stopped, it.listenedSeconds) }
     }
-    val lastListenedAt: Flow<Map<String, Long>> = dao.observeLastListenedTracks().map { rows ->
+    override val lastListenedAt: Flow<Map<String, Long>> = dao.observeLastListenedTracks().map { rows ->
         rows.associate { it.trackId to it.lastListenedAt }
     }
 
-    suspend fun analysis(trackId: String): TrackAnalysis? = activeAnalyses()[trackId]
+    override suspend fun analysis(trackId: String): TrackAnalysis? = activeAnalyses()[trackId]
 
     suspend fun activeAnalyses(): Map<String, TrackAnalysis> = dao.activeAnalysisDocuments().mapNotNull { document ->
         val value = runCatching { LibrarySyncProtocol.json.parseToJsonElement(document.rawJson).jsonObject }.getOrNull() ?: return@mapNotNull null
@@ -576,7 +581,7 @@ internal class AndroidLibrarySyncStore(
             MoodRadioTrack(track.id, track.albumId, artist?.string("id").orEmpty(), mood.getOrNull(0), mood.getOrNull(1), mood.getOrNull(2), mood.getOrNull(3))
         }
     }
-    val tracks: Flow<List<LibraryTrack>> = combine(activeTrackRows, projectedPlaylistMutations) { rows, pending ->
+    override val tracks: Flow<List<LibraryTrack>> = combine(activeTrackRows, projectedPlaylistMutations) { rows, pending ->
         val overrides = pending.mapNotNull { row ->
             runCatching { LibrarySyncProtocol.json.decodeFromString(PlaylistMutationPayload.serializer(), row.payloadJson) }
                 .getOrNull()?.takeIf { row.operation == PlaylistMutationOperation.SET_FAVORITE.name }
@@ -611,7 +616,7 @@ internal class AndroidLibrarySyncStore(
     val analysisProgress: Flow<LibraryAnalysisProgress> = combine(tracks, analyzedTrackIds) { tracks, analyzedIds ->
         LibraryAnalysisProgress(tracks.count { it.id in analyzedIds }, tracks.size)
     }.distinctUntilChanged()
-    val artists: Flow<List<LibraryArtist>> = combine(
+    override val artists: Flow<List<LibraryArtist>> = combine(
         activeTrackRows,
         artworkAssets,
     ) { rows, artworkAssets ->
@@ -619,7 +624,7 @@ internal class AndroidLibrarySyncStore(
             asset.assetId.removePrefix("artwork:") to asset.relativePath
         })
     }.shareIn(snapshotScope, SharingStarted.WhileSubscribed(5_000), replay = 1)
-    val albums: Flow<List<LibraryAlbum>> = combine(
+    override val albums: Flow<List<LibraryAlbum>> = combine(
         activeTrackRows,
         artworkAssets,
     ) { rows, artworkAssets ->
@@ -627,10 +632,10 @@ internal class AndroidLibrarySyncStore(
             asset.assetId.removePrefix("artwork:") to asset.relativePath
         })
     }.shareIn(snapshotScope, SharingStarted.WhileSubscribed(5_000), replay = 1)
-    val genres: Flow<List<LibraryGenre>> = activeTrackRows.map { rows ->
+    override val genres: Flow<List<LibraryGenre>> = activeTrackRows.map { rows ->
         libraryGenresFrom(rows)
     }.shareIn(snapshotScope, SharingStarted.WhileSubscribed(5_000), replay = 1)
-    val composers: Flow<List<LibraryComposer>> = combine(
+    override val composers: Flow<List<LibraryComposer>> = combine(
         activeTrackRows,
         artworkAssets,
     ) { rows, artworkAssets ->
@@ -638,7 +643,7 @@ internal class AndroidLibrarySyncStore(
             asset.assetId.removePrefix("artwork:") to asset.relativePath
         })
     }.shareIn(snapshotScope, SharingStarted.WhileSubscribed(5_000), replay = 1)
-    val playlists: Flow<List<LibraryPlaylist>> = combine(
+    override val playlists: Flow<List<LibraryPlaylist>> = combine(
         dao.observePlaylists(),
         dao.observeLocalPlaylists(),
         projectedPlaylistMutations,
@@ -662,16 +667,16 @@ internal class AndroidLibrarySyncStore(
         applyPendingPlaylistMutations(projected, pending.mapNotNull(PlaylistMutationEntity::toPlaylistMutation))
             .sortedBy { it.name.lowercase() }
     }.shareIn(snapshotScope, SharingStarted.WhileSubscribed(5_000), replay = 1)
-    val artworkPaths: Flow<Map<String, String>> = combine(artworkAssets, dao.observePlaylistArtwork()) { assets, staged ->
+    override val artworkPaths: Flow<Map<String, String>> = combine(artworkAssets, dao.observePlaylistArtwork()) { assets, staged ->
         (assets.map { asset -> asset.assetId.removePrefix("artwork:") to asset.relativePath } + staged.map { artwork -> artwork.sha256 to artwork.relativePath }).toMap()
     }.shareIn(snapshotScope, SharingStarted.WhileSubscribed(5_000), replay = 1)
 
-    fun searchCandidates(query: String): Flow<List<LibrarySearchCandidate>> = searchFtsMatch(query)
+    override fun searchCandidates(query: String): Flow<List<LibrarySearchCandidate>> = searchFtsMatch(query)
         ?.let(dao::observeSearchCandidates)
         ?: flowOf(emptyList())
 
     /** Durable boundary for playlist mutations; list browsing remains read-only for now. */
-    suspend fun queuePlaylistMutation(mutation: PlaylistMutation) {
+    override suspend fun queuePlaylistMutation(mutation: PlaylistMutation) {
         require(mutation.validationError() == null) { mutation.validationError() ?: "Invalid playlist mutation" }
         dao.insertPlaylistMutation(
             PlaylistMutationEntity(
@@ -685,7 +690,7 @@ internal class AndroidLibrarySyncStore(
     }
 
     /** Applies the desired favorite state optimistically; the durable delta is reconciled on the next desktop Sync. */
-    suspend fun setFavorite(trackId: String, favorite: Boolean) {
+    override suspend fun setFavorite(trackId: String, favorite: Boolean) {
         val mutation = PlaylistMutation(
             mutationId = UUID.randomUUID().toString(),
             playlistId = "favorites",
@@ -696,11 +701,11 @@ internal class AndroidLibrarySyncStore(
         queuePlaylistMutation(mutation)
     }
 
-    suspend fun createLocalPlaylist(
+    override suspend fun createLocalPlaylist(
         mutation: PlaylistMutation,
-        artwork: StagedPlaylistArtwork? = null,
-        artworkMutationId: String? = null,
-        initialTrackIds: List<String> = emptyList(),
+        artwork: StagedPlaylistArtwork?,
+        artworkMutationId: String?,
+        initialTrackIds: List<String>,
     ) {
         require(mutation.operation == PlaylistMutationOperation.CREATE) { "Expected playlist create mutation" }
         require(mutation.validationError() == null) { mutation.validationError() ?: "Invalid playlist mutation" }
@@ -745,13 +750,13 @@ internal class AndroidLibrarySyncStore(
     }.also { cleanupAcknowledgedPlaylistArtwork() }
 
     /** A rejected local-only playlist has no desktop state to delete; discard its failed queue instead. */
-    suspend fun discardFailedLocalPlaylist(playlistId: String): Boolean = database.withTransaction {
+    override suspend fun discardFailedLocalPlaylist(playlistId: String): Boolean = database.withTransaction {
         if (dao.deleteFailedLocalPlaylist(playlistId) == 0) return@withTransaction false
         dao.deletePlaylistMutations(playlistId)
         true
     }.also { discarded -> if (discarded) cleanupAcknowledgedPlaylistArtwork() }
 
-    suspend fun stagePlaylistArtwork(value: StagedPlaylistArtwork) {
+    override suspend fun stagePlaylistArtwork(value: StagedPlaylistArtwork) {
         require(value.sha256.matches(Regex("^[0-9a-f]{64}$")) && value.mime in setOf("image/jpeg", "image/png", "image/webp"))
         require(!value.relativePath.startsWith('/') && ".." !in value.relativePath.split('/'))
         dao.insertPlaylistArtwork(PlaylistArtworkStagingEntity(value.sha256, value.mime, value.size, value.relativePath))

@@ -11,7 +11,7 @@ import kotlinx.serialization.json.longOrNull
 import kotlinx.serialization.json.booleanOrNull
 import com.amwolfstein.sistrum.player.PlaybackController
 import com.amwolfstein.sistrum.player.PlaybackRequest
-import com.amwolfstein.sistrum.sync.AndroidLibrarySyncStore
+import com.amwolfstein.sistrum.sync.LibraryCatalog
 import com.amwolfstein.sistrum.sync.LibraryPlaylist
 import com.amwolfstein.sistrum.sync.LibraryTrack
 import com.amwolfstein.sistrum.sync.metadataObject
@@ -32,11 +32,11 @@ internal data class PlaylistDetailsUiState(
 )
 
 internal class PlaylistDetailsViewModel(
-    private val syncStore: AndroidLibrarySyncStore,
+    private val syncStore: LibraryCatalog,
     private val playbackController: PlaybackController,
 ) : ViewModel() {
     class Factory(
-        private val store: AndroidLibrarySyncStore,
+        private val store: LibraryCatalog,
         private val playback: PlaybackController,
     ) : ViewModelProvider.Factory {
         @Suppress("UNCHECKED_CAST")

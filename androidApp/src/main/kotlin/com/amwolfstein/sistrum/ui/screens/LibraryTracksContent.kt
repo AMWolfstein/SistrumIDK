@@ -1,7 +1,16 @@
 package com.amwolfstein.sistrum.ui.screens
 
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.lazy.LazyListState
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.Text
+import androidx.compose.ui.Alignment
+import androidx.compose.ui.platform.testTag
+import com.amwolfstein.sistrum.ui.components.MaterialSymbol
+import com.amwolfstein.sistrum.ui.theme.LocalSistrumColors
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.fillMaxSize
@@ -47,6 +56,7 @@ internal fun LibraryTracksContent(
     hazeState: HazeState? = null,
     onPlayAll: (Boolean) -> Unit = {},
     onFilterQueryChange: (String) -> Unit = {},
+    onRatingFilterChange: (Int?) -> Unit = {},
     onTrackContextBottomSheet: (TrackContextBottomSheetRequest) -> Unit = {},
 ) {
     var contextTrack by remember { mutableStateOf<LibraryTrack?>(null) }
@@ -77,13 +87,19 @@ internal fun LibraryTracksContent(
             )
         },
         leadingContent = {
-            LibraryPlaybackActions(
-                playLabel = stringResource(R.string.player_play),
-                shuffleLabel = stringResource(R.string.player_shuffle),
-                onPlay = { onPlayAll(false) },
-                onShuffle = { onPlayAll(true) },
-                hazeState = hazeState,
-            )
+            Column {
+                LibraryPlaybackActions(
+                    playLabel = stringResource(R.string.player_play),
+                    shuffleLabel = stringResource(R.string.player_shuffle),
+                    onPlay = { onPlayAll(false) },
+                    onShuffle = { onPlayAll(true) },
+                    hazeState = hazeState,
+                )
+                RatingFilterRow(
+                    selected = uiState.ratingFilter,
+                    onSelected = onRatingFilterChange,
+                )
+            }
         },
         alphabeticalIndexKey = when (uiState.sortOption) {
             TrackSortOption.Name -> { track -> track.sortTitle.ifBlank { track.title } }
@@ -130,6 +146,34 @@ internal fun LibraryTracksContent(
                 onClick = onItemClick,
                 onMoreClick = onItemMoreClick,
                 onLongClick = { contextTrack = track },
+            )
+        }
+    }
+}
+
+
+/** Minimum-rating filter: tapping the same star again clears it. */
+@Composable
+internal fun RatingFilterRow(selected: Int?, onSelected: (Int?) -> Unit) {
+    Row(
+        modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 4.dp),
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.spacedBy(4.dp),
+    ) {
+        Text(
+            text = stringResource(R.string.rating_filter_label),
+            style = MaterialTheme.typography.bodySmall,
+            color = LocalSistrumColors.current.textMuted,
+        )
+        for (value in 1..5) {
+            MaterialSymbol(
+                symbol = MaterialSymbols.Star,
+                contentDescription = null,
+                size = 20.dp,
+                tint = if ((selected ?: 0) >= value) LocalSistrumColors.current.primary else LocalSistrumColors.current.textMuted,
+                modifier = Modifier
+                    .testTag("rating-filter-star-$value")
+                    .clickable { onSelected(if (selected == value) null else value) },
             )
         }
     }

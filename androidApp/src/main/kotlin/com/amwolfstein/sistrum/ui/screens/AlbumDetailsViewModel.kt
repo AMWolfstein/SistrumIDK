@@ -9,7 +9,7 @@ import kotlinx.coroutines.flow.stateIn
 import kotlinx.serialization.json.longOrNull
 import com.amwolfstein.sistrum.player.PlaybackController
 import com.amwolfstein.sistrum.player.PlaybackRequest
-import com.amwolfstein.sistrum.sync.AndroidLibrarySyncStore
+import com.amwolfstein.sistrum.sync.LibraryCatalog
 import com.amwolfstein.sistrum.sync.LibraryAlbum
 import com.amwolfstein.sistrum.sync.LibraryTrack
 import com.amwolfstein.sistrum.sync.metadataObject
@@ -20,8 +20,8 @@ data class AlbumDetailsUiState(
     internal val albums: List<LibraryAlbum> = emptyList(),
 )
 
-internal class AlbumDetailsViewModel(syncStore: AndroidLibrarySyncStore, private val playbackController: PlaybackController) : ViewModel() {
-    class Factory(private val store: AndroidLibrarySyncStore, private val playback: PlaybackController) : androidx.lifecycle.ViewModelProvider.Factory {
+internal class AlbumDetailsViewModel(syncStore: LibraryCatalog, private val playbackController: PlaybackController) : ViewModel() {
+    class Factory(private val store: LibraryCatalog, private val playback: PlaybackController) : androidx.lifecycle.ViewModelProvider.Factory {
         @Suppress("UNCHECKED_CAST") override fun <T : ViewModel> create(modelClass: Class<T>): T = AlbumDetailsViewModel(store, playback) as T
     }
     val uiState: StateFlow<AlbumDetailsUiState> = combine(syncStore.albums, syncStore.tracks) { albums, tracks ->

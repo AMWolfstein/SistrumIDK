@@ -57,6 +57,15 @@ class LibraryTracksViewModelTest {
     }
 
     @Test
+    fun sortsByRatingWithUnratedLast() {
+        val rated = sampleTracks.mapIndexed { index, track -> track.copy(rating = listOf(2, 5, null)[index]) }
+        val ascending = sortTracks(rated, TrackSortOption.Rating, SortOrder.Ascending)
+        assertEquals(listOf("1", "2", "3"), ascending.map { it.id })
+        val descending = sortTracks(rated, TrackSortOption.Rating, SortOrder.Descending)
+        assertEquals(listOf("2", "1", "3"), descending.map { it.id })
+    }
+
+    @Test
     fun sortsByNameAscending() {
         val sorted = sortTracks(sampleTracks, TrackSortOption.Name, SortOrder.Ascending)
         assertEquals(listOf("Alpha", "Bravo", "Charlie"), sorted.map { it.title })

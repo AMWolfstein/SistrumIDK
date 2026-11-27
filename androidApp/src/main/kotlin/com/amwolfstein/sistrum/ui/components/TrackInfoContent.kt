@@ -20,6 +20,9 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.ui.platform.LocalHapticFeedback
+import androidx.compose.ui.platform.testTag
+import androidx.compose.foundation.clickable
 import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -180,6 +183,7 @@ internal fun TrackInfoContent(track: LibraryTrack, modifier: Modifier = Modifier
     val quality = remember(track) { trackAudioQuality(track) }
     val artwork = rememberArtworkThumbnail(track.artworkPath, targetPx = 480)
     val metadata = track.metadataObject()
+    val setRating = LocalTrackRatingActions.current
     val albumArtist = metadata.string("raw_album_artist_names").ifBlank { track.artists }
     val subtitle = listOf(albumArtist, track.album).filter(String::isNotBlank).joinToString(" · ")
     val density = LocalDensity.current
@@ -204,6 +208,7 @@ internal fun TrackInfoContent(track: LibraryTrack, modifier: Modifier = Modifier
                 Text(track.title, modifier = Modifier.padding(top = 20.dp), style = MaterialTheme.typography.titleLarge.copy(fontWeight = FontWeight.Bold), color = colors.textMain, textAlign = TextAlign.Center, maxLines = 2, overflow = TextOverflow.Ellipsis)
                 if (subtitle.isNotBlank()) Text(subtitle, modifier = Modifier.padding(top = 4.dp), style = MaterialTheme.typography.bodyMedium, color = colors.textMuted, textAlign = TextAlign.Center, maxLines = 2, overflow = TextOverflow.Ellipsis)
                 TrackQualityBadge(quality, Modifier.padding(top = 12.dp))
+                TrackRatingRow(track = track, onRatingSelected = { rating -> setRating(track.id, rating) })
             }
         }
         if (details.isNotEmpty()) {
@@ -240,5 +245,32 @@ private fun TrackQualityBadge(quality: TrackAudioQuality, modifier: Modifier = M
     ) {
         MaterialSymbol(symbol, null, size = 14.dp, tint = style.foreground)
         Text(stringResource(label), style = MaterialTheme.typography.labelSmall.copy(fontWeight = FontWeight.Bold), color = style.foreground)
+    }
+}
+
+
+@Composable
+private fun TrackRatingRow(track: LibraryTrack, onRatingSelected: (Int?) -> Unit) {
+    val haptic = LocalHapticFeedback.current
+    Row(
+        modifier = Modifier.fillMaxWidth().padding(top = 8.dp),
+        horizontalArrangement = Arrangement.Center,
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        for (value in 1..5) {
+            val filled = (track.rating ?: 0) >= value
+            MaterialSymbol(
+                symbol = if (filled) MaterialSymbols.Star else MaterialSymbols.Star,
+                contentDescription = null,
+                size = 28.dp,
+                tint = if (filled) LocalSistrumColors.current.primary else LocalSistrumColors.current.textMuted,
+                modifier = Modifier
+                    .testTag("track-rating-star-$value")
+                    .clickable {
+                        haptic.performHapticFeedback(androidx.compose.ui.hapticfeedback.HapticFeedbackType.TextHandleMove)
+                        onRatingSelected(if (track.rating == value) null else value)
+                    },
+            )
+        }
     }
 }

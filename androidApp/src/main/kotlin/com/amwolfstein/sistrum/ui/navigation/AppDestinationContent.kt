@@ -202,6 +202,7 @@ internal fun AppDestinationContent(
     val onTrackClick = library.tracks.onTrackClick
     val onTracksPlayAll = library.tracks.onPlayAll
     val onTracksFilterQueryChange = library.tracks.onFilterQueryChange
+    val onTracksRatingFilterChange = library.tracks.onRatingFilterChange
     val onRecentTrackClick = library.tracks.onRecentTrackClick
     val onSearchQueryChange = library.search.onQueryChange
     val onSearchTrackClick = library.search.onTrackClick
@@ -712,6 +713,7 @@ internal fun AppDestinationContent(
                                 hazeState = hazeState,
                                 onPlayAll = onTracksPlayAll,
                                 onFilterQueryChange = onTracksFilterQueryChange,
+                                onRatingFilterChange = onTracksRatingFilterChange,
                                 onTrackContextBottomSheet = onTrackContextBottomSheet,
                             )
                             else -> LibraryContent(

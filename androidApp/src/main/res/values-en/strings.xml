@@ -409,6 +409,8 @@
     <string name="separators_rebuild_hint">Rebuild after changing separators to apply them to the existing library; no audio is read.</string>
     <string name="separators_rebuild_done">Rebuilt %1$d tracks: %2$d artists, %3$d genres, %4$d composers.</string>
     <string name="separators_rebuild_failed">Rebuild failed. Your library is unchanged; try again.</string>
+    <string name="sort_rating">Rating</string>
+    <string name="rating_filter_label">Rating</string>
     <string name="online_artwork_title">Online Artwork</string>
     <string name="online_artwork_sources">Artwork sources</string>
     <string name="online_artwork_deezer">Deezer artist artwork</string>

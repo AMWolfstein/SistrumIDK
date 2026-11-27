@@ -59,6 +59,7 @@ internal data class LibraryTracksModel(
     val onTrackClick: (String) -> Unit = {},
     val onPlayAll: (Boolean) -> Unit = {},
     val onFilterQueryChange: (String) -> Unit = {},
+    val onRatingFilterChange: (Int?) -> Unit = {},
     val onRecentTrackClick: (String) -> Unit = {},
 )
 

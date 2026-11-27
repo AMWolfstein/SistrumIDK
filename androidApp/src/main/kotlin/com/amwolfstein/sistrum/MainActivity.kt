@@ -99,6 +99,16 @@ import com.amwolfstein.sistrum.ui.screens.InsightViewModel
 private data class ManualLyricsOverride(val trackId: String, val content: String)
 
 class MainActivity : ComponentActivity() {
+
+    private val libraryCatalog by lazy {
+        com.amwolfstein.sistrum.sync.LocalLibraryCatalog(
+            applicationContext,
+            legacy = AndroidSyncRuntime.syncStore(),
+        )
+    }
+
+    private fun libraryCatalog(): com.amwolfstein.sistrum.sync.LibraryCatalog = libraryCatalog
+
     private val localNetworkPermission = registerForActivityResult(ActivityResultContracts.RequestPermission()) {
         syncViewModel.setLocalNetworkAccess(currentLocalNetworkAccess())
     }
@@ -181,7 +191,7 @@ class MainActivity : ComponentActivity() {
         )
     }
     private val tracksViewModel: LibraryTracksViewModel by viewModels {
-        LibraryTracksViewModel.Factory(AndroidSyncRuntime.syncStore(), AndroidPlaybackRuntime.controller())
+        LibraryTracksViewModel.Factory(libraryCatalog(), AndroidPlaybackRuntime.controller())
     }
     private val insightViewModel: InsightViewModel by viewModels {
         InsightViewModel.Factory(
@@ -191,41 +201,41 @@ class MainActivity : ComponentActivity() {
         )
     }
     private val artistsViewModel: LibraryArtistsViewModel by viewModels {
-        LibraryArtistsViewModel.Factory(AndroidSyncRuntime.syncStore())
+        LibraryArtistsViewModel.Factory(libraryCatalog())
     }
     private val albumsViewModel: LibraryAlbumsViewModel by viewModels {
         LibraryAlbumsViewModel.Factory(
-            AndroidSyncRuntime.syncStore(),
+            libraryCatalog(),
             AndroidPlaybackRuntime.controller(),
             LibraryAlbumsLayoutPreferences(applicationContext),
         )
     }
     private val genresViewModel: LibraryGenresViewModel by viewModels {
-        LibraryGenresViewModel.Factory(AndroidSyncRuntime.syncStore())
+        LibraryGenresViewModel.Factory(libraryCatalog())
     }
     private val composersViewModel: LibraryComposersViewModel by viewModels {
-        LibraryComposersViewModel.Factory(AndroidSyncRuntime.syncStore())
+        LibraryComposersViewModel.Factory(libraryCatalog())
     }
     private val playlistsViewModel: LibraryPlaylistsViewModel by viewModels {
-        LibraryPlaylistsViewModel.Factory(applicationContext, AndroidSyncRuntime.syncStore())
+        LibraryPlaylistsViewModel.Factory(applicationContext, libraryCatalog())
     }
     private val searchViewModel: LibrarySearchViewModel by viewModels {
-        LibrarySearchViewModel.Factory(AndroidSyncRuntime.syncStore())
+        LibrarySearchViewModel.Factory(libraryCatalog())
     }
     private val albumDetailsViewModel: AlbumDetailsViewModel by viewModels {
-        AlbumDetailsViewModel.Factory(AndroidSyncRuntime.syncStore(), AndroidPlaybackRuntime.controller())
+        AlbumDetailsViewModel.Factory(libraryCatalog(), AndroidPlaybackRuntime.controller())
     }
     private val playlistDetailsViewModel: PlaylistDetailsViewModel by viewModels {
-        PlaylistDetailsViewModel.Factory(AndroidSyncRuntime.syncStore(), AndroidPlaybackRuntime.controller())
+        PlaylistDetailsViewModel.Factory(libraryCatalog(), AndroidPlaybackRuntime.controller())
     }
     private val artistDetailsViewModel: ArtistDetailsViewModel by viewModels {
-        ArtistDetailsViewModel.Factory(AndroidSyncRuntime.syncStore(), AndroidPlaybackRuntime.controller())
+        ArtistDetailsViewModel.Factory(libraryCatalog(), AndroidPlaybackRuntime.controller())
     }
     private val genreDetailsViewModel: GenreDetailsViewModel by viewModels {
-        GenreDetailsViewModel.Factory(AndroidSyncRuntime.syncStore(), AndroidPlaybackRuntime.controller())
+        GenreDetailsViewModel.Factory(libraryCatalog(), AndroidPlaybackRuntime.controller())
     }
     private val composerDetailsViewModel: ComposerDetailsViewModel by viewModels {
-        ComposerDetailsViewModel.Factory(AndroidSyncRuntime.syncStore(), AndroidPlaybackRuntime.controller())
+        ComposerDetailsViewModel.Factory(libraryCatalog(), AndroidPlaybackRuntime.controller())
     }
 
     override fun onResume() {
@@ -469,6 +479,7 @@ class MainActivity : ComponentActivity() {
                         onTrackClick = tracksViewModel::playTrack,
                         onPlayAll = tracksViewModel::playAll,
                         onFilterQueryChange = tracksViewModel::setFilterQuery,
+                        onRatingFilterChange = tracksViewModel::setRatingFilter,
                         onRecentTrackClick = tracksViewModel::playRecentTrack,
                     ),
                     artists = LibraryArtistsModel(
@@ -667,6 +678,13 @@ class MainActivity : ComponentActivity() {
                 onMiniPlayerDismiss = playbackController::clearQueue,
                 onOpenMediaOutputSwitcher = ::openMediaOutputSwitcher,
             )
+            val ratingScope = rememberCoroutineScope()
+            androidx.compose.runtime.CompositionLocalProvider(
+                com.amwolfstein.sistrum.ui.components.LocalTrackRatingActions provides
+                    { trackId: String, rating: Int? ->
+                        ratingScope.launch { libraryCatalog.setRating(trackId, rating) }
+                    },
+            ) {
             App(
                 uiState = uiState,
                 appUpdate = appUpdate,
@@ -681,6 +699,7 @@ class MainActivity : ComponentActivity() {
                 },
                 onDismissSyncFailure = AndroidSyncRuntime::idle,
             )
+            }
         }
     }
 

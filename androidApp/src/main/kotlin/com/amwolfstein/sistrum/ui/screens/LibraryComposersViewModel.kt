@@ -9,7 +9,7 @@ import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.flowOn
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.Dispatchers
-import com.amwolfstein.sistrum.sync.AndroidLibrarySyncStore
+import com.amwolfstein.sistrum.sync.LibraryCatalog
 import com.amwolfstein.sistrum.sync.LibraryComposer
 import com.amwolfstein.sistrum.ui.libraryAlphabeticalComparator
 
@@ -27,9 +27,9 @@ data class LibraryComposersUiState(
 )
 
 internal class LibraryComposersViewModel(
-    syncStore: AndroidLibrarySyncStore,
+    syncStore: LibraryCatalog,
 ) : ViewModel() {
-    class Factory(private val syncStore: AndroidLibrarySyncStore) : androidx.lifecycle.ViewModelProvider.Factory {
+    class Factory(private val syncStore: LibraryCatalog) : androidx.lifecycle.ViewModelProvider.Factory {
         @Suppress("UNCHECKED_CAST")
         override fun <T : ViewModel> create(modelClass: Class<T>): T {
             return LibraryComposersViewModel(syncStore) as T

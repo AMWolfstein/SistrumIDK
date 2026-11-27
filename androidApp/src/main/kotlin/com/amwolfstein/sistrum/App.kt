@@ -428,6 +428,7 @@ internal fun App(
                             LibrarySortOption(TrackSortOption.Artist, R.string.sort_artist),
                             LibrarySortOption(TrackSortOption.PlayCount, R.string.sort_play_count),
                             LibrarySortOption(TrackSortOption.DateAdded, R.string.sort_date_added),
+                            LibrarySortOption(TrackSortOption.Rating, R.string.sort_rating),
                         ),
                         selectedOption = tracksUiState.sortOption,
                         sortOrder = tracksUiState.sortOrder,

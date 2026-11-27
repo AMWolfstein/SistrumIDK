@@ -522,3 +522,35 @@ data class ArtistArtworkRow(
     val releaseDate: String?,
     val artworkKey: String?,
 )
+
+/** One library item with its split relationship names, for local catalog mapping. */
+data class LocalTrackRow(
+    @androidx.room.Embedded val item: LibraryItemEntity,
+    val artistNames: String? = null,
+    val albumArtistNames: String? = null,
+    val genreNames: String? = null,
+    val composerNames: String? = null,
+)
+
+data class LocalAlbumRow(
+    @androidx.room.Embedded val album: AlbumEntity,
+    val artistName: String? = null,
+    val trackCount: Int = 0,
+)
+
+data class LocalArtistRow(
+    @androidx.room.Embedded val artist: ArtistEntity,
+    val trackCount: Int = 0,
+)
+
+data class LocalGenreRow(
+    @androidx.room.Embedded val genre: GenreEntity,
+    val trackCount: Int = 0,
+)
+
+data class LocalComposerRow(
+    @androidx.room.Embedded val composer: ComposerEntity,
+    val trackCount: Int = 0,
+)
+
+data class LocalListeningRow(val trackId: String, val lastListenedAt: Long)

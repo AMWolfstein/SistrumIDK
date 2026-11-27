@@ -20,7 +20,7 @@ import kotlinx.serialization.json.JsonObject
 import kotlinx.serialization.json.JsonPrimitive
 import kotlinx.serialization.json.JsonElement
 import kotlinx.serialization.json.contentOrNull
-import com.amwolfstein.sistrum.sync.AndroidLibrarySyncStore
+import com.amwolfstein.sistrum.sync.LibraryCatalog
 import com.amwolfstein.sistrum.sync.LibraryAlbum
 import com.amwolfstein.sistrum.sync.LibraryArtist
 import com.amwolfstein.sistrum.sync.LibraryComposer
@@ -43,8 +43,8 @@ data class LibrarySearchUiState(
 )
 
 @OptIn(ExperimentalCoroutinesApi::class)
-internal class LibrarySearchViewModel(syncStore: AndroidLibrarySyncStore) : ViewModel() {
-    class Factory(private val syncStore: AndroidLibrarySyncStore) : androidx.lifecycle.ViewModelProvider.Factory {
+internal class LibrarySearchViewModel(syncStore: LibraryCatalog) : ViewModel() {
+    class Factory(private val syncStore: LibraryCatalog) : androidx.lifecycle.ViewModelProvider.Factory {
         @Suppress("UNCHECKED_CAST") override fun <T : ViewModel> create(modelClass: Class<T>): T =
             LibrarySearchViewModel(syncStore) as T
     }
@@ -84,7 +84,7 @@ internal class LibrarySearchViewModel(syncStore: AndroidLibrarySyncStore) : View
 }
 
 private data class SearchCandidates(val query: String, val idsByType: Map<String, Set<String>>) {
-    fun ids(type: String): Set<String>? = idsByType[type]
+    fun ids(type: String): Set<String>? = idsByType[type]?.takeIf { it.isNotEmpty() }
 }
 
 internal const val LibrarySearchDebounceMs = 200L

@@ -11,7 +11,7 @@ import kotlinx.serialization.json.JsonObject
 import kotlinx.serialization.json.JsonPrimitive
 import com.amwolfstein.sistrum.player.PlaybackController
 import com.amwolfstein.sistrum.player.PlaybackRequest
-import com.amwolfstein.sistrum.sync.AndroidLibrarySyncStore
+import com.amwolfstein.sistrum.sync.LibraryCatalog
 import com.amwolfstein.sistrum.sync.LibraryAlbum
 import com.amwolfstein.sistrum.sync.LibraryComposer
 import com.amwolfstein.sistrum.sync.LibraryTrack
@@ -27,11 +27,11 @@ data class ComposerDetailsUiState(
 )
 
 internal class ComposerDetailsViewModel(
-    syncStore: AndroidLibrarySyncStore,
+    syncStore: LibraryCatalog,
     private val playbackController: PlaybackController,
 ) : ViewModel() {
     class Factory(
-        private val store: AndroidLibrarySyncStore,
+        private val store: LibraryCatalog,
         private val playback: PlaybackController,
     ) : androidx.lifecycle.ViewModelProvider.Factory {
         @Suppress("UNCHECKED_CAST")
