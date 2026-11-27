@@ -5,6 +5,7 @@ import androidx.room.Insert
 import androidx.room.OnConflictStrategy
 import androidx.room.Query
 import androidx.room.Update
+import kotlinx.coroutines.flow.Flow
 import androidx.room.Upsert
 
 @Dao
@@ -17,6 +18,15 @@ interface LibraryDao {
 
     @Query("SELECT * FROM library_sources ORDER BY isRemovable, displayName")
     suspend fun sources(): List<LibrarySourceEntity>
+
+    @Query("SELECT * FROM library_sources ORDER BY isRemovable, displayName")
+    fun observeSources(): Flow<List<LibrarySourceEntity>>
+
+    @Query("UPDATE library_sources SET enabled = :enabled WHERE id = :id")
+    suspend fun setSourceEnabled(id: String, enabled: Boolean)
+
+    @Query("UPDATE library_sources SET available = :available, lastScanError = :error WHERE id = :id")
+    suspend fun setSourceAvailability(id: String, available: Boolean, error: String? = null)
 
     @Query("SELECT * FROM library_sources WHERE id = :id")
     suspend fun source(id: String): LibrarySourceEntity?

@@ -56,6 +56,7 @@ import com.amwolfstein.sistrum.ui.screens.InsightPeriod
 import com.amwolfstein.sistrum.ui.screens.InsightSourceFilter
 import com.amwolfstein.sistrum.ui.screens.InsightUiState
 import com.amwolfstein.sistrum.ui.screens.SettingsContent
+import com.amwolfstein.sistrum.ui.screens.LibrarySettingsContent
 import com.amwolfstein.sistrum.ui.screens.IntegrationContent
 import com.amwolfstein.sistrum.ui.screens.LastFmContent
 import com.amwolfstein.sistrum.ui.screens.LyricsContent
@@ -399,6 +400,7 @@ internal fun AppDestinationContent(
                                 },
                                 hazeState = hazeState,
                             )
+                            AppStackPage.SettingsLibrary -> LibrarySettingsContent(modifier = settingsPageModifier)
                             AppStackPage.SettingsSync -> SyncContent(
                                 syncUiState = syncUiState,
                                 onRequestLocalNetworkAccess = settings.onRequestLocalNetworkAccess,
@@ -481,6 +483,9 @@ internal fun AppDestinationContent(
                                 },
                                 onPlaybackSelected = {
                                     onIntent(AppIntent.OpenPage(AppStackPage.SettingsPlayback))
+                                },
+                                onLibrarySelected = {
+                                    onIntent(AppIntent.OpenPage(AppStackPage.SettingsLibrary))
                                 },
                                 onSyncSelected = {
                                     onIntent(AppIntent.OpenPage(AppStackPage.SettingsSync))

@@ -285,3 +285,5 @@ Rules: each task starts with a full map refresh, records evidence, implements, r
 - [x] M001-T001 Reproducible baseline and build enablement
 
 - [x] M001-T002 Local Room database and legacy migration scaffold
+
+- [x] M001-T003 SAF sources, grants and library settings UI

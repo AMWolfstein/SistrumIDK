@@ -13,6 +13,7 @@ import com.amwolfstein.sistrum.ui.components.MaterialSymbols
 internal fun SettingsContent(
     onAppearanceSelected: () -> Unit,
     onPlaybackSelected: () -> Unit,
+    onLibrarySelected: () -> Unit,
     onSyncSelected: () -> Unit,
     onIntegrationSelected: () -> Unit,
     onAboutSelected: () -> Unit,
@@ -25,6 +26,11 @@ internal fun SettingsContent(
                     R.string.settings_appearance,
                     leadingSymbol = MaterialSymbols.Palette,
                     onClick = onAppearanceSelected,
+                ),
+                ActionListItem(
+                    R.string.settings_library,
+                    leadingSymbol = MaterialSymbols.Library,
+                    onClick = onLibrarySelected,
                 ),
                 ActionListItem(
                     R.string.settings_sync,

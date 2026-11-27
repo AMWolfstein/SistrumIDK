@@ -1,13 +1,13 @@
 {
   "missions": {
     "M001": {
-      "next_task": 3,
+      "next_task": 4,
       "nonce": "45356c82baed4375811369ee33874b57",
       "path": "specs/001-standalone-player",
       "title": "Complete standalone Android music player"
     }
   },
-  "next_completion": 6,
+  "next_completion": 7,
   "next_mission": 2,
   "next_tor": 4,
   "tasks": {
@@ -56,6 +56,29 @@
       "record": "specs/001-standalone-player/tasks.md",
       "status": "complete",
       "title": "Local Room database and legacy migration scaffold"
+    },
+    "M001-T003": {
+      "completion": 6,
+      "evidence": {
+        "checks": "284/284 host tests; androidTest compiles; source ID/volume tests; IO-off-main; duplicate re-add restores grant; remove confirmation/grant release; no broad storage permission; SAF runtime not run (no device); independent review PASS",
+        "graph": {
+          "impact": "androidApp/src/main/kotlin/.../library/scan/*, ui/screens/LibrarySettingsContent.kt, AppDestination*, SettingsContent, strings",
+          "queries": 3,
+          "revision": "884c9a4c396d28aacc35e6b906192d01e7747d3d",
+          "status": "PASS",
+          "tool": "0.6.13"
+        },
+        "result": "PASS",
+        "reviewer": "independent-subagent",
+        "round": 3
+      },
+      "final": false,
+      "kind": "T",
+      "mission": "M001",
+      "nonce": "393b48ffe5d44505b8787b0c37259acf",
+      "record": "specs/001-standalone-player/tasks.md",
+      "status": "complete",
+      "title": "SAF sources, grants and library settings UI"
     },
     "TOR001": {
       "completion": 1,

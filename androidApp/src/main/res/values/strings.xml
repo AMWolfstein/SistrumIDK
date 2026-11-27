@@ -68,6 +68,7 @@
     <string name="appearance_theme_title">Theme</string>
     <string name="appearance_reduce_transparency">Reduce transparency</string>
     <string name="settings_appearance">Appearance</string>
+    <string name="settings_library">Library</string>
     <string name="settings_sync">Sync</string>
     <string name="sync_title">Sync</string>
     <string name="sync_scan_title">Scan desktop code</string>
@@ -427,4 +428,18 @@
     <string name="sync_local_network_description">Allow local network access to find, pair with, and sync your desktop. Offline playback remains available.</string>
     <string name="sync_local_network_allow">Allow access</string>
     <string name="sync_local_network_settings">Open app settings</string>
+    <string name="library_folders_description">Choose folders on this device. Sistrum reads them directly and keeps your library on the phone.</string>
+    <string name="library_no_folders">No music folders yet.</string>
+    <string name="library_add_folder">Add folder</string>
+    <string name="library_available">Available</string>
+    <string name="library_unavailable">Unavailable — check access</string>
+    <string name="library_removable">Removable storage</string>
+    <string name="library_remove_folder">Remove</string>
+    <string name="library_remove_folder_named">Remove %1$s</string>
+    <string name="library_add_failed">Could not add that folder. Check storage access and try again.</string>
+    <string name="library_enable_folder">Enable %1$s</string>
+    <string name="library_remove_title">Remove folder?</string>
+    <string name="library_remove_message">Remove %1$s and its library entries? Favorites, ratings and playlist links for these tracks will be deleted. To keep them, turn the folder off instead.</string>
+    <string name="library_remove_confirm">Remove folder</string>
+    <string name="library_cancel">Cancel</string>
 </resources>

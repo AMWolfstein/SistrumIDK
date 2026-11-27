@@ -48,6 +48,13 @@ abstract class LibraryDatabase : RoomDatabase() {
     companion object {
         const val NAME = "library.db"
 
+        @Volatile private var instance: LibraryDatabase? = null
+
+        fun get(context: Context): LibraryDatabase =
+            instance ?: synchronized(this) {
+                instance ?: create(context).also { instance = it }
+            }
+
         fun create(context: Context): LibraryDatabase =
             Room.databaseBuilder(context.applicationContext, LibraryDatabase::class.java, NAME)
                 .addCallback(ratingCheck())

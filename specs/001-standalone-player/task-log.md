@@ -32,3 +32,11 @@
 - Review: Round 3 PASS (earlier rounds found @Upsert/cascade, mutation replay, listening/favorites, rating-trigger and test-fixture issues; all fixed and re-verified).
 
 - Map note: the snapshot was rebuilt from the existing CGC index (source read fine), so the 11 newly added Kotlin files are not yet in the symbol index; a full reindex is the first step of the next task.
+
+## M001-T003 — SAF sources, grants and library settings UI
+
+- Added `SafSourceRepository` (stable source IDs, persistable read/write grants with read-only fallback, volume/removable metadata, tri-state availability refresh, grant release on remove) and `LibrarySettingsContent` (add/remove/enable folders, status/error states).
+- Wired `Settings → Library` into `AppDestination`, navigation metadata, settings list and destination content; added strings.
+- Tests: `SafSourceRepositoryTest`; host 283/283; androidTest compiles. Actual SAF picker/grant behavior requires a device/emulator (not run).
+- Limitation: no scan action yet (T04); no device.
+- Review: Round 3 PASS. Non-blocking gaps: no Compose content test and new strings are default-locale only; actual SAF picker/grant runtime remains device-dependent.
