@@ -1,8 +1,8 @@
 {
   "missions": {},
-  "next_completion": 2,
+  "next_completion": 3,
   "next_mission": 1,
-  "next_tor": 2,
+  "next_tor": 3,
   "tasks": {
     "TOR001": {
       "completion": 1,
@@ -26,6 +26,29 @@
       "record": ".specify/quick-tasks/TOR001.md",
       "status": "complete",
       "title": "Import the upstream Airmedy mobile baseline"
+    },
+    "TOR002": {
+      "completion": 2,
+      "evidence": {
+        "checks": "4/4 paths match upstream blob/mode; task-doc/registry/history exclusions verified; workflow and AGENTS unchanged; bash -n PASS; pins match Gradle/CMake; ignore rules verified; independent review PASS; build/device tests not run (no SDK)",
+        "graph": {
+          "impact": "scripts/build-ffmpeg-android.sh, .gitignore, README.md, tools/font-subset/__pycache__ removal",
+          "queries": 2,
+          "revision": "2687d14eb93bcac38c6f7b858859445c0e646191",
+          "status": "PASS",
+          "tool": "0.6.13"
+        },
+        "result": "PASS",
+        "reviewer": "independent-subagent",
+        "round": 1
+      },
+      "final": false,
+      "kind": "TOR",
+      "mission": null,
+      "nonce": "4e2c6586196c49c2b2d25de8aa3338cf",
+      "record": ".specify/quick-tasks/TOR002.md",
+      "status": "complete",
+      "title": "Add the Android FFmpeg build helper"
     }
   },
   "version": 1
