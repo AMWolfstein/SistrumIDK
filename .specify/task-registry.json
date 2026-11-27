@@ -1,8 +1,32 @@
 {
-  "version": 1,
-  "next_mission": 1,
-  "next_tor": 1,
-  "next_completion": 1,
   "missions": {},
-  "tasks": {}
+  "next_completion": 2,
+  "next_mission": 1,
+  "next_tor": 2,
+  "tasks": {
+    "TOR001": {
+      "completion": 1,
+      "evidence": {
+        "checks": "385/385 imported paths match upstream blob and mode; task-doc/registry/history exclusions verified; AGENTS.md and workflow/ unchanged; independent read-only review PASS; graph 3483 symbols/5655 relationships; Android build and device tests not run (no SDK)",
+        "graph": {
+          "impact": "androidApp/, sharedLogic/, iosApp/, gradle/, tools/, root build files (385 imported paths)",
+          "queries": 3,
+          "revision": "c0e02a9c4d519c36d1d91fc431643c99ea320459",
+          "status": "PASS",
+          "tool": "0.6.13"
+        },
+        "result": "PASS",
+        "reviewer": "independent-subagent",
+        "round": 1
+      },
+      "final": false,
+      "kind": "TOR",
+      "mission": null,
+      "nonce": "9942ac898b014d31b89d6fcdbc52a4e9",
+      "record": ".specify/quick-tasks/TOR001.md",
+      "status": "complete",
+      "title": "Import the upstream Airmedy mobile baseline"
+    }
+  },
+  "version": 1
 }

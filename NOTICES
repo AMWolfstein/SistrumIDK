@@ -1,0 +1,171 @@
+This software includes third-party components with the following licenses:
+
+--------------------------------------------------------------------------------
+Android Markdown release notes
+--------------------------------------------------------------------------------
+The Android app uses Markwon 4.6.2 (https://github.com/noties/Markwon) and
+AndroidSVG 1.4 (https://bigbadaboom.github.io/androidsvg/) to render release
+notes and images. Both are licensed under the Apache License, Version 2.0.
+
+License text: https://www.apache.org/licenses/LICENSE-2.0
+
+--------------------------------------------------------------------------------
+Wails
+https://wails.io
+--------------------------------------------------------------------------------
+This software is built with Wails by Lea Anthony, which is licensed under the
+MIT License.
+
+Copyright (c) 2018-Present Lea Anthony
+
+The Wails source code is available at https://github.com/wailsapp/wails
+
+License text: https://opensource.org/licenses/MIT
+
+--------------------------------------------------------------------------------
+FFmpeg
+https://ffmpeg.org
+--------------------------------------------------------------------------------
+This software uses libraries from the FFmpeg project (libavcodec, libavformat,
+libavutil, libswresample), which are licensed under the GNU Lesser General
+Public License (LGPL) version 2.1 or later.
+
+The FFmpeg source code is available at https://ffmpeg.org/download.html
+
+License text: https://www.gnu.org/licenses/old-licenses/lgpl-2.1.html
+
+--------------------------------------------------------------------------------
+miniaudio
+https://miniaud.io
+--------------------------------------------------------------------------------
+This software uses miniaudio by David Reid, which is dual-licensed as
+Public Domain (Unlicense) and MIT-0. No attribution required.
+
+--------------------------------------------------------------------------------
+SFBAudioEngine
+https://github.com/sbooth/SFBAudioEngine
+--------------------------------------------------------------------------------
+This software uses SFBAudioEngine by Stephen F. Booth, which is licensed under
+the MIT License.
+
+SFBAudioEngine includes several third-party libraries (including libogg,
+libvorbis, libopus, and libFLAC) which are subject to their own licenses.
+The SFBAudioEngine frameworks are dynamically linked to comply with
+dependency license requirements.
+
+--------------------------------------------------------------------------------
+aubio
+https://aubio.org
+--------------------------------------------------------------------------------
+This software uses aubio, which is licensed under the GNU General Public
+License (GPL) version 2 or later.
+
+The aubio source code is available at https://github.com/aubio/aubio
+
+License text: https://www.gnu.org/licenses/old-licenses/gpl-2.0.html
+
+--------------------------------------------------------------------------------
+FFTW3
+https://fftw.org
+--------------------------------------------------------------------------------
+This software uses FFTW (Fastest Fourier Transform in the West) by Matteo Frigo
+and Steven G. Johnson, which is licensed under the GNU General Public License
+(GPL) version 2 or later.
+
+The FFTW source code is available at https://github.com/FFTW/fftw3
+
+License text: https://www.gnu.org/licenses/old-licenses/gpl-2.0.html
+
+--------------------------------------------------------------------------------
+TagLib
+https://taglib.org
+--------------------------------------------------------------------------------
+This software uses TagLib, which is dual-licensed under the GNU Lesser General
+Public License (LGPL) version 2.1 and the Mozilla Public License (MPL)
+version 1.1.
+
+The TagLib source code is available at https://github.com/taglib/taglib
+
+License text: https://www.gnu.org/licenses/old-licenses/lgpl-2.1.html
+
+--------------------------------------------------------------------------------
+mpg123
+https://www.mpg123.de
+--------------------------------------------------------------------------------
+This software uses mpg123, which is licensed under the GNU Lesser General
+Public License (LGPL) version 2.1.
+
+The mpg123 source code is available at https://sourceforge.net/projects/mpg123
+
+License text: https://www.gnu.org/licenses/old-licenses/lgpl-2.1.html
+
+--------------------------------------------------------------------------------
+libogg
+https://xiph.org/ogg
+--------------------------------------------------------------------------------
+This software uses libogg by Xiph.Org Foundation, which is licensed under the
+3-Clause BSD License.
+
+The libogg source code is available at https://github.com/xiph/ogg
+
+License text: https://opensource.org/licenses/BSD-3-Clause
+
+--------------------------------------------------------------------------------
+libvorbis
+https://xiph.org/vorbis
+--------------------------------------------------------------------------------
+This software uses libvorbis by Xiph.Org Foundation, which is licensed under
+the 3-Clause BSD License.
+
+The libvorbis source code is available at https://github.com/xiph/vorbis
+
+License text: https://opensource.org/licenses/BSD-3-Clause
+
+--------------------------------------------------------------------------------
+libopus
+https://opus-codec.org
+--------------------------------------------------------------------------------
+This software uses libopus, which is licensed under the 3-Clause BSD License.
+
+The libopus source code is available at https://github.com/xiph/opus
+
+License text: https://opensource.org/licenses/BSD-3-Clause
+
+--------------------------------------------------------------------------------
+libFLAC
+https://xiph.org/flac
+--------------------------------------------------------------------------------
+This software uses libFLAC by Xiph.Org Foundation, which is licensed under
+the 3-Clause BSD License.
+
+The libFLAC source code is available at https://github.com/xiph/flac
+
+License text: https://opensource.org/licenses/BSD-3-Clause
+
+--------------------------------------------------------------------------------
+WavPack
+https://www.wavpack.com
+--------------------------------------------------------------------------------
+This software uses WavPack, which is licensed under the 3-Clause BSD License.
+
+The WavPack source code is available at https://github.com/dbry/WavPack
+
+License text: https://opensource.org/licenses/BSD-3-Clause
+
+
+
+--------------------------------------------------------------------------------
+Offline lyric romanization
+--------------------------------------------------------------------------------
+Bundled romanization components and data:
+
+- go-pinyin v0.21.0 and phrase-pinyin-data
+  cee0ed6e6e4898580cafd2bd5e3723e20b214aa0: MIT, Copyright (c) 2016 and 2017
+  mozillazg. https://github.com/mozillazg/go-pinyin
+- koroman e529729b923f8a9d9acc62b2c9c0887b00e9bd88: MIT, Copyright (c) 2025
+  Donghe Youn (Daissue). https://github.com/gerosyab/koroman
+- OpenCC 5c764a5a886f46eb365656ed91a0410d7162fac6 (TSCharacters table):
+  Apache-2.0. https://github.com/BYVoid/OpenCC
+
+License texts: https://opensource.org/licenses/MIT and
+https://www.apache.org/licenses/LICENSE-2.0
