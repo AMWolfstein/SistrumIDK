@@ -24,6 +24,10 @@
             android:exported="false"
             android:foregroundServiceType="dataSync" />
         <service
+            android:name=".library.scan.ScanService"
+            android:exported="false"
+            android:foregroundServiceType="dataSync" />
+        <service
             android:name=".player.PlaybackService"
             android:exported="false"
             android:foregroundServiceType="mediaPlayback" />

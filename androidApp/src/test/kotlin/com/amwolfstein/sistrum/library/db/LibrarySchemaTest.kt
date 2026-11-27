@@ -53,4 +53,24 @@ class LibrarySchemaTest {
             entityByName.keys,
         )
     }
+
+    @Test
+    fun version2AddsScanEntryMetadataForResume() {
+        val file = File("schemas/com.amwolfstein.sistrum.library.db.LibraryDatabase/2.json")
+        assertTrue("Room schema not generated: $file", file.isFile)
+        val database = Json.parseToJsonElement(file.readText()).jsonObject["database"]!!.jsonObject
+        assertEquals(2, database["version"]!!.jsonPrimitive.content.toInt())
+        val entities = database["entities"]!!.jsonArray.map { it.jsonObject }
+        val scanEntries = entities.single { it["tableName"]!!.jsonPrimitive.content == "scan_entries" }
+        val fields = scanEntries["fields"]!!.jsonArray.map { it.jsonObject["columnName"]!!.jsonPrimitive.content }.toSet()
+        assertTrue(
+            fields.containsAll(
+                setOf(
+                    "relativePath", "name", "cueKey", "cueTrackNumber", "cueStartMs",
+                    "cueEndMs", "cueTitle", "cuePerformer", "changed",
+                ),
+            ),
+        )
+        assertEquals(30, entities.size)
+    }
 }

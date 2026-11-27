@@ -6,3 +6,4 @@
 - M001-T001 — Reproducible baseline and build enablement
 - M001-T002 — Local Room database and legacy migration scaffold
 - M001-T003 — SAF sources, grants and library settings UI
+- M001-T004 — SAF scanner, checkpoint and scan service

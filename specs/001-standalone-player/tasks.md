@@ -287,3 +287,7 @@ Rules: each task starts with a full map refresh, records evidence, implements, r
 - [x] M001-T002 Local Room database and legacy migration scaffold
 
 - [x] M001-T003 SAF sources, grants and library settings UI
+
+- [x] M001-T004 SAF scanner, checkpoint and scan service
+
+- [ ] M001-T005 TagLib integration, metadata extraction and identity

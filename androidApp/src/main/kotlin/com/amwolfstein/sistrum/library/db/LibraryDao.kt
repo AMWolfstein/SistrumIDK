@@ -145,6 +145,24 @@ interface LibraryDao {
     @Upsert
     suspend fun upsertScanEntries(values: List<ScanEntryEntity>)
 
+    @Query("SELECT * FROM scan_entries WHERE runId = :runId")
+    suspend fun scanEntries(runId: String): List<ScanEntryEntity>
+
+    @Query("DELETE FROM scan_entries WHERE runId = :runId")
+    suspend fun deleteScanEntries(runId: String)
+
+    @Query("SELECT * FROM scan_runs WHERE state IN ('RUNNING','PAUSED') ORDER BY startedAt DESC")
+    suspend fun unfinishedScanRuns(): List<ScanRunEntity>
+
+    @Query("SELECT * FROM scan_runs WHERE id = :runId")
+    suspend fun scanRun(runId: String): ScanRunEntity?
+
+    @Query("SELECT * FROM scan_runs WHERE sourceId = :sourceId AND state = 'COMPLETED' ORDER BY startedAt DESC LIMIT 1")
+    suspend fun latestCompletedScanRun(sourceId: String): ScanRunEntity?
+
+    @Query("SELECT * FROM library_exclusions WHERE sourceId = :sourceId")
+    suspend fun exclusions(sourceId: String): List<LibraryExclusionEntity>
+
     @Insert(onConflict = OnConflictStrategy.IGNORE)
     suspend fun insertScanError(value: ScanErrorEntity)
 

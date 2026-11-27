@@ -127,6 +127,7 @@ dependencies {
     androidTestImplementation(libs.androidx.testExt.junit)
     androidTestImplementation(libs.compose.uiTestJunit4)
     androidTestImplementation(libs.androidx.espresso.core)
+    androidTestImplementation(libs.room.testing)
     debugImplementation(libs.compose.uiTooling)
     debugImplementation(libs.compose.uiTestManifest)
 }
@@ -135,6 +136,8 @@ android {
     namespace = "com.amwolfstein.sistrum"
     compileSdk = libs.versions.android.compileSdk.get().toInt()
     ndkVersion = "30.0.16248370"
+
+    sourceSets.getByName("androidTest").assets.srcDir("$projectDir/schemas")
 
 
     defaultConfig {

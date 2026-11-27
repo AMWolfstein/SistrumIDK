@@ -32,6 +32,7 @@ import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.unit.dp
 import com.amwolfstein.sistrum.R
 import com.amwolfstein.sistrum.library.db.LibrarySourceEntity
+import com.amwolfstein.sistrum.library.scan.ScanCoordinator
 import com.amwolfstein.sistrum.library.scan.SafSourceRepository
 import kotlinx.coroutines.launch
 
@@ -40,6 +41,7 @@ internal fun LibrarySettingsContent(modifier: Modifier = Modifier) {
     val context = LocalContext.current
     val repository = remember { SafSourceRepository(context) }
     val sources by repository.observeSources().collectAsState(initial = emptyList())
+    val scanProgress by ScanCoordinator.progress.collectAsState()
     val scope = rememberCoroutineScope()
     var addFailed by remember { mutableStateOf(false) }
     var pendingRemoval by remember { mutableStateOf<LibrarySourceEntity?>(null) }
@@ -65,6 +67,8 @@ internal fun LibrarySettingsContent(modifier: Modifier = Modifier) {
                 source = source,
                 onEnabled = { enabled -> scope.launch { repository.setEnabled(source, enabled) } },
                 onRemove = { pendingRemoval = source },
+                onScan = { ScanCoordinator.start(context, source.id) },
+                scanning = ScanCoordinator.isRunning && scanProgress.sourceId == source.id,
             )
         }
         if (addFailed) {
@@ -76,6 +80,56 @@ internal fun LibrarySettingsContent(modifier: Modifier = Modifier) {
         }
         Button(onClick = { picker.launch(null) }) {
             Text(stringResource(R.string.library_add_folder))
+        }
+        val active = scanProgress
+        if (active.state != com.amwolfstein.sistrum.library.scan.ScanState.IDLE) {
+            Text(
+                text = when (active.state) {
+                    com.amwolfstein.sistrum.library.scan.ScanState.RUNNING ->
+                        if (active.scannedFiles > 0) {
+                            stringResource(R.string.library_scan_scanned, active.scannedFiles)
+                        } else {
+                            stringResource(R.string.library_scan_preparing)
+                        }
+                    com.amwolfstein.sistrum.library.scan.ScanState.PAUSED -> stringResource(R.string.library_scan_paused)
+                    com.amwolfstein.sistrum.library.scan.ScanState.CANCELLING ->
+                        stringResource(R.string.library_scan_cancelling)
+                    com.amwolfstein.sistrum.library.scan.ScanState.COMPLETED -> stringResource(R.string.library_scan_complete)
+                    com.amwolfstein.sistrum.library.scan.ScanState.COMPLETED_WITH_ERRORS ->
+                        stringResource(R.string.library_scan_complete_with_errors)
+                    com.amwolfstein.sistrum.library.scan.ScanState.CANCELLED -> stringResource(R.string.library_scan_cancelled)
+                    com.amwolfstein.sistrum.library.scan.ScanState.FAILED -> stringResource(R.string.library_scan_failed)
+                    com.amwolfstein.sistrum.library.scan.ScanState.IDLE -> ""
+                },
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
+            if (active.state == com.amwolfstein.sistrum.library.scan.ScanState.RUNNING ||
+                active.state == com.amwolfstein.sistrum.library.scan.ScanState.PAUSED
+            ) {
+                Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                    TextButton(onClick = {
+                        if (active.state == com.amwolfstein.sistrum.library.scan.ScanState.PAUSED) {
+                            ScanCoordinator.resume()
+                        } else {
+                            ScanCoordinator.pause()
+                        }
+                    }) {
+                        Text(
+                            stringResource(
+                                if (active.state == com.amwolfstein.sistrum.library.scan.ScanState.PAUSED) {
+                                    R.string.library_scan_resume
+                                } else {
+                                    R.string.library_scan_pause
+                                },
+                            ),
+                        )
+                    }
+                    TextButton(onClick = { ScanCoordinator.cancel() }) {
+                        Text(stringResource(R.string.library_scan_cancel))
+                    }
+                }
+            }
         }
     }
 
@@ -104,6 +158,8 @@ private fun SourceCard(
     source: LibrarySourceEntity,
     onEnabled: (Boolean) -> Unit,
     onRemove: () -> Unit,
+    onScan: () -> Unit,
+    scanning: Boolean,
 ) {
     Card(modifier = Modifier.fillMaxWidth()) {
         Column(modifier = Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
@@ -134,6 +190,9 @@ private fun SourceCard(
             }
             HorizontalDivider()
             Row(horizontalArrangement = Arrangement.End, modifier = Modifier.fillMaxWidth()) {
+                TextButton(onClick = onScan, enabled = source.enabled && source.available && !scanning) {
+                    Text(stringResource(R.string.library_scan_now))
+                }
                 val removeLabel = stringResource(R.string.library_remove_folder_named, source.displayName)
                 TextButton(
                     onClick = onRemove,

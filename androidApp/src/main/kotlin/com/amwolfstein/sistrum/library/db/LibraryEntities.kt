@@ -418,6 +418,15 @@ data class ScanEntryEntity(
     val size: Long? = null,
     val state: String = "SEEN",
     val error: String? = null,
+    val relativePath: String = "",
+    val name: String = "",
+    val cueKey: String? = null,
+    val cueTrackNumber: Int? = null,
+    val cueStartMs: Long? = null,
+    val cueEndMs: Long? = null,
+    val cueTitle: String? = null,
+    val cuePerformer: String? = null,
+    val changed: Boolean = false,
 )
 
 @Entity(
