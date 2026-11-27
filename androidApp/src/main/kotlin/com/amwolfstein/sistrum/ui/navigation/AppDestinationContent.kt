@@ -59,6 +59,7 @@ import com.amwolfstein.sistrum.ui.screens.SettingsContent
 import com.amwolfstein.sistrum.ui.screens.LibrarySettingsContent
 import com.amwolfstein.sistrum.ui.screens.IntegrationContent
 import com.amwolfstein.sistrum.ui.screens.OnlineArtworkContent
+import com.amwolfstein.sistrum.ui.screens.SeparatorsContent
 import com.amwolfstein.sistrum.ui.screens.LastFmContent
 import com.amwolfstein.sistrum.ui.screens.LyricsContent
 import com.amwolfstein.sistrum.ui.screens.PlaybackSettingsContent
@@ -401,7 +402,13 @@ internal fun AppDestinationContent(
                                 },
                                 hazeState = hazeState,
                             )
-                            AppStackPage.SettingsLibrary -> LibrarySettingsContent(modifier = settingsPageModifier)
+                            AppStackPage.SettingsLibrary -> LibrarySettingsContent(
+                                onSeparatorsSelected = {
+                                    onIntent(AppIntent.OpenPage(AppStackPage.SettingsSeparators))
+                                },
+                                modifier = settingsPageModifier,
+                            )
+                            AppStackPage.SettingsSeparators -> SeparatorsContent(modifier = settingsPageModifier)
                             AppStackPage.SettingsSync -> SyncContent(
                                 syncUiState = syncUiState,
                                 onRequestLocalNetworkAccess = settings.onRequestLocalNetworkAccess,

@@ -26,6 +26,7 @@ internal fun AppStackPage.titleRes(destination: AppDestination): Int = when (thi
     AppStackPage.SettingsVolumeNormalization -> R.string.playback_volume_normalization
     AppStackPage.SettingsEqualizer -> R.string.equalizer_title
     AppStackPage.SettingsLibrary -> R.string.settings_library
+    AppStackPage.SettingsSeparators -> R.string.separators_title
     AppStackPage.SettingsSync -> R.string.sync_title
     AppStackPage.SettingsSyncScanner -> R.string.sync_scan_title
     AppStackPage.SettingsIntegration -> R.string.integration_title

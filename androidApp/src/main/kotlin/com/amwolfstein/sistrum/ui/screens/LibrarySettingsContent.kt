@@ -37,7 +37,10 @@ import com.amwolfstein.sistrum.library.scan.SafSourceRepository
 import kotlinx.coroutines.launch
 
 @Composable
-internal fun LibrarySettingsContent(modifier: Modifier = Modifier) {
+internal fun LibrarySettingsContent(
+    onSeparatorsSelected: () -> Unit = {},
+    modifier: Modifier = Modifier,
+) {
     val context = LocalContext.current
     val repository = remember { SafSourceRepository(context) }
     val sources by repository.observeSources().collectAsState(initial = emptyList())
@@ -61,6 +64,9 @@ internal fun LibrarySettingsContent(modifier: Modifier = Modifier) {
         )
         if (sources.isEmpty()) {
             Text(stringResource(R.string.library_no_folders), style = MaterialTheme.typography.bodyMedium)
+        }
+        Button(onClick = onSeparatorsSelected, modifier = Modifier.fillMaxWidth()) {
+            Text(stringResource(R.string.separators_title))
         }
         sources.forEach { source ->
             SourceCard(

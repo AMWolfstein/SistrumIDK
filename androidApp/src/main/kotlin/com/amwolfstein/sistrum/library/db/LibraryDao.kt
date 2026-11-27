@@ -86,6 +86,45 @@ interface LibraryDao {
     @Query("DELETE FROM track_composers WHERE trackId = :trackId")
     suspend fun deleteTrackComposers(trackId: String)
 
+    @Query("SELECT * FROM library_items ORDER BY id")
+    suspend fun allItems(): List<LibraryItemEntity>
+
+    @Query("SELECT * FROM albums ORDER BY id")
+    suspend fun allAlbums(): List<AlbumEntity>
+
+    @Query("SELECT * FROM artists ORDER BY id")
+    suspend fun allArtists(): List<ArtistEntity>
+
+    @Query("SELECT * FROM library_items WHERE albumId = :albumId ORDER BY id")
+    suspend fun itemsForAlbum(albumId: String): List<LibraryItemEntity>
+
+    @Query("DELETE FROM album_artists WHERE albumId = :albumId")
+    suspend fun deleteAlbumArtists(albumId: String)
+
+    @Query("UPDATE albums SET primaryAlbumArtistId = :artistId WHERE id = :albumId")
+    suspend fun updateAlbumPrimaryArtist(albumId: String, artistId: String?)
+
+    @Query(
+        "DELETE FROM artists WHERE id NOT IN (" +
+            "SELECT artistId FROM track_artists " +
+            "UNION SELECT artistId FROM track_album_artists " +
+            "UNION SELECT artistId FROM album_artists " +
+            "UNION SELECT primaryAlbumArtistId FROM albums WHERE primaryAlbumArtistId IS NOT NULL)",
+    )
+    suspend fun deleteOrphanArtists()
+
+    @Query("DELETE FROM genres WHERE id NOT IN (SELECT genreId FROM track_genres)")
+    suspend fun deleteOrphanGenres()
+
+    @Query("DELETE FROM composers WHERE id NOT IN (SELECT composerId FROM track_composers)")
+    suspend fun deleteOrphanComposers()
+
+    @Query(
+        "DELETE FROM albums WHERE id NOT IN " +
+            "(SELECT albumId FROM library_items WHERE albumId IS NOT NULL)",
+    )
+    suspend fun deleteOrphanAlbums()
+
     @Query("SELECT COUNT(*) FROM library_items")
     suspend fun itemCount(): Int
 

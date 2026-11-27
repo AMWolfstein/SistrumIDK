@@ -23,6 +23,7 @@ import com.amwolfstein.sistrum.library.scan.PublishResult
 import com.amwolfstein.sistrum.library.scan.ScanPublisher
 import com.amwolfstein.sistrum.library.scan.detachSource
 import com.amwolfstein.sistrum.library.tags.MetadataExtractor
+import kotlinx.coroutines.flow.first
 
 class RoomLibraryStore(private val dao: LibraryDao) : LibraryStore {
     override suspend fun source(id: String): LibrarySourceEntity? = dao.source(id)
@@ -70,6 +71,7 @@ class LibraryRepository(
 ) {
     private val dao = database.libraryDao()
     private val extractor = MetadataExtractor(context)
+    private val separators = com.amwolfstein.sistrum.library.metadata.SeparatorPreferences(context)
 
     suspend fun publish(source: LibrarySourceEntity, runId: String, complete: Boolean): PublishResult =
         database.withTransaction {
@@ -78,6 +80,7 @@ class LibraryRepository(
                 metadataProvider = { entry ->
                     extractor.read(Uri.parse(entry.fileUri)).getOrNull()?.metadata
                 },
+                separators = separators.settings.first(),
             ).publish(source, runId, complete)
         }
 

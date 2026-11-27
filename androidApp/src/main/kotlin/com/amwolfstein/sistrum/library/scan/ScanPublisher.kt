@@ -13,6 +13,7 @@ import com.amwolfstein.sistrum.library.db.TrackAlbumArtistEntity
 import com.amwolfstein.sistrum.library.db.TrackArtistEntity
 import com.amwolfstein.sistrum.library.db.TrackComposerEntity
 import com.amwolfstein.sistrum.library.db.TrackGenreEntity
+import com.amwolfstein.sistrum.library.metadata.SeparatorConfig
 import com.amwolfstein.sistrum.library.tags.EntityResolver
 import com.amwolfstein.sistrum.library.tags.ResolvedTrack
 import com.amwolfstein.sistrum.library.tags.TagMetadata
@@ -77,7 +78,8 @@ data class PublishResult(
 class ScanPublisher(
     private val store: LibraryStore,
     private val metadataProvider: TrackMetadataProvider,
-    private val resolver: EntityResolver = EntityResolver(),
+    separators: SeparatorConfig = SeparatorConfig(),
+    private val resolver: EntityResolver = EntityResolver(separators),
     private val now: () -> Long = System::currentTimeMillis,
 ) {
     private val json = Json { encodeDefaults = true }

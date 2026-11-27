@@ -1,5 +1,9 @@
 package com.amwolfstein.sistrum.library.tags
 
+import com.amwolfstein.sistrum.library.metadata.SeparatorCategory
+import com.amwolfstein.sistrum.library.metadata.SeparatorConfig
+import com.amwolfstein.sistrum.library.metadata.Separators
+
 /** Deterministic ids for the entities derived from one audio file. */
 data class ResolvedTrack(
     val itemId: String,
@@ -20,21 +24,17 @@ data class ResolvedTrack(
     val releaseDate: String?,
 )
 
-class EntityResolver {
+class EntityResolver(private val separators: SeparatorConfig = SeparatorConfig()) {
     fun resolve(metadata: TagMetadata, relativePath: String, documentKey: String): ResolvedTrack {
         val title = TagAliases.first(metadata, TagAliases.titleKeys)
             ?: metadata.title
             ?: TagNormalizer.fileTitle(relativePath)
-        val artists = TagAliases.all(metadata, TagAliases.artistKeys)
-            .ifEmpty { listOf(metadata.artist ?: "").filter { it.isNotBlank() } }
-        val albumArtists = TagAliases.all(metadata, TagAliases.albumArtistKeys)
-            .ifEmpty { listOfNotNull(metadata.albumArtist).filter { it.isNotBlank() } }
+        val artists = names(metadata, TagAliases.artistKeys, metadata.artist, SeparatorCategory.ARTIST)
+        val albumArtists = names(metadata, TagAliases.albumArtistKeys, metadata.albumArtist, SeparatorCategory.ALBUM_ARTIST)
             .ifEmpty { artists }
         val albumTitle = TagAliases.first(metadata, TagAliases.albumKeys) ?: metadata.album ?: ""
-        val genres = TagAliases.all(metadata, listOf("GENRE"))
-            .ifEmpty { listOfNotNull(metadata.genre).filter { it.isNotBlank() } }
-        val composers = TagAliases.all(metadata, listOf("COMPOSER"))
-            .ifEmpty { listOfNotNull(metadata.composer).filter { it.isNotBlank() } }
+        val genres = names(metadata, listOf("GENRE"), metadata.genre, SeparatorCategory.GENRE)
+        val composers = names(metadata, listOf("COMPOSER"), metadata.composer, SeparatorCategory.COMPOSER)
         val albumKeyName = albumTitle.ifBlank { "Unknown Album" }
         val albumKeyArtist = albumArtists.firstOrNull().orEmpty()
 
@@ -61,5 +61,17 @@ class EntityResolver {
             releaseDate = TagAliases.first(metadata, TagAliases.dateKeys)
                 ?: metadata.year?.toString(),
         )
+    }
+
+    private fun names(
+        metadata: TagMetadata,
+        keys: List<String>,
+        fallback: String?,
+        category: SeparatorCategory,
+    ): List<String> {
+        val raw = TagAliases.all(metadata, keys)
+            .ifEmpty { listOfNotNull(fallback).map { it.trim() }.filter { it.isNotEmpty() } }
+        return if (separators.delimitersFor(category).isEmpty()) raw.distinct() else
+            Separators.splitAll(raw, separators.delimitersFor(category))
     }
 }
