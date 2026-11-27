@@ -1,6 +1,6 @@
-# Airmedy Mobile
+# Sistrum Mobile
 
-Android-first Kotlin Multiplatform mobile app for Airmedy. The application is
+Android-first Kotlin Multiplatform mobile app for Sistrum. The application is
 currently independent from the desktop app; it does not share the desktop
 database, Wails bindings, or Remote API.
 
@@ -169,7 +169,7 @@ Run from the repository root after preparing FFmpeg:
 ```
 
 The Android app has two installable variants: `dev` uses application ID
-`me.misa198.airmedy.dev`; `prod` uses `me.misa198.airmedy`. This allows both
+`com.amwolfstein.sistrum.dev`; `prod` uses `com.amwolfstein.sistrum`. This allows both
 variants to be installed on the same device.
 
 ### Android versioning
@@ -247,7 +247,7 @@ connection. Provenance and the optional regeneration command are in
 ## Last.fm
 
 Android authenticates independently from desktop through the browser and the
-`airmedy://lastfm/auth` callback. Supply its dedicated API credentials in the
+`sistrum://lastfm/auth` callback. Supply its dedicated API credentials in the
 Git-ignored `mobile/local.properties` file (environment variables remain the CI
 fallback):
 

@@ -1,0 +1,132 @@
+package com.amwolfstein.sistrum.ui.screens
+
+import android.graphics.Bitmap
+import androidx.compose.ui.test.assertCountEquals
+import androidx.compose.ui.test.assertIsDisplayed
+import androidx.compose.ui.test.junit4.v2.createComposeRule
+import androidx.compose.ui.test.onAllNodesWithTag
+import androidx.compose.ui.test.onNodeWithTag
+import androidx.compose.ui.test.onNodeWithText
+import androidx.compose.ui.test.performClick
+import androidx.test.platform.app.InstrumentationRegistry
+import java.io.File
+import com.amwolfstein.sistrum.lastfm.LastFmStatus
+import com.amwolfstein.sistrum.lyrics.LyricsSettings
+import com.amwolfstein.sistrum.lyrics.LyricsSource
+import com.amwolfstein.sistrum.settings.ThemeMode
+import com.amwolfstein.sistrum.ui.theme.SistrumTheme
+import org.junit.Assert.assertTrue
+import org.junit.Assert.assertEquals
+import org.junit.Rule
+import org.junit.Test
+
+class IntegrationContentTest {
+    @get:Rule
+    val composeTestRule = createComposeRule()
+
+    @Test
+    fun connectedAccountShowsUsernameAndDisconnects() {
+        var disconnected = false
+        composeTestRule.setContent {
+            SistrumTheme(themeMode = ThemeMode.Dark) {
+                LastFmContent(
+                    status = LastFmStatus(connected = true, username = "listener"),
+                    onConnect = {},
+                    onDisconnect = { disconnected = true },
+                )
+            }
+        }
+
+        composeTestRule.onNodeWithText("Connected as listener").assertIsDisplayed()
+        composeTestRule.onNodeWithTag("lastfm-icon").assertIsDisplayed()
+        composeTestRule.onNodeWithText("Disconnect").performClick()
+        assertTrue(disconnected)
+    }
+
+    @Test
+    fun connectedAccountUsesAvatarInsteadOfIcon() {
+        val context = InstrumentationRegistry.getInstrumentation().targetContext
+        val avatar = File(context.filesDir, "lastfm-test-avatar.png")
+        avatar.outputStream().use {
+            Bitmap.createBitmap(1, 1, Bitmap.Config.ARGB_8888).compress(Bitmap.CompressFormat.PNG, 100, it)
+        }
+
+        composeTestRule.setContent {
+            SistrumTheme(themeMode = ThemeMode.Dark) {
+                LastFmContent(
+                    status = LastFmStatus(connected = true, username = "listener", avatarPath = avatar.absolutePath),
+                    onConnect = {},
+                    onDisconnect = {},
+                )
+            }
+        }
+
+        composeTestRule.waitUntil {
+            composeTestRule.onAllNodesWithTag("lastfm-avatar").fetchSemanticsNodes().isNotEmpty()
+        }
+        composeTestRule.onNodeWithTag("lastfm-avatar").assertIsDisplayed()
+        composeTestRule.onAllNodesWithTag("lastfm-icon").assertCountEquals(0)
+        avatar.delete()
+    }
+
+    @Test
+    fun lyricsSourceSelectionReportsAutoFetch() {
+        var source = LyricsSource.Desktop
+        composeTestRule.setContent {
+            SistrumTheme(themeMode = ThemeMode.Dark) {
+                LyricsContent(
+                    settings = LyricsSettings(),
+                    onSourceChanged = { source = it },
+                    onLrclibChanged = {},
+                    onKugouChanged = {},
+                    onRomanizationEnabledChanged = {},
+                    onGlowChanged = {},
+                )
+            }
+        }
+
+        composeTestRule.onNodeWithText("Desktop sync").performClick()
+        composeTestRule.onNodeWithText("Auto fetch").performClick()
+        assertEquals(LyricsSource.AutoFetch, source)
+    }
+
+    @Test
+    fun romanizationSettingReportsItsNewValue() {
+        var enabled = false
+        composeTestRule.setContent {
+            SistrumTheme(themeMode = ThemeMode.Dark) {
+                LyricsContent(
+                    settings = LyricsSettings(),
+                    onSourceChanged = {},
+                    onLrclibChanged = {},
+                    onKugouChanged = {},
+                    onRomanizationEnabledChanged = { enabled = it },
+                    onGlowChanged = {},
+                )
+            }
+        }
+
+        composeTestRule.onNodeWithText("Enable romanization").performClick()
+        assertTrue(enabled)
+    }
+
+    @Test
+    fun glowSettingReportsItsNewValue() {
+        var enabled = true
+        composeTestRule.setContent {
+            SistrumTheme(themeMode = ThemeMode.Dark) {
+                LyricsContent(
+                    settings = LyricsSettings(),
+                    onSourceChanged = {},
+                    onLrclibChanged = {},
+                    onKugouChanged = {},
+                    onRomanizationEnabledChanged = {},
+                    onGlowChanged = { enabled = it },
+                )
+            }
+        }
+
+        composeTestRule.onNodeWithText("Lyrics glow").performClick()
+        org.junit.Assert.assertFalse(enabled)
+    }
+}

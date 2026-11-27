@@ -7,7 +7,7 @@
 	objects = {
 
 /* Begin PBXFileReference section */
-		5A6C8BDD5CFC39FE288C3D1C /* Airmedy.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = Airmedy.app; sourceTree = BUILT_PRODUCTS_DIR; };
+		5A6C8BDD5CFC39FE288C3D1C /* Sistrum.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = Sistrum.app; sourceTree = BUILT_PRODUCTS_DIR; };
 /* End PBXFileReference section */
 
 /* Begin PBXFileSystemSynchronizedBuildFileExceptionSet section */
@@ -59,7 +59,7 @@
 		F98BEDFAE4D444C3B685A35D /* Products */ = {
 			isa = PBXGroup;
 			children = (
-				5A6C8BDD5CFC39FE288C3D1C /* Airmedy.app */,
+				5A6C8BDD5CFC39FE288C3D1C /* Sistrum.app */,
 			);
 			name = Products;
 			sourceTree = "<group>";
@@ -87,7 +87,7 @@
 			packageProductDependencies = (
 			);
 			productName = iosApp;
-			productReference = 5A6C8BDD5CFC39FE288C3D1C /* Airmedy.app */;
+			productReference = 5A6C8BDD5CFC39FE288C3D1C /* Sistrum.app */;
 			productType = "com.apple.product-type.application";
 		};
 /* End PBXNativeTarget section */

@@ -65,7 +65,7 @@ plugins {
 
 val subsetMaterialSymbolsFont =
     tasks.register<SubsetMaterialSymbolsFontTask>("subsetMaterialSymbolsFont") {
-        symbolsKt = file("src/main/kotlin/me/misa198/airmedy/ui/components/MaterialSymbols.kt")
+        symbolsKt = file("src/main/kotlin/com/amwolfstein/sistrum/ui/components/MaterialSymbols.kt")
         sourceFont = rootProject.file("tools/fonts/material_symbols_rounded.ttf")
         subsetScript = rootProject.file("tools/font-subset/subset_font.py")
         outputFont = file("src/main/res/font/material_symbols_rounded.ttf")
@@ -136,7 +136,7 @@ dependencies {
 
 android {
     sourceSets.getByName("main").assets.directories.add(layout.buildDirectory.dir("generated/romanizationAssets").get().asFile.path)
-    namespace = "me.misa198.airmedy"
+    namespace = "com.amwolfstein.sistrum"
     compileSdk = libs.versions.android.compileSdk.get().toInt()
     ndkVersion = "30.0.16248370"
 
@@ -144,8 +144,8 @@ android {
     defaultConfig {
         minSdk = libs.versions.android.minSdk.get().toInt()
         targetSdk = libs.versions.android.targetSdk.get().toInt()
-        versionCode = 13
-        versionName = "1.3.0"
+        versionCode = 1
+        versionName = "0.1.0"
 
         val lastFmApiKey = localProperties.getProperty("LASTFM_API_KEY")
             ?: providers.environmentVariable("LASTFM_API_KEY").getOrElse("")
@@ -171,11 +171,11 @@ android {
     productFlavors {
         create("dev") {
             dimension = "environment"
-            applicationId = "me.misa198.airmedy.dev"
+            applicationId = "com.amwolfstein.sistrum.dev"
         }
         create("prod") {
             dimension = "environment"
-            applicationId = "me.misa198.airmedy"
+            applicationId = "com.amwolfstein.sistrum"
         }
     }
     packaging {

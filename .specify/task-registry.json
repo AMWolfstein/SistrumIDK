@@ -1,8 +1,8 @@
 {
   "missions": {},
-  "next_completion": 3,
+  "next_completion": 4,
   "next_mission": 1,
-  "next_tor": 3,
+  "next_tor": 4,
   "tasks": {
     "TOR001": {
       "completion": 1,
@@ -49,6 +49,29 @@
       "record": ".specify/quick-tasks/TOR002.md",
       "status": "complete",
       "title": "Add the Android FFmpeg build helper"
+    },
+    "TOR003": {
+      "completion": 3,
+      "evidence": {
+        "checks": "0 old package/path refs; 309/309 package declarations match; IDs com.amwolfstein.sistrum(.dev); version 0.1.0 (1); scheme sistrum; CMake/JNI sistrum_player; 11 new icon assets byte-identical; 208 verbatim upstream files; independent review PASS; build/tests not run (no SDK)",
+        "graph": {
+          "impact": "androidApp/src/**, sharedLogic/src/**, build.gradle.kts, settings.gradle.kts, AndroidManifest.xml, res assets",
+          "queries": 3,
+          "revision": "619677fd7641545a668a1232c0be5137840423e1",
+          "status": "PASS",
+          "tool": "0.6.13"
+        },
+        "result": "PASS",
+        "reviewer": "independent-subagent",
+        "round": 1
+      },
+      "final": false,
+      "kind": "TOR",
+      "mission": null,
+      "nonce": "7cc0a52401f0489d82a0bfabd2c2e968",
+      "record": ".specify/quick-tasks/TOR003.md",
+      "status": "complete",
+      "title": "Rebrand Android as Sistrum V0.1.0"
     }
   },
   "version": 1

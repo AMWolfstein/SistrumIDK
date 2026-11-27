@@ -76,7 +76,7 @@ presentation, log through the Android host, and permit retry next session.
 
 `App` receives immutable `AppUpdate` state and a dismiss callback. `AppUpdateDialog`
 shows a localized title, version and Markdown GitHub notes (or a localized empty
-fallback) through `AirmedyDialog`'s optional content slot. Later, Back and outside taps dismiss it; Update
+fallback) through `SistrumDialog`'s optional content slot. Later, Back and outside taps dismiss it; Update
 dismisses and emits the existing external-URL intent to the release page.
 Dismissal does not erase history. See `releases/README.md` for publication and
 at-most-once persistence semantics. Android host tests cover parsing, state and
@@ -88,7 +88,7 @@ lists, quotes, links and code are supported. Markdown images and HTML `<img>`
 load asynchronously (including SVG through AndroidSVG) and fit the available
 width even when HTML specifies an oversized width; relative image paths resolve
 against the repository at the mobile release tag. Text, links, code, tables and
-checkboxes follow `AirmedyColors`, including after theme changes. Only HTTP(S)
+checkboxes follow `SistrumColors`, including after theme changes. Only HTTP(S)
 image/link destinations are accepted. Links use the existing external-URL host
 action, with no embedded browser or JavaScript. Failed Markdown images retain
 alternative text while notes remain usable. Removing the view cancels Markwon's image/table
@@ -98,7 +98,7 @@ covers formatted spans, links, theme changes and both Markdown/HTML images using
 a local test server, including an image failure. These UI tests require explicit
 device/emulator authorization to run; compiling their APK remains host-only.
 
-`AirmedyDialog` caps its surface width at 420dp and height at 85% of the configured
+`SistrumDialog` caps its surface width at 420dp and height at 85% of the configured
 screen height. Its title/body region scrolls while the action buttons remain
 outside that region, so long release notes do not hide the actions.
 
@@ -123,21 +123,21 @@ and card removal in Light/Dark; its APK can be built without running a device.
 
 ### Theme tokens
 
-`AirmedyTheme.kt` and `AirmedyColors` are the single source of truth for colour.
-`AirmedyTheme` also provides Material `LocalContentColor` from `textMain`.
+`SistrumTheme.kt` and `SistrumColors` are the single source of truth for colour.
+`SistrumTheme` also provides Material `LocalContentColor` from `textMain`.
 `MaterialTheme` alone does not update this ambient, so uncolored Text/Icon slots
 would otherwise retain Material's dark default in Dark mode. Dialogs and bottom
 sheets inherit the themed foreground; explicit muted/primary colors still win.
-`AirmedyBottomSheetTest` checks default and explicit slot colors while switching
+`SistrumBottomSheetTest` checks default and explicit slot colors while switching
 Light/Dark, and `AppNavigationTest` covers the actual Lyrics info action.
 
-Composables use `LocalAirmedyColors.current` or `MaterialTheme`; feature code
+Composables use `LocalSistrumColors.current` or `MaterialTheme`; feature code
 must not introduce raw `Color(...)` values. Supported modes are System, Light,
 Dark, and OLED. OLED persists as `oled` through `ThemePreferences`, uses light
 system-bar icons, and inherits Dark foreground/accent tokens.
 Its app and player base backgrounds are pure black; cards and glass use darker
 neutral surfaces inspired by desktop Black. System continues to follow Light/Dark.
-`ThemeModeTest`, `MainViewModelTest`, and `AirmedyThemeTest` cover restoration,
+`ThemeModeTest`, `MainViewModelTest`, and `SistrumThemeTest` cover restoration,
 selection persistence, and palette invariants on the host; `AppearanceContentTest`
 covers OLED selection and Compose/Material token propagation.
 Primary remains rose; inactive controls use themed foreground rather
@@ -203,15 +203,15 @@ system. Reuse the existing primitive before making another component:
 
 | Need | Reuse |
 | --- | --- |
-| Page frame/header | `StackPageLayout`, `StackPageHeader`, `AirmedyBackButton` |
-| Floating glass/buttons | `liquidGlassBackground`, `AirmedyIconButton`, `AirmedyPillButton` |
-| Text input / slider / selection | `AirmedyTextField`, `AirmedyTrackSlider`, `Selection`, `RadioList` |
+| Page frame/header | `StackPageLayout`, `StackPageHeader`, `SistrumBackButton` |
+| Floating glass/buttons | `liquidGlassBackground`, `SistrumIconButton`, `SistrumPillButton` |
+| Text input / slider / selection | `SistrumTextField`, `SistrumTrackSlider`, `Selection`, `RadioList` |
 | Settings annotation | `TextHelper` |
 | Rows/lists | `TrackRow`, collection rows, `LibraryVirtualList`, `InsetListDivider` |
-| Modal/menu | `AirmedyBottomSheet`, `AirmedyDialog`, `AnchoredPopupMenu`, context menus |
-| Artwork and status | `DetailHero`, `DiscCard`, `AirmedyPlayingIndicator`, `MaterialSymbol` |
+| Modal/menu | `SistrumBottomSheet`, `SistrumDialog`, `AnchoredPopupMenu`, context menus |
+| Artwork and status | `DetailHero`, `DiscCard`, `SistrumPlayingIndicator`, `MaterialSymbol` |
 
-`AirmedyDialog` supports both confirmations and one-action alerts. The app
+`SistrumDialog` supports both confirmations and one-action alerts. The app
 shell renders the transient insufficient-storage sync failure above every
 destination from `AndroidSyncState.Failed`; its Close callback resets the
 runtime state to `Idle`, and the failure is never persisted.
@@ -262,7 +262,7 @@ the first Room-backed snapshot; initial loading stays visually neutral.
 When a page with a library search/filter input is popped from its destination
 stack, the shell resets that page's query before it can be opened again.
 
-`AirmedyMarqueeText` is shared by mini-player and fullscreen title/artist labels.
+`SistrumMarqueeText` is shared by mini-player and fullscreen title/artist labels.
 It uses Compose `basicMarquee`: overflowing text loops in one direction with a
 32dp trailing gap, 20dp/s motion, and a three-second pause before each cycle.
 Text that fits stays still, and system-disabled animations disable scrolling.
@@ -272,7 +272,7 @@ Mini-player and fullscreen title/artist labels enable its optional trailing alph
 mask when text overflows, softening the edge beside playback controls and
 Favorite/More in expanded and compact modes.
 The mask reveals the existing background and leaves fitting text unchanged.
-`AirmedyMarqueeTextTest` covers overflow motion, its initial pause, fitting text,
+`SistrumMarqueeTextTest` covers overflow motion, its initial pause, fitting text,
 and the trailing fade in light and dark themes.
 
 ## Player UI contracts
@@ -599,7 +599,7 @@ defaults to Mandarin; kana-containing lines are unsupported. Host fixtures live
 in shared/Android lyrics tests; the fullscreen Compose test covers replacement
 and restoration of secondary text and intermediate row positions during toggles.
 
-Bottom sheets may use `AirmedyBottomSheetStack`: only its top entry renders;
+Bottom sheets may use `SistrumBottomSheetStack`: only its top entry renders;
 popping removes that entry while the entry below retains its data. Find Lyrics
 uses it for a full-height, prefilled search sheet with leading input icons and
 placeholders (not separate labels), and a lyric-content-only preview sheet.

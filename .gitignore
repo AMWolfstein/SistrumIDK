@@ -2,7 +2,7 @@
 # Local workflow caches
 .work/
 
-# Airmedy mobile defaults
+# Sistrum mobile defaults
 *.iml
 .kotlin
 .gradle
