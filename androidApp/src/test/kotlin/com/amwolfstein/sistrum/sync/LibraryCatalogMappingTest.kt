@@ -85,7 +85,7 @@ class LibraryCatalogMappingTest {
         assertEquals("album_1", track.albumId)
         assertEquals("/files/artwork/ab/abc.jpg", track.artworkPath)
         assertEquals(4, track.rating)
-        assertNull(track.audioPath)
+        assertEquals("content://music/1.flac", track.audioPath)
     }
 
     @Test

@@ -94,7 +94,14 @@ class PlaybackService : Service() {
 
     override fun onCreate() {
         super.onCreate()
-        AndroidPlaybackRuntime.initialize(applicationContext, AndroidSyncRuntime.syncStore())
+        AndroidPlaybackRuntime.initialize(
+            applicationContext,
+            AndroidSyncRuntime.syncStore(),
+            com.amwolfstein.sistrum.sync.LocalLibraryCatalog(
+                applicationContext,
+                legacy = AndroidSyncRuntime.syncStore(),
+            ),
+        )
         lastFm = AndroidLastFmRuntime.initialize(applicationContext, AndroidSyncRuntime.syncStore())
         listeningTracker = ListeningTracker(runBlocking { PairingPreferences(applicationContext).identity().id }) { UUID.randomUUID().toString() }
         listeningWriter = scope.launch {
@@ -387,6 +394,22 @@ class PlaybackService : Service() {
         return true
     }
 
+    /** Opens either an app-owned file or a SAF document for the native decoder. */
+    private fun openAudio(item: PlaybackItem): android.os.ParcelFileDescriptor {
+        val path = item.audioPath
+        return if (path.startsWith("content://")) {
+            contentResolver.openFileDescriptor(android.net.Uri.parse(path), "r")
+                ?: error("Unable to open audio document")
+        } else if (path.startsWith("file://")) {
+            android.os.ParcelFileDescriptor.open(
+                File(android.net.Uri.parse(path).path ?: error("Invalid file URI")),
+                android.os.ParcelFileDescriptor.MODE_READ_ONLY,
+            )
+        } else {
+            android.os.ParcelFileDescriptor.open(File(path), android.os.ParcelFileDescriptor.MODE_READ_ONLY)
+        }
+    }
+
     private fun stopMoodRadio() { moodRadioSeedId = null; moodRadioLastRefillAttempt = null; moodRadioActive.value = false }
 
     private suspend fun handleTransition(
@@ -427,7 +450,7 @@ class PlaybackService : Service() {
             try {
                 preparedDecoder.setGlobalDspConfig(equalizerDspConfig(equalizerSettings))
                 preparedDecoder.setFocusGain(if (isDucked) DuckedFocusGain else 1f)
-                preparedDecoder.prepare(File(item.audioPath), normalizationGain(item, queue.peekNext()))
+                openAudio(item).use { preparedDecoder.prepare(it, normalizationGain(item, queue.peekNext())) }
                 if (startPositionMs > 0L) preparedDecoder.seekTo(clampSeekPosition(startPositionMs, preparedDecoder.durationMs()))
                 if (startPaused) {
                     preparedDecoder.pause()
@@ -465,7 +488,7 @@ class PlaybackService : Service() {
             decoder = FfmpegDecoder().also {
                 it.setGlobalDspConfig(equalizerDspConfig(equalizerSettings))
                 it.setFocusGain(if (isDucked) DuckedFocusGain else 1f)
-                it.prepare(File(item.audioPath), normalizationGain(item, queue.peekNext()))
+                openAudio(item).use { descriptor -> it.prepare(descriptor, normalizationGain(item, queue.peekNext())) }
                 val positionMs = clampSeekPosition(savedPositionMs, it.durationMs())
                 if (positionMs > 0L) it.seekTo(positionMs)
                 it.pause()
@@ -657,7 +680,7 @@ class PlaybackService : Service() {
     private suspend fun publishQueue() {
         val snapshot = queue.snapshot()
         queueState.value = snapshot
-        val tracks = AndroidSyncRuntime.syncStore().tracks.first().associateBy { it.id }
+        val tracks = AndroidPlaybackRuntime.tracksSnapshot().associateBy { it.id }
         mediaSession.setQueue(snapshot.activeTrackIds.mapIndexedNotNull { index, trackId ->
             tracks[trackId]?.let { track ->
                 MediaSession.QueueItem(
@@ -707,7 +730,7 @@ class PlaybackService : Service() {
         currentDecoder.clearPreloaded()
         preloadedItem = nextId?.let { id -> AndroidPlaybackRuntime.controller().resolve(id) }
         preloadedItem?.let { item ->
-            runCatching { currentDecoder.preload(File(item.audioPath), normalizationGain(item, queue.peekNext())) }
+            runCatching { openAudio(item).use { descriptor -> currentDecoder.preload(descriptor, normalizationGain(item, queue.peekNext())) } }
                 .onSuccess { loaded ->
                     if (!loaded) preloadedItem = null
                 }

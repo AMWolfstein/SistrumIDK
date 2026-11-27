@@ -272,7 +272,7 @@ class MainActivity : ComponentActivity() {
         AndroidSyncRuntime.initialize(applicationContext)
         lastFm = AndroidLastFmRuntime.initialize(applicationContext, AndroidSyncRuntime.syncStore())
         handleLastFmIntent(intent)
-        AndroidPlaybackRuntime.initialize(applicationContext, AndroidSyncRuntime.syncStore())
+        AndroidPlaybackRuntime.initialize(applicationContext, AndroidSyncRuntime.syncStore(), libraryCatalog())
         lifecycleScope.launch {
             com.amwolfstein.sistrum.library.tags.TagWriter(
                 applicationContext,

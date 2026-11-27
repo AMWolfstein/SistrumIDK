@@ -73,3 +73,12 @@
 - Ratings (0–5, Sistrum extension): local read/write with database-bound validation, star display and edit in track info, a minimum-rating filter row, and a rating sort that keeps unrated tracks last in both directions.
 - Tests: host mapping tests (JSON keys, identity, artwork, rating), rating sort test; device `LocalLibraryCatalogTest` (flows, local rating/favorite writes, bounds, empty search/playlists/listening) and `RatingFilterRowTest` — 5/5 PASS on OnePlus CPH2307 (Android 15). Host suites: androidApp 364/364, sharedLogic 59/59.
 - Limitations: SAF playback resolution is wired in T11, so local rows do not play yet; playlists are read from the legacy store until T13; no room FTS table (in-memory matcher) and no Bleve-equivalent ranking.
+
+## M001-T011 — Local URI playback and queue integration
+
+- Local tracks now expose their SAF document URI, and the native decoder gained descriptor-based `prepare`/`preload` overloads (path overloads remain for app-owned files). `PlaybackService` opens `content://` documents through `ContentResolver` and `file://` through a file descriptor, so no path is fabricated for SAF storage.
+- `AndroidPlaybackRuntime` resolves local catalog tracks first and falls back to the legacy sync store for not-yet-migrated desktop files, validates that the document actually opens before queueing, carries local artwork and analysis, and exposes a metadata snapshot so the media session shows local queue items.
+- Queue restore validates ids against the same resolver (`availableTrackIds` merges local and legacy availability), so deleted or revoked documents are dropped instead of left pointing at missing rows; a track that disappears while playing fails through the existing `PlaybackState.Failed` path.
+- `LocalLibraryCatalog` uses the item URI as the playable path; missing files are logged with the id and path and never queue.
+- Tests: device `FfmpegDescriptorTest` proves decode and preload from an open descriptor (MP3 fixture), and the updated `LocalLibraryCatalogTest` asserts the SAF URI is exposed — 6/6 PASS on OnePlus CPH2307 (Android 15). Host suites: androidApp 364/364, sharedLogic 59/59; `assembleDevDebug` succeeds.
+- Limitations: no emulator/device audio capture, so real SAF playback under a provider, crossfade/EQ timing and route changes are covered by T12 evidence rather than by an automated assertion here; Mood Radio and listening history still read the legacy store until T19/T20.

@@ -301,3 +301,5 @@ Rules: each task starts with a full map refresh, records evidence, implements, r
 - [x] M001-T009 Metadata separators and derived-relationship rebuild
 
 - [x] M001-T010 Local library queries, search and UI wiring
+
+- [x] M001-T011 Local URI playback and queue integration

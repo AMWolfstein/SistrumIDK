@@ -13,3 +13,4 @@
 - M001-T008 — Artwork cache, artist precedence and Online Artwork page
 - M001-T009 — Metadata separators and derived-relationship rebuild
 - M001-T010 — Local library queries, search and UI wiring
+- M001-T011 — Local URI playback and queue integration

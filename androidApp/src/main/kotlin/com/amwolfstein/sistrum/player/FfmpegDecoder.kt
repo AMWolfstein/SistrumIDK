@@ -12,18 +12,27 @@ internal class FfmpegDecoder : Closeable {
     private var handle: Long = nativeCreate()
 
     fun prepare(file: File, normalizationGainDb: Float = 0f) {
-        check(handle != 0L) { "Decoder is closed" }
         ParcelFileDescriptor.open(file, ParcelFileDescriptor.MODE_READ_ONLY).use { descriptor ->
-            nativePrepare(handle, descriptor.detachFd(), normalizationGainDb)
+            prepare(descriptor, normalizationGainDb)
         }
+    }
+
+    /** Prepares from an already-open descriptor, which is how SAF documents are played. */
+    fun prepare(descriptor: ParcelFileDescriptor, normalizationGainDb: Float = 0f) {
+        check(handle != 0L) { "Decoder is closed" }
+        nativePrepare(handle, descriptor.detachFd(), normalizationGainDb)
     }
 
     /** Opens and decodes the next item into the engine's idle source slot. */
     fun preload(file: File, normalizationGainDb: Float = 0f): Boolean {
-        check(handle != 0L) { "Decoder is closed" }
         ParcelFileDescriptor.open(file, ParcelFileDescriptor.MODE_READ_ONLY).use { descriptor ->
-            return nativePreload(handle, descriptor.detachFd(), normalizationGainDb)
+            return preload(descriptor, normalizationGainDb)
         }
+    }
+
+    fun preload(descriptor: ParcelFileDescriptor, normalizationGainDb: Float = 0f): Boolean {
+        check(handle != 0L) { "Decoder is closed" }
+        return nativePreload(handle, descriptor.detachFd(), normalizationGainDb)
     }
 
     fun setNormalizationGains(activeDb: Float, preloadedDb: Float) {

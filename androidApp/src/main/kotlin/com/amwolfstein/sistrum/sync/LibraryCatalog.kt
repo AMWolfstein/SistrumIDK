@@ -118,9 +118,8 @@ internal fun LocalTrackRow.toLibraryTrack(artworkPath: String?): LibraryTrack = 
     trackNumber = item.trackNumber ?: 0,
     metadataJson = localTrackMetadataJson(this),
     artworkPath = artworkPath,
-    // SAF documents are opened by URI by the local playback resolver (T11); the legacy player
-    // only uses absolute paths, so this stays empty until then.
-    audioPath = null,
+    // SAF documents are opened through ContentResolver by the playback service.
+    audioPath = item.fileUri,
     rating = item.rating,
 )
 

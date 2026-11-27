@@ -67,7 +67,7 @@ class LocalLibraryCatalogTest {
         assertEquals("Dummy", roads.album)
         assertEquals(3, roads.rating)
         assertTrue(roads.metadataJson.contains("Portishead"))
-        assertNull(roads.audioPath)
+        assertEquals("content://m/1.mp3", roads.audioPath)
     }
 
     @Test
