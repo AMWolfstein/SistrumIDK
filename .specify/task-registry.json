@@ -9,7 +9,7 @@
   },
   "next_completion": 13,
   "next_mission": 2,
-  "next_tor": 10,
+  "next_tor": 11,
   "tasks": {
     "M001-T001": {
       "completion": 9,
@@ -94,6 +94,16 @@
       "record": "specs/001-local-library-upgrade/tasks.md",
       "status": "complete",
       "title": "Replace local audio analysis with Airmedy parity"
+    },
+    "M001-TOR010": {
+      "completion": null,
+      "final": false,
+      "kind": "TOR",
+      "mission": "M001",
+      "nonce": "f568b66b840248dfbc42a9384f87573e",
+      "record": "specs/001-local-library-upgrade/tasks.md",
+      "status": "reserved",
+      "title": "Integrate the full TagLib editor and FFmpeg ReplayGain"
     },
     "TOR001": {
       "completion": 1,

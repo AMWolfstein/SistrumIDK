@@ -2,6 +2,7 @@ package com.amwolfstein.sistrum.analysis
 
 import androidx.test.platform.app.InstrumentationRegistry
 import java.io.File
+import kotlin.math.pow
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertTrue
 import org.junit.Test
@@ -9,6 +10,22 @@ import org.junit.Test
 /** Pinned Airmedy FFmpeg 9 analyzer references for locally generated 1 kHz fixtures. */
 class OfflineAudioDecoderTest {
     private val instrumentation = InstrumentationRegistry.getInstrumentation()
+
+    @Test
+    fun replayGainReportsLinearSamplePeakSeparatelyFromTruePeak() {
+        val file = asset("rhythm.flac")
+        try {
+            OfflineAudioDecoder().use { decoder ->
+                decoder.open(file)
+                val values = decoder.replayGain()
+                assertEquals(-18.62, values[0], .2)
+                assertEquals(10.0.pow(-4.402936 / 20.0), values[1], .002)
+                assertEquals(-4.394, values[2], .2)
+            }
+        } finally {
+            file.delete()
+        }
+    }
 
     @Test
     fun decodesSupportedFormatsWithExpectedLoudness() {

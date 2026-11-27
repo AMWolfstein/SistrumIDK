@@ -1,4 +1,23 @@
 <resources>
+    <string name="replaygain_remove_tags">Remove ReplayGain tags</string>
+    <string name="replaygain_mode">ReplayGain</string>
+    <string name="replaygain_off">Off</string>
+    <string name="replaygain_preamp">Preamp: %1$.1f dB</string>
+    <string name="replaygain_precedence">ReplayGain takes precedence over loudness normalization. Missing tags use no gain. MP3 and FLAC only.</string>
+
+    <string name="track_edit_advanced">Additional properties</string>
+    <string name="track_edit_multivalue_hint">Select a property or enter a name. Put each value on a separate line.</string>
+    <string name="track_edit_property_name">Property name</string>
+    <string name="track_edit_property_values">Values</string>
+    <string name="track_edit_property_unsupported">This property cannot be safely edited for this format.</string>
+    <string name="track_edit_property_set">Set</string>
+    <string name="track_edit_property_remove">Remove</string>
+    <string name="tag_property_changes_pending">%1$d property changes pending</string>
+    <string name="replaygain_scan_track">Scan ReplayGain</string>
+    <string name="replaygain_write_track">Write track ReplayGain tags</string>
+    <string name="replaygain_scanning">Analyzing audio…</string>
+    <string name="replaygain_scan_failed">ReplayGain analysis could not be completed.</string>
+    <string name="replaygain_preview">Loudness %1$s LUFS · Gain %2$s dB · Sample peak %3$s · True peak %4$s dBTP</string>
     <string name="library_analysis_retry_one">Retry</string>
 
     <string name="library_analysis_schedule_failed">Could not change library analysis.</string>
@@ -525,4 +544,16 @@
     <string name="track_edit_pending_count">%1$d edited song(s) waiting for a library scan</string>
     <string name="track_edit_refresh">Refresh edited songs</string>
     <string name="playlist_export_unresolved">Could not export %1$d entries</string>
+    <string name="batch_edit_open">Batch metadata and ReplayGain</string>
+    <string name="batch_select_all">Select all</string>
+    <string name="batch_clear">Clear selection</string>
+    <string name="batch_selected">Selected: %1$d</string>
+    <string name="batch_skip_tagged">Skip tracks with existing gain</string>
+    <string name="batch_skipped">Skipped existing gain</string>
+    <string name="batch_progress">Processed %1$d of %2$d</string>
+    <string name="track_edit_picture_description">Picture description</string>
+    <string name="batch_denied">Permission denied</string>
+    <string name="batch_permission_error">Could not request permission</string>
+    <string name="track_edit_lyrics">Embedded lyrics</string>
+    <string name="batch_summary">Scanned %1$d · Saved %2$d · Skipped %3$d · Failed %4$d</string>
 </resources>

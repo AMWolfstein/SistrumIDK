@@ -27,6 +27,8 @@ import com.amwolfstein.sistrum.library.LocalGenre
 import com.amwolfstein.sistrum.library.LocalLibrarySnapshot
 import com.amwolfstein.sistrum.library.LocalTrack
 import com.amwolfstein.sistrum.metadata.TrackEdit
+import com.amwolfstein.sistrum.metadata.TagMetadata
+import com.amwolfstein.sistrum.metadata.embeddedTagsFromProperties
 
 /** Audio asset row resolved for a scanned track, keyed by track id in the scan result. */
 internal data class LocalScanAudio(
@@ -210,7 +212,21 @@ internal class MediaStoreLibraryScanner(
                     previous != null -> previous.first
                     else -> "local:$mediaId"
                 }
-                val embeddedTags = if (unchanged) null else EmbeddedTagReader.embeddedTrackTags(data)
+                val embeddedTags = if (unchanged) null else {
+                    val fallback = EmbeddedTagReader.embeddedTrackTags(data)
+                    val taglib = runCatching {
+                        embeddedTagsFromProperties(TagMetadata.read(File(data), readPictures = false).properties)
+                    }.getOrNull()
+                    if (taglib == null) fallback else EmbeddedTrackTags(
+                        releaseDate = taglib.releaseDate ?: fallback?.releaseDate,
+                        year = taglib.year ?: fallback?.year,
+                        bpm = taglib.bpm ?: fallback?.bpm,
+                        label = taglib.label ?: fallback?.label,
+                        isrc = taglib.isrc ?: fallback?.isrc,
+                        copyright = taglib.copyright ?: fallback?.copyright,
+                        explicit = taglib.explicit ?: fallback?.explicit,
+                    )
+                }
                 val year = if (unchanged) priorTrack.year else embeddedTags?.year ?: 0
                 val releaseDate = if (unchanged) priorTrack.releaseDate else embeddedTags?.releaseDate.orEmpty()
                 val bpm = if (unchanged) priorTrack.bpm else embeddedTags?.bpm ?: 0

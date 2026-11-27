@@ -26,8 +26,10 @@ reorderable = "3.1.0"
 vico = "3.2.1"
 markwon = "4.6.2"
 androidsvg = "1.4"
+taglib = "1.0.6"
 
 [libraries]
+taglib = { module = "io.github.kyant0:taglib", version.ref = "taglib" }
 androidx-window = { module = "androidx.window:window", version.ref = "androidx-window" }
 kotlin-test = { module = "org.jetbrains.kotlin:kotlin-test", version.ref = "kotlin" }
 kotlin-testJunit = { module = "org.jetbrains.kotlin:kotlin-test-junit", version.ref = "kotlin" }

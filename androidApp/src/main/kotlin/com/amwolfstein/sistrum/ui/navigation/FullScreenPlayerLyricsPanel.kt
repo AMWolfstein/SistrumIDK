@@ -375,7 +375,7 @@ internal fun FullScreenPlayerLyricsPanel(
                     val content = lyrics
                     saveScope.launch {
                         val target = runCatching { prepareTrackEdit(context, trackId) }.getOrNull()
-                        if (target == null || !target.path.endsWith(".mp3", ignoreCase = true)) {
+                        if (target == null || !(target.path.endsWith(".mp3", true) || target.path.endsWith(".flac", true))) {
                             Toast.makeText(context, R.string.lyrics_embedded_save_failed, Toast.LENGTH_LONG).show()
                             return@launch
                         }

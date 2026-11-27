@@ -40,6 +40,7 @@ The first action of every task is `python3 workflow/codegraph/code_tools.py upda
 
 ## Final cumulative review
 
+- [ ] M001-TOR010 Integrate the full TagLib editor and FFmpeg ReplayGain
 - [ ] M001-T005 [FINAL] Review the standalone library upgrade
   - **Depends on** M001-T001 through M001-T004 and any authorized mission extras.
   - **Paths** All cumulative mission changes, [spec.md](spec.md), [plan.md](plan.md), [task-log.md](task-log.md) and this checklist.

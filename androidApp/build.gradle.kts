@@ -89,6 +89,7 @@ kotlin {
 }
 dependencies {
     implementation(project(":sharedLogic"))
+    implementation(libs.taglib)
 
     implementation(libs.androidx.window)
     implementation(libs.androidx.activity.compose)

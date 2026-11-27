@@ -10,6 +10,7 @@ import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.Slider
 import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
@@ -192,6 +193,23 @@ internal fun VolumeNormalizationContent(
 ) {
     Column(modifier = modifier, verticalArrangement = Arrangement.spacedBy(12.dp)) {
         com.amwolfstein.sistrum.ui.components.Card {
+            Selection(
+                labelRes = R.string.replaygain_mode,
+                options = listOf(
+                    SelectionOption(com.amwolfstein.sistrum.player.ReplayGainMode.Off, R.string.replaygain_off),
+                    SelectionOption(com.amwolfstein.sistrum.player.ReplayGainMode.Track, R.string.playback_normalization_mode_track),
+                    SelectionOption(com.amwolfstein.sistrum.player.ReplayGainMode.Album, R.string.playback_normalization_mode_album),
+                ),
+                selectedValue = normalization.replayGainMode,
+                onValueSelected = { onNormalizationChanged(normalization.copy(replayGainMode = it)) },
+            )
+            if (normalization.replayGainMode != com.amwolfstein.sistrum.player.ReplayGainMode.Off) {
+                Text(stringResource(R.string.replaygain_preamp, normalization.replayGainPreampDb), modifier = Modifier.padding(horizontal = 16.dp))
+                Slider(value = normalization.replayGainPreampDb, onValueChange = { onNormalizationChanged(normalization.copy(replayGainPreampDb = it)) }, valueRange = -12f..12f, modifier = Modifier.padding(horizontal = 16.dp))
+                Text(stringResource(R.string.replaygain_precedence), modifier = Modifier.padding(16.dp))
+            }
+        }
+        com.amwolfstein.sistrum.ui.components.Card {
             ActionList(
                 items = listOf(
                     ActionListItem(
@@ -201,8 +219,8 @@ internal fun VolumeNormalizationContent(
                     ),
                     ActionListItem(
                         labelRes = R.string.playback_normalization_prevent_clip,
-                        trailingContent = { Switch(checked = normalization.preventClip, enabled = normalizationAvailable && normalization.enabled, onCheckedChange = { onNormalizationChanged(normalization.copy(preventClip = it)) }) },
-                        onClick = { if (normalizationAvailable && normalization.enabled) onNormalizationChanged(normalization.copy(preventClip = !normalization.preventClip)) },
+                        trailingContent = { Switch(checked = normalization.preventClip, enabled = (normalizationAvailable && normalization.enabled) || normalization.replayGainMode != com.amwolfstein.sistrum.player.ReplayGainMode.Off, onCheckedChange = { onNormalizationChanged(normalization.copy(preventClip = it)) }) },
+                        onClick = { if ((normalizationAvailable && normalization.enabled) || normalization.replayGainMode != com.amwolfstein.sistrum.player.ReplayGainMode.Off) onNormalizationChanged(normalization.copy(preventClip = !normalization.preventClip)) },
                     ),
                 ),
                 containerStyle = ActionListContainerStyle.Plain,

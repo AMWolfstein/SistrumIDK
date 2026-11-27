@@ -5,7 +5,7 @@ import org.json.JSONObject
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 
-internal data class TrackEdit(val trackId: String, val path: String, val oldHash: String, val newHash: String)
+internal data class TrackEdit(val trackId: String, val path: String, val oldHash: String, val newHash: String, val audioEquivalent: Boolean = false)
 
 internal class TrackEditJournal(context: Context) {
     private val preferences = context.getSharedPreferences("track_edit_journal", Context.MODE_PRIVATE)
@@ -13,7 +13,7 @@ internal class TrackEditJournal(context: Context) {
     val edits: StateFlow<List<TrackEdit>> = current
 
     fun put(edit: TrackEdit) {
-        val data = JSONObject().put("path", edit.path).put("oldHash", edit.oldHash).put("newHash", edit.newHash).toString()
+        val data = JSONObject().put("path", edit.path).put("oldHash", edit.oldHash).put("newHash", edit.newHash).put("audioEquivalent", edit.audioEquivalent).toString()
         check(preferences.edit().putString(edit.trackId, data).commit())
         current.value = read()
     }
@@ -22,7 +22,7 @@ internal class TrackEditJournal(context: Context) {
 
     private fun read(): List<TrackEdit> = preferences.all.mapNotNull { (id, value) ->
         val obj = runCatching { JSONObject(value as String) }.getOrNull() ?: return@mapNotNull null
-        TrackEdit(id, obj.optString("path"), obj.optString("oldHash"), obj.optString("newHash"))
+        TrackEdit(id, obj.optString("path"), obj.optString("oldHash"), obj.optString("newHash"), obj.optBoolean("audioEquivalent", false))
     }
 
     fun remove(ids: Collection<String>) {

@@ -222,6 +222,7 @@ internal fun TrackInfoContent(track: LibraryTrack, modifier: Modifier = Modifier
                 if (subtitle.isNotBlank()) Text(subtitle, modifier = Modifier.padding(top = 4.dp), style = MaterialTheme.typography.bodyMedium, color = colors.textMuted, textAlign = TextAlign.Center, maxLines = 2, overflow = TextOverflow.Ellipsis)
                 TrackQualityBadge(quality, Modifier.padding(top = 12.dp))
                 EditTrackMetadata(track)
+                ReplayGainTrackPreview(track)
             }
         }
         if (details.isNotEmpty()) {

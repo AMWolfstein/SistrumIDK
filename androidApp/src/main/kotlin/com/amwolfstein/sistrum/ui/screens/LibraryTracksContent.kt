@@ -21,6 +21,7 @@ import com.amwolfstein.sistrum.sync.LibraryTrack
 import com.amwolfstein.sistrum.player.PlaybackQueueSnapshot
 import com.amwolfstein.sistrum.ui.components.HeroCard
 import com.amwolfstein.sistrum.ui.components.LibraryVirtualList
+import com.amwolfstein.sistrum.ui.components.LibraryBatchMetadata
 import com.amwolfstein.sistrum.ui.components.LibraryPlaybackActions
 import com.amwolfstein.sistrum.ui.components.LibraryTextFilter
 import com.amwolfstein.sistrum.ui.components.TrackRow
@@ -77,6 +78,7 @@ internal fun LibraryTracksContent(
             )
         },
         leadingContent = {
+            LibraryBatchMetadata()
             LibraryPlaybackActions(
                 playLabel = stringResource(R.string.player_play),
                 shuffleLabel = stringResource(R.string.player_shuffle),

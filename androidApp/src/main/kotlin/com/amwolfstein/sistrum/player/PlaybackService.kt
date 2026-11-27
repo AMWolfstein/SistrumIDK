@@ -779,6 +779,12 @@ class PlaybackService : Service() {
     }
 
     private suspend fun normalizationGain(item: PlaybackItem, nextId: String?): Float {
+        if (normalizationSettings.replayGainMode != ReplayGainMode.Off) {
+            val file = File(item.audioPath)
+            if (file.extension.lowercase() !in setOf("mp3", "flac")) return 0f
+            val properties = runCatching { com.amwolfstein.sistrum.metadata.TagMetadata.read(file, false).properties }.getOrNull() ?: return 0f
+            return replayGainPlaybackDb(properties, normalizationSettings.replayGainMode, normalizationSettings.replayGainPreampDb, normalizationSettings.preventClip)
+        }
         val store = LocalLibraryRuntime.libraryStore()
         val currentAnalysis = store.analysis(item.trackId) ?: return 0f
         val next = nextId?.let { AndroidPlaybackRuntime.controller().resolve(it) }

@@ -409,13 +409,14 @@ internal suspend fun performScan(
         val syncStore = LocalLibraryRuntime.libraryStore()
         val filter = ScanFilterPreferences(context).currentFilter()
         val prior = syncStore.priorScanState()
+        val pendingEdits = LocalLibraryRuntime.trackEditJournal.pending()
         val result: LocalLibraryScanResult = scanner.scan(
             prior = prior,
             filter = filter,
             onProgress = onProgress,
             checkCancelled = { scanContext.ensureActive() },
             forceRefresh = forceRefresh,
-            pendingEdits = LocalLibraryRuntime.trackEditJournal.pending(),
+            pendingEdits = pendingEdits,
         )
         scanContext.ensureActive()
         check(prior.tracksByTrackId.values.none { state ->
@@ -428,6 +429,11 @@ internal suspend fun performScan(
             audioRows = result.audio,
             artworkRows = result.artwork,
             preservedTrackIds = preservedTrackIds,
+            equivalentEdits = pendingEdits.filter { edit ->
+                edit.audioEquivalent && edit.trackId in result.appliedEdits &&
+                    prior.tracksByTrackId[edit.trackId]?.let { it.absolutePath == edit.path && it.contentHash == edit.oldHash } == true &&
+                    result.audio[edit.trackId]?.let { it.absolutePath == edit.path && it.sha256 == edit.newHash } == true
+            }.associate { it.trackId to (it.oldHash to it.newHash) },
         )
         if (!written) {
             // An empty result (most often an empty whitelist) would have replaced the whole

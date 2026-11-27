@@ -339,6 +339,15 @@ internal interface SyncDao {
     """)
     suspend fun activeTrackScanState(): List<PriorTrackScanRow>
 
+    @Query("""
+        SELECT t.trackId AS trackId, t.rawJson AS rawJson, audio.sha256 AS sha256, audio.relativePath AS absolutePath, audio.size AS size
+        FROM sync_tracks t
+        INNER JOIN sync_plans p ON p.planId = t.planId
+        LEFT JOIN sync_assets audio ON audio.planId = t.planId AND audio.assetId = ('audio:' || t.trackId)
+        WHERE p.active = 1 AND t.trackId = :trackId LIMIT 1
+    """)
+    suspend fun activeTrackScanStateFor(trackId: String): PriorTrackScanRow?
+
     @Query("SELECT * FROM sync_assets WHERE planId IN (SELECT planId FROM sync_plans WHERE active = 1)")
     suspend fun activeAssets(): List<SyncAssetEntity>
 
@@ -469,6 +478,9 @@ internal interface SyncDao {
         WHERE t.trackId = :trackId LIMIT 1
     """)
     suspend fun activeSourceRevision(trackId: String): String?
+
+    @Query("UPDATE local_track_analysis SET sourceRevision = :newRevision WHERE trackId = :trackId AND sourceRevision = :oldRevision")
+    suspend fun rebindEquivalentAnalysis(trackId: String, oldRevision: String, newRevision: String)
 
     @Query("""
         SELECT a.* FROM local_track_analysis a
@@ -1023,27 +1035,7 @@ internal class AndroidLibrarySyncStore(
 
     suspend fun priorScanState(): PriorLibraryScanState {
         val tracksByTrackId = dao.activeTrackScanState().mapNotNull { row ->
-            val sha256 = row.sha256.orEmpty()
-            val json = runCatching { LibraryJson.json.parseToJsonElement(row.rawJson) as? JsonObject }.getOrNull()
-                ?: return@mapNotNull null
-            row.trackId to PriorTrackScanState(
-                identityHash = sha256,
-                absolutePath = row.absolutePath.orEmpty(),
-                sourceMediaId = json.string("source_media_id")?.toLongOrNull() ?: 0,
-                contentHash = json.string("content_hash").orEmpty(),
-                title = json.string("title").orEmpty(),
-                durationMillis = json.string("duration")?.toLongOrNull() ?: 0,
-                size = row.size ?: 0,
-                schemaVersion = json.int("schema_version"),
-                year = json.int("year"),
-                releaseDate = json.string("release_date").orEmpty(),
-                bpm = json.int("bpm"),
-                label = json.string("label").orEmpty(),
-                isrc = json.string("isrc").orEmpty(),
-                copyright = json.string("copyright").orEmpty(),
-                explicit = json.string("explicit") == "true",
-                codec = json.string("codec").orEmpty(),
-            )
+            row.toPriorTrackScanState()?.let { row.trackId to it }
         }.toMap()
         val artworkByArtworkKey = dao.activeArtworkScanState().associate { row ->
             artworkKeyOfAssetId(row.assetId) to PriorArtworkScanState(
@@ -1054,6 +1046,9 @@ internal class AndroidLibrarySyncStore(
         }
         return PriorLibraryScanState(tracksByTrackId, artworkByArtworkKey)
     }
+
+    suspend fun priorTrackScanState(trackId: String): PriorTrackScanState? =
+        dao.activeTrackScanStateFor(trackId)?.toPriorTrackScanState()
 
     /** Rebuild the active search index from its stored library rows. */
     suspend fun rebuildLocalSearch(): Boolean = database.withTransaction {
@@ -1089,6 +1084,7 @@ internal class AndroidLibrarySyncStore(
         audioRows: Map<String, LocalScanAudio>,
         artworkRows: List<LocalScanArtwork>,
         preservedTrackIds: Set<String> = emptySet(),
+        equivalentEdits: Map<String, Pair<String, String>> = emptyMap(),
     ): Boolean {
         val planId = "local-${UUID.randomUUID()}"
         val written = database.withTransaction {
@@ -1148,6 +1144,11 @@ internal class AndroidLibrarySyncStore(
             dao.insertTracks(allTracks)
             dao.deleteSearchDocuments(planId)
             dao.insertSearchDocuments(searchDocumentsFor(planId, allTracks, emptyList()))
+            equivalentEdits.forEach { (trackId, revisions) ->
+                if (dao.activeSourceRevision(trackId) == revisions.first && audioRows[trackId]?.sha256 == revisions.second) {
+                    dao.rebindEquivalentAnalysis(trackId, revisions.first, revisions.second)
+                }
+            }
             dao.deactivatePlans()
             dao.activatePlan(planId)
             val active = dao.assetPaths(planId).toSet()
@@ -1569,6 +1570,30 @@ private fun PlaylistMutation.dedupeMutationId(): String? = when (operation) {
     PlaylistMutationOperation.SET_ARTWORK, PlaylistMutationOperation.REMOVE_ARTWORK -> "dedupe:artwork:$playlistId"
     PlaylistMutationOperation.UPDATE -> "dedupe:update:$playlistId"
     else -> null
+}
+
+private fun PriorTrackScanRow.toPriorTrackScanState(): PriorTrackScanState? {
+            val sha256 = this.sha256.orEmpty()
+            val json = runCatching { LibraryJson.json.parseToJsonElement(this.rawJson) as? JsonObject }.getOrNull()
+                ?: return null
+            return PriorTrackScanState(
+                identityHash = sha256,
+                absolutePath = this.absolutePath.orEmpty(),
+                sourceMediaId = json.string("source_media_id")?.toLongOrNull() ?: 0,
+                contentHash = json.string("content_hash").orEmpty(),
+                title = json.string("title").orEmpty(),
+                durationMillis = json.string("duration")?.toLongOrNull() ?: 0,
+                size = this.size ?: 0,
+                schemaVersion = json.int("schema_version"),
+                year = json.int("year"),
+                releaseDate = json.string("release_date").orEmpty(),
+                bpm = json.int("bpm"),
+                label = json.string("label").orEmpty(),
+                isrc = json.string("isrc").orEmpty(),
+                copyright = json.string("copyright").orEmpty(),
+                explicit = json.string("explicit") == "true",
+                codec = json.string("codec").orEmpty(),
+            )
 }
 
 private fun trackAnalysisFrom(value: JsonObject): TrackAnalysis? {

@@ -67,3 +67,10 @@ coverage gaps, and completion for each task when implementation is authorized.
 - No performance, battery, Android hardware, external storage or physical-device playback checks were performed. Host parity does not establish bit-identical results on ARM64. The shared probe lock gives playback priority once FFmpeg's interrupt callback is polled; a CPU-bound codec open is not interruptible until it returns.
 - Fresh combined bootstrap `ANDROID_HOME=$PWD/.work/android-sdk TMPDIR=<RAM-scratch> SISTRUM_BUILD_JOBS=3 bash scripts/build-ffmpeg-android.sh` passed end-to-end, rebuilding FFTW3F and aubio followed by FFmpeg. The same ARM64/host Gradle tasks passed again afterward.
 - Independent review round 1: PASS (Codex). Verified pinned-source bootstrap, ARM64 ELF alignment, native probe priority and resource cleanup, analysis-version isolation, removal of the T002 meter and estimator, native parity over 19 inputs and Kotlin comparison against Go. Confirmed 470 Android unit tests, 43 shared Android host tests, AndroidTest compilation, registry validation and staged whitespace. Runtime device coverage remains as noted above.
+
+## M001-TOR010 implementation snapshot
+
+- Added the pinned Kyant0 TagLib backend, staged MP3 and FLAC edits, artwork and lyrics controls, batch metadata actions, and FFmpeg track ReplayGain preview and tag writes. Existing album tags can be used for playback in supported formats. The active task remains reserved.
+- The development Kotlin compilation, Android test source compilation and host test runs completed successfully. Host results were 477 app unit tests and 47 shared tests. Device tests were deferred.
+- Pending implementation includes album-wide gated analysis and tag writing, Opus R128 gain handling, and safe write support and round-trip coverage for M4A, Opus, Ogg Vorbis and WAV. See [format capabilities](taglib-replaygain-capabilities.md) for current guards.
+- Recheck URI write access, cancellation before replacement, and staged-file durability. Verify real-device writes, recovery, library refresh, and ReplayGain behavior during transitions before closing the task.

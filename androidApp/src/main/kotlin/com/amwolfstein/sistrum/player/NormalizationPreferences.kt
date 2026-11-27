@@ -11,6 +11,8 @@ import kotlinx.coroutines.flow.map
 private val NormalizationEnabledKey = booleanPreferencesKey("normalization_enabled")
 private val NormalizationModeKey = stringPreferencesKey("normalization_mode")
 private val NormalizationTargetKey = floatPreferencesKey("normalization_target_lufs")
+private val ReplayGainModeKey = stringPreferencesKey("replaygain_mode")
+private val ReplayGainPreampKey = floatPreferencesKey("replaygain_preamp_db")
 private val NormalizationPreventClipKey = booleanPreferencesKey("normalization_prevent_clip")
 
 internal class NormalizationPreferences(private val context: Context) {
@@ -20,6 +22,8 @@ internal class NormalizationPreferences(private val context: Context) {
             mode = if (value[NormalizationModeKey] == NormalizationMode.Album.name) NormalizationMode.Album else NormalizationMode.Track,
             targetLufs = (value[NormalizationTargetKey] ?: -14f).coerceIn(-30f, -5f),
             preventClip = value[NormalizationPreventClipKey] ?: true,
+            replayGainMode = ReplayGainMode.entries.firstOrNull { it.name == value[ReplayGainModeKey] } ?: ReplayGainMode.Off,
+            replayGainPreampDb = (value[ReplayGainPreampKey] ?: 0f).coerceIn(-12f, 12f),
         )
     }
 
@@ -29,8 +33,12 @@ internal class NormalizationPreferences(private val context: Context) {
                 values[NormalizationEnabledKey] ?: false,
                 if (values[NormalizationModeKey] == NormalizationMode.Album.name) NormalizationMode.Album else NormalizationMode.Track,
                 (values[NormalizationTargetKey] ?: -14f).coerceIn(-30f, -5f), values[NormalizationPreventClipKey] ?: true,
+                ReplayGainMode.entries.firstOrNull { it.name == values[ReplayGainModeKey] } ?: ReplayGainMode.Off,
+                (values[ReplayGainPreampKey] ?: 0f).coerceIn(-12f, 12f),
             )
             val next = transform(current)
+            values[ReplayGainModeKey] = next.replayGainMode.name
+            values[ReplayGainPreampKey] = next.replayGainPreampDb.coerceIn(-12f, 12f)
             values[NormalizationEnabledKey] = next.enabled
             values[NormalizationModeKey] = next.mode.name
             values[NormalizationTargetKey] = next.targetLufs.coerceIn(-30f, -5f)

@@ -43,6 +43,7 @@
 #define FFA_TEMPO_HOP  512
 #define FFA_COMPONENT_FFMPEG 1
 #define FFA_COMPONENT_AUBIO  2
+#define FFA_COMPONENT_REPLAYGAIN 4
 
 /*
  * aubio is built here against FFTW3F rather than its bundled Ooura fallback.
@@ -79,6 +80,9 @@ typedef struct {
     double zcr;               /* astats overall zero-crossings rate            */
     double tempo;             /* estimated tempo (BPM) via aubio, 0 if unknown */
     double onset_variance;    /* inter-onset-interval variance via aubio_onset */
+    double replaygain_sample_peak; /* linear sample peak, independent of true peak */
+    int64_t replaygain_samples;
+    int replaygain_sample_rate;
 } FFAnalysisResult;
 
 enum {
@@ -333,8 +337,9 @@ static int ffmpeg_analyze(const char *path, FFAnalysisResult *out, atomic_int *c
 
         /* ebur128 emits I/LRA + true peak; aspectralstats centroid/rolloff/flatness/flux;
          * astats RMS/crest/ZCR. aresample/aformat are auto-inserted as needed. */
-        const char *desc =
-            "ebur128=metadata=1:peak=true,aspectralstats=measure=centroid+rolloff+flatness+flux,astats=metadata=1:reset=0";
+        const char *desc = (components & FFA_COMPONENT_REPLAYGAIN)
+            ? "ebur128=metadata=1:peak=true,astats=metadata=1:reset=0"
+            : "ebur128=metadata=1:peak=true,aspectralstats=measure=centroid+rolloff+flatness+flux,astats=metadata=1:reset=0";
         if (avfilter_graph_parse_ptr(graph, desc, &gin, &gout, NULL) < 0) {
             rc = FFA_ERR_GRAPH; goto done;
         }
@@ -419,6 +424,9 @@ static int ffmpeg_analyze(const char *path, FFAnalysisResult *out, atomic_int *c
 
             int ret = avcodec_receive_frame(codec_ctx, frame);
             if (ret == 0) {
+                if (components & FFA_COMPONENT_REPLAYGAIN) {
+                    out->replaygain_samples += frame->nb_samples;
+                }
                 if (src_ctx && av_buffersrc_add_frame_flags(src_ctx, frame, AV_BUFFERSRC_FLAG_KEEP_REF) < 0) {
                     av_frame_unref(frame);
                     rc = FFA_ERR_PROCESS; goto done;
@@ -434,21 +442,36 @@ static int ffmpeg_analyze(const char *path, FFAnalysisResult *out, atomic_int *c
                 av_frame_unref(frame);
             } else if (ret == AVERROR(EAGAIN)) {
                 if (flushed) {
+                    if (components & FFA_COMPONENT_REPLAYGAIN) { rc = FFA_ERR_PROCESS; goto done; }
                     /* decoder drained: signal EOS to the graph and drain it below */
                     if (src_ctx) (void)av_buffersrc_add_frame_flags(src_ctx, NULL, 0);
                     eof = 1;
-                } else if (av_read_frame(fmt_ctx, pkt) >= 0) {
+                } else if ((ret = av_read_frame(fmt_ctx, pkt)) >= 0) {
                     if (pkt->stream_index == stream_idx) {
                         int s = avcodec_send_packet(codec_ctx, pkt);
+                        if ((components & FFA_COMPONENT_REPLAYGAIN) && s == AVERROR(EAGAIN)) {
+                            av_packet_unref(pkt); rc = FFA_ERR_PROCESS; goto done;
+                        }
                         if (s < 0 && s != AVERROR(EAGAIN)) { av_packet_unref(pkt); rc = FFA_ERR_PROCESS; goto done; }
                     }
                     av_packet_unref(pkt);
                 } else {
-                    avcodec_send_packet(codec_ctx, NULL);
+                    if ((components & FFA_COMPONENT_REPLAYGAIN) && ret != AVERROR_EOF) {
+                        rc = FFA_ERR_PROCESS; goto done;
+                    }
+                    int sent = avcodec_send_packet(codec_ctx, NULL);
+                    if ((components & FFA_COMPONENT_REPLAYGAIN) && sent < 0 && sent != AVERROR_EOF) {
+                        rc = FFA_ERR_PROCESS; goto done;
+                    }
                     flushed = 1;
                 }
             } else if (ret == AVERROR_EOF) {
-                if (src_ctx) (void)av_buffersrc_add_frame_flags(src_ctx, NULL, 0);
+                if (src_ctx) {
+                    int sent = av_buffersrc_add_frame_flags(src_ctx, NULL, 0);
+                    if ((components & FFA_COMPONENT_REPLAYGAIN) && sent < 0 && sent != AVERROR_EOF) {
+                        rc = FFA_ERR_PROCESS; goto done;
+                    }
+                }
                 eof = 1;
             } else {
                 rc = FFA_ERR_PROCESS; goto done;
@@ -492,11 +515,20 @@ static int ffmpeg_analyze(const char *path, FFAnalysisResult *out, atomic_int *c
             }
         }
 
+        if ((components & FFA_COMPONENT_REPLAYGAIN) && (!have_loudness || !have_peak_db ||
+            !have_true_peak || tp_lin <= 0 || !isfinite(tp_lin) ||
+            out->replaygain_samples < codec_ctx->sample_rate * 0.4 || !isfinite(last_lufs) || !isfinite(peak_db))) {
+            rc = FFA_ERR_PROCESS; goto done;
+        }
         if ((components & FFA_COMPONENT_FFMPEG) && !have_loudness && !have_astats) { rc = FFA_ERR_PROCESS; goto done; }
 
         if (components & FFA_COMPONENT_FFMPEG) {
         out->loudness_lufs = last_lufs;
         out->loudness_range = last_lra;
+        if (components & FFA_COMPONENT_REPLAYGAIN) {
+            out->replaygain_sample_peak = pow(10.0, peak_db / 20.0);
+            out->replaygain_sample_rate = codec_ctx->sample_rate;
+        }
         if (have_true_peak && tp_lin > 0) {
             out->true_peak = 20.0 * log10(tp_lin); /* linear -> dBFS */
         } else if (have_peak_db) {

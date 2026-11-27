@@ -56,6 +56,27 @@ int sistrum_analysis_run(SistrumAnalysis *state, double output[12]) {
     return 0;
 }
 
+int sistrum_analysis_replaygain(SistrumAnalysis *state, double output[3]) {
+    if (!state || state->fd < 0) return -1;
+    char path[64];
+    snprintf(path, sizeof(path), "/proc/self/fd/%d", state->fd);
+    FFAnalysisResult result;
+    int status;
+    do {
+        status = ffmpeg_analyze(path, &result, &state->cancelled,
+            FFA_COMPONENT_FFMPEG | FFA_COMPONENT_REPLAYGAIN);
+        if (status == FFA_ERR_YIELDED) {
+            while (sistrum_playback_probe_waiting() && !atomic_load(&state->cancelled))
+                av_usleep(10000);
+        }
+    } while (status == FFA_ERR_YIELDED && !atomic_load(&state->cancelled));
+    if (status != FFA_OK) return status;
+    output[0] = result.loudness_lufs;
+    output[1] = result.replaygain_sample_peak;
+    output[2] = result.true_peak;
+    return 0;
+}
+
 void sistrum_analysis_cancel(SistrumAnalysis *state) {
     if (state) atomic_store(&state->cancelled, 1);
 }

@@ -34,6 +34,18 @@ Java_com_amwolfstein_sistrum_analysis_OfflineAudioDecoder_nativeAnalyze(JNIEnv *
     return result;
 }
 
+extern "C" JNIEXPORT jdoubleArray JNICALL
+Java_com_amwolfstein_sistrum_analysis_OfflineAudioDecoder_nativeReplayGain(JNIEnv *env, jclass, jlong handle) {
+    double values[3];
+    if (sistrum_analysis_replaygain(reinterpret_cast<SistrumAnalysis *>(handle), values) != 0) {
+        fail(env, "ReplayGain analysis failed");
+        return nullptr;
+    }
+    jdoubleArray result = env->NewDoubleArray(3);
+    if (result) env->SetDoubleArrayRegion(result, 0, 3, values);
+    return result;
+}
+
 extern "C" JNIEXPORT void JNICALL
 Java_com_amwolfstein_sistrum_analysis_OfflineAudioDecoder_nativeCancel(JNIEnv *, jclass, jlong handle) {
     sistrum_analysis_cancel(reinterpret_cast<SistrumAnalysis *>(handle));

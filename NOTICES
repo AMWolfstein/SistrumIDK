@@ -186,3 +186,11 @@ FFTW 3.3.11
 https://www.fftw.org/
 --------------------------------------------------------------------------------
 FFTW is licensed under GPL-2.0-or-later.
+
+--------------------------------------------------------------------------------
+Kyant0 TagLib Android wrapper 1.0.6
+https://github.com/Kyant0/taglib/tree/1.0.6
+--------------------------------------------------------------------------------
+The Android wrapper is licensed under Apache License 2.0. Its native TagLib
+library is distributed under the LGPL-2.1-or-later or MPL-1.1 terms described
+in the TagLib notice above. The Maven Central AAR is used without modification.

@@ -143,6 +143,28 @@ internal class LocalAnalysisController(
         },
     )
 
+    /** Analyze original audio without player DSP; a revision change invalidates the result. */
+    suspend fun analyzeReplayGain(path: String, sourceRevision: String): ReplayGainTrack {
+        val file = File(path)
+        check(localAnalysisFileRevision(file) == sourceRevision) { "File changed since the last scan" }
+        val result = dispatcher.run(
+            create = ::OfflineAudioDecoder,
+            cancel = OfflineAudioDecoder::cancel,
+            close = OfflineAudioDecoder::close,
+            execute = { decoder ->
+                Process.setThreadPriority(Process.THREAD_PRIORITY_BACKGROUND)
+                decoder.open(file)
+                val values = decoder.replayGain()
+                check(values.size == 3)
+                checkNotNull(replayGainTrack(values[0], values[1], values[2])) {
+                    "No valid ReplayGain measurement"
+                }
+            },
+        )
+        check(localAnalysisFileRevision(file) == sourceRevision) { "File changed during analysis" }
+        return result
+    }
+
 }
 
 internal fun localAnalysisFileRevision(file: File): String? {

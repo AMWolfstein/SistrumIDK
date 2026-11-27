@@ -96,6 +96,24 @@ class LocalAnalysisPersistenceTest {
         assertTrue(store.pendingLocalAnalyses(-1, 1).first().isEmpty())
     }
 
+    @Test
+    fun equivalentEditRebindsOnlyTheMatchingActiveRevision() = runBlocking {
+        scan("revision-1")
+        assertTrue(store.saveLocalAnalysis(result("revision-1")))
+        val track = LocalTrack(id = "local:1", title = "Track", artists = emptyList(), album = LocalAlbumRef("album", "Album"))
+        suspend fun replace(old: String, new: String) = store.writeLocalLibrary(
+            LocalLibrarySnapshot(0, listOf(track)),
+            mapOf(track.id to LocalScanAudio(track.id, "/track.mp3", new, 100)),
+            emptyList(),
+            equivalentEdits = mapOf(track.id to (old to new)),
+        )
+        replace("revision-1", "revision-2")
+        assertEquals("revision-2", database.syncDao().activeLocalAnalysis("local:1")?.sourceRevision)
+        assertFalse(store.saveLocalAnalysis(result("revision-1")))
+        replace("revision-1", "revision-3")
+        assertNull(store.analysis("local:1"))
+    }
+
     private suspend fun scan(revision: String) {
         val track = LocalTrack(
             id = "local:1", title = "Track", artists = emptyList(),

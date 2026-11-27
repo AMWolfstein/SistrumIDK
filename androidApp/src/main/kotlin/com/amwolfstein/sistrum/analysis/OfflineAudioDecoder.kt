@@ -22,6 +22,12 @@ internal class OfflineAudioDecoder : Closeable {
         return nativeAnalyze(current)
     }
 
+    /** Returns integrated LUFS, linear sample peak, and true peak dBTP. */
+    fun replayGain(): DoubleArray {
+        val current = synchronized(lock) { checkNotNull(handle.takeIf { it != 0L }) }
+        return nativeReplayGain(current)
+    }
+
     fun cancel() = synchronized(lock) {
         if (handle != 0L) nativeCancel(handle)
     }
@@ -38,6 +44,7 @@ internal class OfflineAudioDecoder : Closeable {
         @JvmStatic private external fun nativeCreate(): Long
         @JvmStatic private external fun nativeOpen(handle: Long, fd: Int)
         @JvmStatic private external fun nativeAnalyze(handle: Long): DoubleArray
+        @JvmStatic private external fun nativeReplayGain(handle: Long): DoubleArray
         @JvmStatic private external fun nativeCancel(handle: Long)
         @JvmStatic private external fun nativeClose(handle: Long)
     }
