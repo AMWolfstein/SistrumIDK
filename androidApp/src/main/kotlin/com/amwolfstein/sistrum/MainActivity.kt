@@ -542,6 +542,8 @@ class MainActivity : ComponentActivity() {
                         onDelete = playlistsViewModel::deletePlaylist,
                         onCreate = playlistsViewModel::createPlaylist,
                         onCreateWithTracks = { name, artwork, trackIds -> playlistsViewModel.createPlaylist(name, artwork, trackIds) },
+                        onImportM3u8 = playlistsViewModel::importM3u8,
+                        onExportM3u8 = playlistsViewModel::exportM3u8,
                         onMembershipChange = playlistsViewModel::changePlaylistMembership,
                     ),
                     search = LibrarySearchModel(

@@ -13,6 +13,7 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.res.stringResource
+import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.unit.dp
 import com.amwolfstein.sistrum.R
 import com.amwolfstein.sistrum.ui.components.HeroCard
@@ -34,7 +35,24 @@ internal fun LibraryPlaylistsContent(
     onPlaylistAddToQueue: (List<String>) -> Unit = {},
     onPlaylistUpdate: (String, String, android.net.Uri?, Boolean) -> Unit = { _, _, _, _ -> },
     onPlaylistDelete: (String) -> Unit = {},
+    onImportM3u8: (android.net.Uri) -> Unit = {},
+    onExportM3u8: (String, android.net.Uri) -> Unit = { _, _ -> },
 ) {
+    val importLauncher = androidx.activity.compose.rememberLauncherForActivityResult(
+        androidx.activity.result.contract.ActivityResultContracts.OpenDocument(),
+    ) { uri -> uri?.let(onImportM3u8) }
+    var exportingPlaylistId by remember { mutableStateOf<String?>(null) }
+    val exportLauncher = androidx.activity.compose.rememberLauncherForActivityResult(
+        androidx.activity.result.contract.ActivityResultContracts.CreateDocument("audio/x-mpegurl"),
+    ) { uri ->
+        val id = exportingPlaylistId
+        exportingPlaylistId = null
+        if (uri != null && id != null) onExportM3u8(id, uri)
+    }
+    fun startExport(playlistId: String, name: String) {
+        exportingPlaylistId = playlistId
+        exportLauncher.launch((name.ifBlank { "playlist" }).replace('/', '_') + ".m3u8")
+    }
     val listPadding = remember(contentPadding) { PaddingValues(top = contentPadding.calculateTopPadding(), bottom = contentPadding.calculateBottomPadding()) }
     var contextPlaylistId by remember { mutableStateOf<String?>(null) }
     var editingPlaylist by remember { mutableStateOf<PlaylistListItem?>(null) }
@@ -48,6 +66,13 @@ internal fun LibraryPlaylistsContent(
         contentPadding = listPadding,
         modifier = modifier,
         dividerTestTag = "playlist-row-divider",
+        leadingContent = {
+            androidx.compose.material3.TextButton(onClick = {
+                importLauncher.launch(arrayOf("audio/x-mpegurl", "audio/mpegurl", "text/plain", "*/*"))
+            }, modifier = Modifier.testTag("playlists-import-m3u8")) {
+                androidx.compose.material3.Text(stringResource(R.string.playlists_import_m3u8))
+            }
+        },
         emptyContent = {
             Column(Modifier.fillMaxSize().padding(contentPadding), verticalArrangement = Arrangement.spacedBy(16.dp)) {
                 HeroCard(
@@ -67,6 +92,7 @@ internal fun LibraryPlaylistsContent(
             onAddToQueue = onPlaylistAddToQueue,
             onEdit = { editingPlaylist = playlist },
             onDelete = { deletingPlaylist = playlist },
+            onExport = { startExport(playlist.id, playlist.name) },
         ) {
             PlaylistRow(
                 playlist.id,

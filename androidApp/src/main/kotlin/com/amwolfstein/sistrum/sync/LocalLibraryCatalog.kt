@@ -23,6 +23,10 @@ internal class LocalLibraryCatalog(
 ) : LibraryCatalog {
     private val dao = database.libraryDao()
     private val artworkDirectory = File(context.filesDir, "artwork")
+    private val playlistRepository = com.amwolfstein.sistrum.library.playlist.LocalPlaylistRepository(
+        context,
+        database,
+    )
 
     private val artworkPathsFlow: Flow<Map<String, String>> = dao.observeArtworkAssets().map { assets ->
         assets.associate { asset -> asset.key to assetFile(asset).absolutePath }
@@ -58,9 +62,7 @@ internal class LocalLibraryCatalog(
             rows.map { row -> row.toLibraryComposer(null) }
         }
 
-    /** Local playlists are imported in T02; edits still go through the legacy queue until T13. */
-    override val playlists: Flow<List<LibraryPlaylist>> =
-        legacy?.playlists ?: flowOf(emptyList())
+    override val playlists: Flow<List<LibraryPlaylist>> = playlistRepository.observePlaylists()
 
     override val lastListenedAt: Flow<Map<String, Long>> =
         dao.observeLocalLastListened().map { rows -> rows.associate { it.trackId to it.lastListenedAt } }
@@ -88,8 +90,8 @@ internal class LocalLibraryCatalog(
     }
 
     override suspend fun queuePlaylistMutation(mutation: PlaylistMutation) {
-        requireNotNull(legacy) { "Local playlist writes are not implemented until T13" }
-            .queuePlaylistMutation(mutation)
+        val artwork = mutation.payload.artworkSha256?.let { sha -> legacy?.stagedPlaylistArtwork(sha) }
+        playlistRepository.applyMutation(mutation, artwork)
     }
 
     override suspend fun createLocalPlaylist(
@@ -98,16 +100,16 @@ internal class LocalLibraryCatalog(
         artworkMutationId: String?,
         initialTrackIds: List<String>,
     ) {
-        requireNotNull(legacy) { "Local playlist writes are not implemented until T13" }
-            .createLocalPlaylist(mutation, artwork, artworkMutationId, initialTrackIds)
+        playlistRepository.create(mutation, artwork, initialTrackIds)
     }
 
-    override suspend fun discardFailedLocalPlaylist(playlistId: String): Boolean =
-        legacy?.discardFailedLocalPlaylist(playlistId) ?: false
+    /** Local playlists never fail to sync, so there is nothing to discard. */
+    override suspend fun discardFailedLocalPlaylist(playlistId: String): Boolean = false
 
     override suspend fun stagePlaylistArtwork(value: StagedPlaylistArtwork) {
-        requireNotNull(legacy) { "Local playlist writes are not implemented until T13" }
-            .stagePlaylistArtwork(value)
+        // Local artwork is imported directly from the staged file; keep the legacy staging index
+        // so SET_ARTWORK mutations can resolve their sha before the file is imported.
+        legacy?.stagePlaylistArtwork(value)
     }
 
     private fun assetFile(asset: ArtworkAssetEntity): File {

@@ -316,6 +316,24 @@ interface LibraryDao {
     @Query("SELECT * FROM playlists ORDER BY pinnedAt DESC, name COLLATE NOCASE")
     suspend fun playlists(): List<PlaylistEntity>
 
+    @Query("SELECT * FROM playlists ORDER BY pinnedAt DESC, name COLLATE NOCASE")
+    fun observePlaylists(): Flow<List<PlaylistEntity>>
+
+    @Query("DELETE FROM playlists WHERE id = :id")
+    suspend fun deletePlaylist(id: String)
+
+    @Query("SELECT * FROM playlist_tracks ORDER BY playlistId, position, trackId")
+    fun observeAllPlaylistTracks(): Flow<List<PlaylistTrackEntity>>
+
+    @Query("SELECT * FROM playlist_tracks WHERE playlistId = :playlistId AND trackId = :trackId")
+    suspend fun playlistTrack(playlistId: String, trackId: String): PlaylistTrackEntity?
+
+    @Query("DELETE FROM playlist_tracks WHERE playlistId = :playlistId AND trackId = :trackId")
+    suspend fun deletePlaylistTrack(playlistId: String, trackId: String)
+
+    @Query("SELECT * FROM playlist_tracks WHERE playlistId = :playlistId ORDER BY position, trackId")
+    suspend fun playlistTracksList(playlistId: String): List<PlaylistTrackEntity>
+
     @Query("SELECT * FROM playlists WHERE id = :id")
     suspend fun playlist(id: String): PlaylistEntity?
 

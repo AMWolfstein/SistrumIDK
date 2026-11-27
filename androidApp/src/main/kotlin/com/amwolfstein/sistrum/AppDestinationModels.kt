@@ -123,6 +123,8 @@ internal data class LibraryPlaylistsModel(
     val onDelete: (String) -> Unit = {},
     val onCreate: (String, Uri?) -> Unit = { _, _ -> },
     val onCreateWithTracks: (String, Uri?, List<String>) -> Unit = { _, _, _ -> },
+    val onImportM3u8: (Uri) -> Unit = {},
+    val onExportM3u8: (String, Uri) -> Unit = { _, _ -> },
     val onMembershipChange: (String, List<String>, Boolean) -> Unit = { _, _, _ -> },
 )
 

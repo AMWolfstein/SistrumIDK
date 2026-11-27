@@ -90,3 +90,12 @@
 - PASS: decode/seek matrix for all supported fixtures; DSP configuration accepted; local descriptor playback; queue restore filters.
 - UNVERIFIED (needs an audible session or capture): real output route/Bluetooth/AirPlay switching, audio focus duck/pause, gapless/crossfade wall-clock timing, underrun counts and process-death restore during playback. No emulator or capture device was used; the phone was driven through instrumentation only.
 - No behavior changes were needed, so there is no regression to fix in this task.
+
+## M001-T013 — Manual playlists, favorites and M3U8
+
+- Added `LocalPlaylistRepository`: local create/rename/delete, add/remove tracks with duplicate and unknown-id guards, fractional `LexoRank` ordering (insert anywhere by rewriting one row), custom artwork imported into the content-addressed cache, and favorites as a virtual playlist derived from `library_items.isFavorite` (read-only, cannot be renamed or deleted).
+- `LocalLibraryCatalog` now reads playlists from Room and applies mutations locally (create, update, delete, add/remove/move, set/remove artwork, favorite) instead of queueing desktop mutations. Not-yet-migrated artwork still resolves through the legacy staging index.
+- Added `M3u8Codec` with the documented fixes: reads a UTF-8 BOM and an `#EXTENC:` charset header, writes a UTF-8 header, exports relative paths when the track is under the playlist folder, and keeps URIs/absolute paths intact. Import resolves entries against the library's local URIs.
+- Playlist screens gained an Import M3U8 action and a per-playlist Export M3U8 action (including favorites), wired through the models to the ViewModel.
+- Tests: host `LexoRankTest` (ordering, 200 sequential inserts, front inserts, adjacent ranks) and `M3u8CodecTest` (header/relative paths, BOM/#EXTENC, Latin-1, URI pass-through); device `LocalPlaylistRepositoryTest` (create/add/move/remove/rename/delete, duplicate/unknown guards, favorites protection) — 3/3 PASS on OnePlus CPH2307 (Android 15). Host suites: androidApp 372/372, sharedLogic 59/59; `assembleDevDebug` succeeds.
+- Limitations: smart-playlist export waits for the rule engine (T14), and the system file picker itself was not exercised automatically (callbacks are covered by compilation and the codec/repository tests).

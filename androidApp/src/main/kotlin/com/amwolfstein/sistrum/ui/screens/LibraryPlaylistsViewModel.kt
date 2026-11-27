@@ -13,6 +13,9 @@ import kotlinx.coroutines.flow.SharedFlow
 import kotlinx.coroutines.flow.asSharedFlow
 import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.stateIn
+import kotlinx.coroutines.flow.first
+import com.amwolfstein.sistrum.library.playlist.M3u8Codec
+import com.amwolfstein.sistrum.library.playlist.M3u8Entry
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.CancellationException
@@ -24,11 +27,14 @@ import com.amwolfstein.sistrum.sync.LibraryCatalog
 import com.amwolfstein.sistrum.sync.LibraryPlaylist
 import com.amwolfstein.sistrum.sync.LibrarySyncProtocol
 import com.amwolfstein.sistrum.sync.LibraryTrack
+import com.amwolfstein.sistrum.sync.metadataObject
 import com.amwolfstein.sistrum.sync.PlaylistMutation
 import com.amwolfstein.sistrum.sync.PlaylistMutationOperation
 import com.amwolfstein.sistrum.sync.PlaylistMutationPayload
 import com.amwolfstein.sistrum.sync.stagePlaylistArtwork
 import java.util.UUID
+import java.io.File
+import kotlinx.serialization.json.longOrNull
 
 internal data class PlaylistListItem(
     val id: String,
@@ -100,6 +106,57 @@ internal class LibraryPlaylistsViewModel(private val context: Context, syncStore
                 initialTrackIds = initialTrackIds,
             )
             _createdPlaylistIds.emit(playlistId)
+        }
+    }
+
+    /** Exports any playlist, including favorites and later smart playlists, from resolved membership. */
+    fun exportM3u8(playlistId: String, uri: Uri) {
+        viewModelScope.launch {
+            runCatching {
+                val playlists = syncStore.playlists.first()
+                val tracks = syncStore.tracks.first()
+                val playlist = playlists.firstOrNull { it.id == playlistId } ?: return@launch
+                val byId = tracks.associateBy { it.id }
+                val entries = playlist.trackIds.mapNotNull(byId::get).mapNotNull { track ->
+                    val path = track.audioPath ?: return@mapNotNull null
+                    M3u8Entry(
+                        path = path,
+                        durationSeconds = track.metadataObject().durationSeconds(),
+                        title = track.title,
+                        artist = track.artists,
+                    )
+                }
+                val content = M3u8Codec.export(entries, null)
+                withContext(Dispatchers.IO) {
+                    context.contentResolver.openOutputStream(uri, "wt")
+                        ?.use { it.write(content.toByteArray(Charsets.UTF_8)) }
+                        ?: error("Unable to open the selected file")
+                }
+            }.onFailure { Log.w("LibraryPlaylists", "M3U8 export failed", it) }
+        }
+    }
+
+    fun importM3u8(uri: Uri) {
+        viewModelScope.launch {
+            runCatching {
+                val bytes = withContext(Dispatchers.IO) {
+                    context.contentResolver.openInputStream(uri)?.use { it.readBytes() }
+                } ?: error("Unable to read the selected playlist")
+                val entries = M3u8Codec.parse(M3u8Codec.decode(bytes))
+                val tracks = syncStore.tracks.first()
+                val ids = entries.mapNotNull { entry ->
+                    val resolved = M3u8Codec.filePathOf(entry.path)?.let { path ->
+                        M3u8Codec.resolve(path, null)
+                    }
+                    tracks.firstOrNull { track ->
+                        track.audioPath == entry.path ||
+                            resolved != null && track.audioPath?.let { File(it).name } == File(resolved).name
+                    }?.id
+                }.distinct()
+                val name = uri.lastPathSegment?.substringAfterLast('/')?.substringBeforeLast('.')
+                    ?.takeIf { it.isNotBlank() } ?: "Imported playlist"
+                createPlaylist(name, null, ids)
+            }.onFailure { Log.w("LibraryPlaylists", "M3U8 import failed", it) }
         }
     }
 
@@ -207,3 +264,7 @@ private fun playlistArtworkKey(metadataJson: String): String? = runCatching {
     val playlist = root?.get("playlist") as? JsonObject ?: root
     (playlist?.get("artwork_key") as? JsonPrimitive)?.contentOrNull
 }.getOrNull()?.takeIf { it.isNotBlank() }
+
+
+private fun kotlinx.serialization.json.JsonObject?.durationSeconds(): Int? =
+    (this?.get("duration") as? JsonPrimitive)?.longOrNull?.toInt()

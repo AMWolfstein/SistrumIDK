@@ -670,6 +670,8 @@ internal fun AppDestinationContent(
                                 onPlaylistAddToQueue = onPlaylistAddToQueue,
                                 onPlaylistUpdate = onPlaylistUpdate,
                                 onPlaylistDelete = onPlaylistDelete,
+                                onImportM3u8 = library.playlists.onImportM3u8,
+                                onExportM3u8 = library.playlists.onExportM3u8,
                             )
                             AppStackPage.PlaylistDetails -> PlaylistDetailsContent(
                                 uiState = selectedPlaylistDetails,
