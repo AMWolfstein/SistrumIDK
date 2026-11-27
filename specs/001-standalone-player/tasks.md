@@ -295,3 +295,5 @@ Rules: each task starts with a full map refresh, records evidence, implements, r
 - [x] M001-T006 Incremental reconciliation and publication
 
 - [x] M001-T007 Metadata editor and safe tag/artwork writes
+
+- [x] M001-T008 Artwork cache, artist precedence and Online Artwork page

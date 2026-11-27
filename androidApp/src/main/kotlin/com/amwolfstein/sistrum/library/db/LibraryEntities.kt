@@ -515,3 +515,10 @@ data class LegacyImportStateEntity(
     val resolved: Int,
     val unresolved: Int,
 )
+
+/** Read model for the artist-artwork precedence decision. */
+data class ArtistArtworkRow(
+    val trackId: String,
+    val releaseDate: String?,
+    val artworkKey: String?,
+)

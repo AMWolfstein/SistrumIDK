@@ -31,6 +31,7 @@ internal fun AppStackPage.titleRes(destination: AppDestination): Int = when (thi
     AppStackPage.SettingsIntegration -> R.string.integration_title
     AppStackPage.SettingsLastFm -> R.string.lastfm_title
     AppStackPage.SettingsLyrics -> R.string.lyrics_title
+    AppStackPage.SettingsOnlineArtwork -> R.string.online_artwork_title
     AppStackPage.SettingsAbout -> R.string.about_title
     AppStackPage.Root -> destination.titleRes
 }

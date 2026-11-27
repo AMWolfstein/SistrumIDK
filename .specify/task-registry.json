@@ -1,13 +1,13 @@
 {
   "missions": {
     "M001": {
-      "next_task": 8,
+      "next_task": 9,
       "nonce": "45356c82baed4375811369ee33874b57",
       "path": "specs/001-standalone-player",
       "title": "Complete standalone Android music player"
     }
   },
-  "next_completion": 11,
+  "next_completion": 12,
   "next_mission": 2,
   "next_tor": 4,
   "tasks": {
@@ -171,6 +171,29 @@
       "record": "specs/001-standalone-player/tasks.md",
       "status": "complete",
       "title": "Metadata editor and safe tag/artwork writes"
+    },
+    "M001-T008": {
+      "completion": 11,
+      "evidence": {
+        "checks": "host tests 347/347; sharedLogic 59/59; device artwork/UI tests 12/12 on CPH2307 Android 15; assembleDevDebug APK 77MB; review must-fixes applied and re-tested",
+        "graph": {
+          "impact": "androidApp/src/main/kotlin/com/amwolfstein/sistrum/library/artwork/*, library/db/LibraryDao.kt, library/db/LibraryEntities.kt, library/scan/ScanCoordinator.kt, ui/screens/{OnlineArtworkContent,IntegrationContent,TagEditViewModel}.kt, ui/navigation/{AppDestinationContent,AppNavigationMetadata}.kt, AppDestination.kt, AppDestinationModels.kt, MainActivity.kt, res/values*/strings.xml, tests",
+          "queries": 3,
+          "revision": "cb750f33d5d05cdeb6372e031ca9d6ae2ce97821",
+          "status": "PASS",
+          "tool": "0.6.13"
+        },
+        "result": "PASS",
+        "reviewer": "Independent review (subagent)",
+        "round": 3
+      },
+      "final": false,
+      "kind": "T",
+      "mission": "M001",
+      "nonce": "b30bf3446d9e4f0fa7496ab7478405a3",
+      "record": "specs/001-standalone-player/tasks.md",
+      "status": "complete",
+      "title": "Artwork cache, artist precedence and Online Artwork page"
     },
     "TOR001": {
       "completion": 1,

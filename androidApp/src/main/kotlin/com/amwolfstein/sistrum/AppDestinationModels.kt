@@ -167,6 +167,12 @@ internal data class SettingsDestinationModel(
     val onKugouChanged: (Boolean) -> Unit = {},
     val onRomanizationEnabledChanged: (Boolean) -> Unit = {},
     val onLyricsGlowChanged: (Boolean) -> Unit = {},
+    val onlineArtworkSettings: com.amwolfstein.sistrum.library.artwork.ArtworkSettings =
+        com.amwolfstein.sistrum.library.artwork.ArtworkSettings(),
+    val artworkCacheBytes: Long = 0L,
+    val artworkAssetCount: Int = 0,
+    val onOnlineArtworkChanged: (Boolean) -> Unit = {},
+    val onClearArtworkCache: () -> Unit = {},
     val crossfadeSeconds: Int = 0,
     val lastEnabledCrossfadeSeconds: Int = 4,
     val onCrossfadeSecondsChanged: (Int) -> Unit = {},

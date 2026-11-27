@@ -142,6 +142,14 @@ object ScanCoordinator {
                     if (failure is CancellationException) throw failure
                     publishError = failure.message
                 }
+            // Artwork is post-publication enrichment: a decode/network problem must never mark the
+            // scanned source unavailable or fail the scan.
+            if (publishError == null) {
+                runCatching {
+                    com.amwolfstein.sistrum.library.artwork.ArtworkLibraryService(app)
+                        .onLibraryChanged(source.id, result.covers)
+                }
+            }
             val terminal = repository.runProgress.value
             progressJob?.cancelAndJoin()
             progressJob = null

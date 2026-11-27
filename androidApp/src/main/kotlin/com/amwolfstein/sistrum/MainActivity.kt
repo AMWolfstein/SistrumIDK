@@ -337,6 +337,8 @@ class MainActivity : ComponentActivity() {
             val normalizationPreferences = remember { com.amwolfstein.sistrum.player.NormalizationPreferences(applicationContext) }
             val equalizerPreferences = remember { com.amwolfstein.sistrum.player.EqualizerPreferences(applicationContext) }
             val lyricsPreferences = remember { LyricsPreferences(applicationContext) }
+            val artworkPreferences = remember { com.amwolfstein.sistrum.library.artwork.ArtworkPreferences(applicationContext) }
+            val artworkService = remember { com.amwolfstein.sistrum.library.artwork.ArtworkLibraryService(applicationContext) }
             val lyricsService = remember { AndroidLyricsService(AndroidSyncRuntime.syncStore()) }
             val preferenceScope = rememberCoroutineScope()
             val crossfadeSettings by playbackPreferences.settings.collectAsStateWithLifecycle(
@@ -352,6 +354,19 @@ class MainActivity : ComponentActivity() {
                 initialValue = com.amwolfstein.sistrum.player.EqualizerSettings(),
             )
             val lyricsSettings by lyricsPreferences.settings.collectAsStateWithLifecycle(initialValue = com.amwolfstein.sistrum.lyrics.LyricsSettings())
+            val artworkSettings by artworkPreferences.settings.collectAsStateWithLifecycle(
+                initialValue = com.amwolfstein.sistrum.library.artwork.ArtworkSettings(),
+            )
+            var artworkSummary by remember {
+                mutableStateOf(com.amwolfstein.sistrum.library.artwork.ArtworkCacheSummary(0, 0L))
+            }
+            LaunchedEffect(activePage) {
+                if (activePage == AppStackPage.SettingsOnlineArtwork) {
+                    artworkSummary = artworkService.summary()
+                    artworkService.populateMissingArtwork(limit = 16)
+                    artworkService.refreshArtistFallbacks(limit = 32)
+                }
+            }
             LaunchedEffect(lyricsSettings.romanizationEnabled) {
                 romanizationViewModel.setAllowed(lyricsSettings.romanizationEnabled)
             }
@@ -557,6 +572,23 @@ class MainActivity : ComponentActivity() {
                     onKugouChanged = { enabled -> preferenceScope.launch { lyricsPreferences.setKugou(enabled) } },
                     onRomanizationEnabledChanged = { enabled -> preferenceScope.launch { lyricsPreferences.setRomanizationEnabled(enabled) } },
                     onLyricsGlowChanged = { enabled -> preferenceScope.launch { lyricsPreferences.setGlowEnabled(enabled) } },
+                    onlineArtworkSettings = artworkSettings,
+                    artworkCacheBytes = artworkSummary.bytes,
+                    artworkAssetCount = artworkSummary.assetCount,
+                    onOnlineArtworkChanged = { enabled ->
+                        preferenceScope.launch {
+                            artworkPreferences.setDeezerEnabled(enabled)
+                            if (enabled) {
+                                artworkService.resolveArtistsOnline(limit = 50)
+                            }
+                            artworkSummary = artworkService.summary()
+                        }
+                    },
+                    onClearArtworkCache = {
+                        preferenceScope.launch {
+                            artworkSummary = artworkService.clearUnreferenced()
+                        }
+                    },
                     crossfadeSeconds = crossfadeSettings.seconds,
                     lastEnabledCrossfadeSeconds = crossfadeSettings.lastEnabledSeconds,
                     onCrossfadeSecondsChanged = playbackController::setCrossfadeSeconds,

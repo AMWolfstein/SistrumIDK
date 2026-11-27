@@ -39,6 +39,7 @@ import com.amwolfstein.sistrum.ui.theme.LocalSistrumColors
 internal fun IntegrationContent(
     onLastFmSelected: () -> Unit,
     onLyricsSelected: () -> Unit,
+    onOnlineArtworkSelected: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
     Column(modifier = modifier) {
@@ -46,6 +47,7 @@ internal fun IntegrationContent(
             items = listOf(
                 ActionListItem(R.string.lastfm_title, onClick = onLastFmSelected),
                 ActionListItem(R.string.lyrics_title, onClick = onLyricsSelected),
+                ActionListItem(R.string.online_artwork_title, onClick = onOnlineArtworkSelected),
             ),
             containerStyle = ActionListContainerStyle.Card,
             dividerStyle = ActionListDividerStyle.FullWidth,

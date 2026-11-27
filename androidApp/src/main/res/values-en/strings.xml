@@ -390,6 +390,14 @@
     <string name="composers_empty_title">No composers in library</string>
     <string name="composers_empty_description">Synced composers will appear here once mobile sync completes.</string>
     <string name="composers_no_match_title">No matching composers</string>
+    <string name="online_artwork_title">Online Artwork</string>
+    <string name="online_artwork_sources">Artwork sources</string>
+    <string name="online_artwork_deezer">Deezer artist artwork</string>
+    <string name="online_artwork_deezer_description">Imports an artist picture from Deezer once and keeps it offline. Cached images stay available when this is off.</string>
+    <string name="online_artwork_cache">Artwork cache</string>
+    <string name="online_artwork_cache_summary">%1$d cached images, %2$s used</string>
+    <string name="online_artwork_clear_cache">Clear unused artwork</string>
+    <string name="online_artwork_precedence">Artist order: Deezer import, then the newest released track artwork, then a placeholder. Track artwork is never imported over a saved Deezer image.</string>
     <string name="lyrics_title">Lyrics</string>
     <string name="lyrics_data_sources">Data sources</string>
     <string name="lyrics_preferred_source">Preferred source</string>

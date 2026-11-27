@@ -25,7 +25,8 @@ class TagEditViewModel(
     context: Context,
     private val itemId: String,
 ) : ViewModel() {
-    private val database = LibraryDatabase.get(context)
+    private val appContext = context.applicationContext
+    private val database = LibraryDatabase.get(appContext)
     private val dao = database.libraryDao()
     private val repository = LibraryRepository(context, database)
     private val writer = TagWriter(context, dao)
@@ -62,6 +63,11 @@ class TagEditViewModel(
                                     changed = true,
                                 ),
                             )
+                        }
+                        runCatching {
+                            val artwork = com.amwolfstein.sistrum.library.artwork.ArtworkLibraryService(appContext)
+                            artwork.refreshItemArtwork(item.id)
+                            artwork.refreshArtistsForItem(item.id)
                         }
                     }
                     _state.value = _state.value.copy(saving = false, saved = true)

@@ -10,3 +10,4 @@
 - M001-T005 — TagLib integration, metadata extraction and identity
 - M001-T006 — Incremental reconciliation and publication
 - M001-T007 — Metadata editor and safe tag/artwork writes
+- M001-T008 — Artwork cache, artist precedence and Online Artwork page

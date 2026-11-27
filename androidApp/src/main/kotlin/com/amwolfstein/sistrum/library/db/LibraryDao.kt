@@ -131,6 +131,86 @@ interface LibraryDao {
     @Query("SELECT * FROM artwork_assets WHERE key = :key")
     suspend fun artwork(key: String): ArtworkAssetEntity?
 
+    @Query("SELECT * FROM artwork_assets ORDER BY lastUsedAt")
+    suspend fun artworkAssets(): List<ArtworkAssetEntity>
+
+    @Query("UPDATE artwork_assets SET lastUsedAt = :timestamp, active = 1 WHERE key = :key")
+    suspend fun touchArtwork(key: String, timestamp: Long)
+
+    @Query("DELETE FROM artwork_assets WHERE key = :key")
+    suspend fun deleteArtwork(key: String)
+
+    @Query(
+        "SELECT artworkKey FROM library_items WHERE artworkKey IS NOT NULL " +
+            "UNION SELECT artworkKey FROM albums WHERE artworkKey IS NOT NULL " +
+            "UNION SELECT artworkKey FROM artists WHERE artworkKey IS NOT NULL " +
+            "UNION SELECT artworkKey FROM playlists WHERE artworkKey IS NOT NULL",
+    )
+    suspend fun referencedArtworkKeys(): List<String>
+
+    @Query("SELECT * FROM artists WHERE id = :id")
+    suspend fun artist(id: String): ArtistEntity?
+
+    @Query("UPDATE artists SET artworkKey = :key, artworkSource = :source, artworkUpdatedAt = :updatedAt WHERE id = :id")
+    suspend fun updateArtistArtwork(id: String, key: String?, source: String?, updatedAt: Long? = null)
+
+    @Query("SELECT * FROM albums WHERE id = :id")
+    suspend fun album(id: String): AlbumEntity?
+
+    @Query("UPDATE albums SET artworkKey = :key, artworkSource = :source WHERE id = :id")
+    suspend fun updateAlbumArtwork(id: String, key: String?, source: String? = null)
+
+    @Query("UPDATE library_items SET artworkKey = :key WHERE id = :id")
+    suspend fun updateItemArtwork(id: String, key: String?)
+
+    @Query("SELECT * FROM library_items WHERE artworkKey IS NULL AND available = 1 ORDER BY addedAt LIMIT :limit")
+    suspend fun itemsMissingArtwork(limit: Int): List<LibraryItemEntity>
+
+    @Query(
+        "SELECT * FROM library_items WHERE sourceId = :sourceId AND artworkKey IS NULL " +
+            "AND available = 1 ORDER BY addedAt LIMIT :limit",
+    )
+    suspend fun itemsMissingArtworkForSource(sourceId: String, limit: Int): List<LibraryItemEntity>
+
+    @Query(
+        "SELECT * FROM library_items WHERE sourceId = :sourceId AND artworkKey IS NULL " +
+            "AND available = 1 AND id > :afterId ORDER BY id LIMIT :limit",
+    )
+    suspend fun itemsMissingArtworkForSourceAfter(
+        sourceId: String,
+        afterId: String,
+        limit: Int,
+    ): List<LibraryItemEntity>
+
+    @Query(
+        "SELECT * FROM artists WHERE artworkSource IS NULL OR artworkSource != 'DEEZER' " +
+            "ORDER BY CASE WHEN artworkUpdatedAt IS NULL THEN 0 ELSE 1 END, artworkUpdatedAt, name " +
+            "LIMIT :limit",
+    )
+    suspend fun artistsMissingDeezerArtwork(limit: Int): List<ArtistEntity>
+
+    @Query(
+        "SELECT * FROM library_items WHERE sourceId = :sourceId AND displayPath = :path " +
+            "AND available = 1",
+    )
+    suspend fun itemsAtPath(sourceId: String, path: String): List<LibraryItemEntity>
+
+    @Query(
+        "SELECT library_items.id AS trackId, library_items.releaseDate AS releaseDate, " +
+            "library_items.artworkKey AS artworkKey FROM library_items " +
+            "WHERE library_items.id IN (" +
+            "SELECT trackId FROM track_artists WHERE artistId = :artistId " +
+            "UNION SELECT trackId FROM track_album_artists WHERE artistId = :artistId" +
+            ") AND library_items.available = 1",
+    )
+    suspend fun artworkCandidatesForArtist(artistId: String): List<ArtistArtworkRow>
+
+    @Query(
+        "SELECT DISTINCT artistId FROM track_artists WHERE trackId = :itemId " +
+            "UNION SELECT artistId FROM track_album_artists WHERE trackId = :itemId",
+    )
+    suspend fun artistsForItem(itemId: String): List<String>
+
     @Upsert
     suspend fun upsertPlaylist(value: PlaylistEntity)
 

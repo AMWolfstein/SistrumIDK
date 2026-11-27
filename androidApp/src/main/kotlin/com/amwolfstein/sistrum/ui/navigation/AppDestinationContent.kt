@@ -58,6 +58,7 @@ import com.amwolfstein.sistrum.ui.screens.InsightUiState
 import com.amwolfstein.sistrum.ui.screens.SettingsContent
 import com.amwolfstein.sistrum.ui.screens.LibrarySettingsContent
 import com.amwolfstein.sistrum.ui.screens.IntegrationContent
+import com.amwolfstein.sistrum.ui.screens.OnlineArtworkContent
 import com.amwolfstein.sistrum.ui.screens.LastFmContent
 import com.amwolfstein.sistrum.ui.screens.LyricsContent
 import com.amwolfstein.sistrum.ui.screens.PlaybackSettingsContent
@@ -461,6 +462,7 @@ internal fun AppDestinationContent(
                             AppStackPage.SettingsIntegration -> IntegrationContent(
                                 onLastFmSelected = { onIntent(AppIntent.OpenPage(AppStackPage.SettingsLastFm)) },
                                 onLyricsSelected = { onIntent(AppIntent.OpenPage(AppStackPage.SettingsLyrics)) },
+                                onOnlineArtworkSelected = { onIntent(AppIntent.OpenPage(AppStackPage.SettingsOnlineArtwork)) },
                                 modifier = settingsPageModifier,
                             )
                             AppStackPage.SettingsLastFm -> LastFmContent(
@@ -470,6 +472,14 @@ internal fun AppDestinationContent(
                                 modifier = settingsPageModifier,
                             )
                             AppStackPage.SettingsLyrics -> LyricsContent(lyricsSettings, onLyricsSourceChanged, onLrclibChanged, onKugouChanged, onRomanizationEnabledChanged, onLyricsGlowChanged, settingsPageModifier)
+                            AppStackPage.SettingsOnlineArtwork -> OnlineArtworkContent(
+                                settings = settings.onlineArtworkSettings,
+                                cacheBytes = settings.artworkCacheBytes,
+                                assetCount = settings.artworkAssetCount,
+                                onDeezerChanged = settings.onOnlineArtworkChanged,
+                                onClearCache = settings.onClearArtworkCache,
+                                modifier = settingsPageModifier,
+                            )
                             AppStackPage.SettingsAbout -> AboutContent(
                                 modifier = settingsPageModifier,
                                 onOpenExternalUrl = { url ->
