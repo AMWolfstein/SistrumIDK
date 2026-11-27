@@ -28,7 +28,8 @@
 
 | Dependency | Pin | License | Integration |
 |---|---|---|---|
-| TagLib (official C++) | v2.3.2, commit `deadc2990767dfbda0701e0ab35fdeea653db08f`; tarball from https://github.com/taglib/taglib/releases/tag/v2.3.2 | LGPL-2.1 / MPL-1.1 | Static-link into `libsistrum_player.so` via existing NDK/CMake; tarball bundles `3rdparty/utfcpp`; configure with zlib optional (`-DWITH_ZLIB=OFF` unless needed); add notices; verify reproducible build/size. |
+| TagLib (official C++) | v2.3.2, commit `deadc2990767dfbda0701e0ab35fdeea653db08f`; release tarball SHA-256 `cda2d6dac7f12a84e46fbb0907bb1a1ec0679e4722b5237576be5563e295244e` | LGPL-2.1 / MPL-1.1 | Static-link into `libsistrum_player.so` via existing NDK/CMake (`scripts/build-taglib-android.sh`); checksum verified at build time; zlib optional (`-DWITH_ZLIB=OFF`); notices added. Measured debug `libsistrum_player.so`: 227,928 B without TagLib vs 1,696,992 B with TagLib (+1,469,064 B), stripped; APK impact measured in T25. |
+| utfcpp (TagLib requirement) | 4.0.6; release tarball SHA-256 `6920a6a5d6a04b9a89b2a89af7132f8acefd46e0c2a7b190350539e9213816c0` | Boost-1.0 | Header-only helper compiled into TagLib; TagLib's release tarball leaves the submodule empty, so the build script pins and verifies it; notice added. |
 
 Approved analysis additions (owner revision):
 

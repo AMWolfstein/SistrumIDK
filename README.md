@@ -222,7 +222,21 @@ network protocols. It is LGPL-only: it does not enable GPL or nonfree components
 Release attribution must provide the matching FFmpeg source archive, configure
 line, and any patches.
 
-Use the Gradle commands above after preparing the FFmpeg artifacts.
+### TagLib metadata build
+
+Metadata reads use the official TagLib C++ library, static-linked into
+`libsistrum_player.so` through `androidApp/src/main/cpp/taglib_bridge.cpp`. Run:
+
+```bash
+bash scripts/build-taglib-android.sh arm64-v8a
+```
+
+The script downloads the pinned TagLib 2.3.2 source and its pinned utfcpp helper
+into a temporary directory and installs the static library under
+`androidApp/src/main/cpp/third_party/taglib/`, which is ignored by Git. TagLib is
+LGPL-2.1/MPL-1.1; the notice and source links are in `NOTICES`.
+
+Use the Gradle commands above after preparing the FFmpeg and TagLib artifacts.
 
 ## Offline lyric romanization
 

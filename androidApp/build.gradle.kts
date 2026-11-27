@@ -160,6 +160,8 @@ android {
         externalNativeBuild {
             cmake {
                 cppFlags += listOf("-std=c++20", "-fexceptions", "-frtti")
+                // Measurement switch for the TagLib size delta; production builds default to ON.
+                arguments += "-DSISTRUM_WITH_TAGLIB=${System.getenv("SISTRUM_WITH_TAGLIB") ?: "ON"}"
             }
         }
         ndk {

@@ -290,4 +290,4 @@ Rules: each task starts with a full map refresh, records evidence, implements, r
 
 - [x] M001-T004 SAF scanner, checkpoint and scan service
 
-- [ ] M001-T005 TagLib integration, metadata extraction and identity
+- [x] M001-T005 TagLib integration, metadata extraction and identity

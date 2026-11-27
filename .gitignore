@@ -33,3 +33,6 @@ node_modules/
 __pycache__/
 *.pyc
 /iosApp/DerivedData/
+
+# Native dependencies built by scripts/build-*.sh
+/androidApp/src/main/cpp/third_party/

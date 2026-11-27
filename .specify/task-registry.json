@@ -7,7 +7,7 @@
       "title": "Complete standalone Android music player"
     }
   },
-  "next_completion": 8,
+  "next_completion": 9,
   "next_mission": 2,
   "next_tor": 4,
   "tasks": {
@@ -104,13 +104,26 @@
       "title": "SAF scanner, checkpoint and scan service"
     },
     "M001-T005": {
-      "completion": null,
+      "completion": 8,
+      "evidence": {
+        "checks": "TagLib 2.3.2 static-linked (SHA-verified tarball), utfcpp 4.0.6 pinned/attributed; JNI metadata+artwork reads via UTF-16 NewString including astral Unicode; alias priority/normalization/deterministic IDs; raw tags; release date + year fallback; non-seekable SAF staging; 10/10 host tag tests; 5/5 device fixtures (MP3/FLAC/Opus/M4A/WAV/APE/WV/DSF/DFF/TTA + unicode + artwork); size delta +1,469,064 B stripped .so; independent review PASS",
+        "graph": {
+          "impact": "androidApp/src/main/cpp/{CMakeLists.txt,taglib_bridge.cpp}, scripts/build-taglib-android.sh, androidApp/src/main/kotlin/.../library/tags/*, tag unit tests, TagLibBridge device fixtures, NOTICES, dependency-inventory.md",
+          "queries": 4,
+          "revision": "0d3fcce7c1bc80b0247422a681555d88abe3c9a4",
+          "status": "PASS",
+          "tool": "0.6.13"
+        },
+        "result": "PASS",
+        "reviewer": "independent-subagent",
+        "round": 2
+      },
       "final": false,
       "kind": "T",
       "mission": "M001",
       "nonce": "7f1343d3e3ab41e5b852b3693d5e9031",
       "record": "specs/001-standalone-player/tasks.md",
-      "status": "reserved",
+      "status": "complete",
       "title": "TagLib integration, metadata extraction and identity"
     },
     "TOR001": {

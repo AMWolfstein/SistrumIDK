@@ -169,3 +169,16 @@ Bundled romanization components and data:
 
 License texts: https://opensource.org/licenses/MIT and
 https://www.apache.org/licenses/LICENSE-2.0
+
+TagLib 2.3.2 (https://github.com/taglib/taglib, commit deadc2990767dfbda0701e0ab35fdeea653db08f)
+Copyright (C) 2002-2024 Scott Wheeler, Lukas Lalinsky, and TagLib contributors.
+Licensed under the GNU Lesser General Public License v2.1 or later, or the Mozilla
+Public License v1.1. Static-linked into libsistrum_player.so; source and license text at
+https://github.com/taglib/taglib/blob/v2.3.2/COPYING.LGPL and COPYING.MPL.
+
+utfcpp 4.0.6 (https://github.com/nemtrif/utfcpp, tarball SHA-256
+6920a6a5d6a04b9a89b2a89af7132f8acefd46e0c2a7b190350539e9213816c0)
+Copyright (c) 2006-2024 Nemanja Trifunovic and contributors.
+Distributed under the Boost Software License, Version 1.0. Header-only; compiled into
+the TagLib static library linked into libsistrum_player.so.
+https://www.boost.org/LICENSE_1_0.txt
