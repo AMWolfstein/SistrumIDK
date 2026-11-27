@@ -201,6 +201,14 @@ Publication in one `withTransaction`: stage rows, delete `removed` keys only whe
 
 `id` TEXT PK, `source_id` TEXT FK, `relative_path` TEXT, `kind` TEXT (`folder`/`file`/`pattern`), `created_at`. Exclusions are user-owned and applied before metadata reads; they never delete existing rows automatically (a rescan marks them excluded/ignored with an explicit report).
 
+### `legacy_lyrics`
+
+`trackId` (legacy raw ID) PK, `content`, `source`, `fingerprint`. Holds provider lyrics from the mirror until the track is relinked; it is not the authoritative `lyrics` table.
+
+### `legacy_playlist_tracks`
+
+`playlistId` (prefixed `legacy:`), `legacyTrackId`, `position` INT, PK(`playlistId`,`legacyTrackId`). Preserves ordered membership from `sync_playlists` + replayed mutations until relinking.
+
 ### `legacy_track_refs`
 
 `id` TEXT PK, `legacy_track_id` TEXT UNIQUE, `legacy_path` TEXT?, `title`, `artist`, `album`, `duration_seconds`, `playlist_refs_json`, `resolved_item_id` TEXT?, `resolution` TEXT (`unresolved`/`metadata`/`fingerprint`), `resolved_at` INTEGER?. Preserves unresolved legacy playlist/favorite references; never silently dropped.

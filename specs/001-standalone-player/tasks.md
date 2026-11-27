@@ -283,3 +283,5 @@ Rules: each task starts with a full map refresh, records evidence, implements, r
 - **Depends**: T25, T26.
 
 - [x] M001-T001 Reproducible baseline and build enablement
+
+- [x] M001-T002 Local Room database and legacy migration scaffold

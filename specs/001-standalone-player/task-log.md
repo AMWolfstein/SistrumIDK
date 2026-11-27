@@ -22,3 +22,13 @@
 - APK: `androidApp-dev-debug.apk`, 71 MB, `com.amwolfstein.sistrum.dev` 0.1.0 (1), arm64-v8a, debug V2 cert SHA-256 `86547a5a…`.
 - Limitations: no device/emulator; APK size is the pre-T25 baseline; debug variant includes debug tooling.
 - Review: Round 1 PASS from an independent read-only reviewer (build/data/test/APK/JNI evidence verified).
+
+## M001-T002 — Local Room database and legacy migration scaffold
+
+- Added `library/db` package: 30 entities, DAO, `library.db` v1 with exported schema, no destructive fallback, 0–5 rating triggers.
+- Legacy importer reads `library-sync.db` read-only in one transaction; merges local+synced playlists, replays only pending mutations in order (`track_id`/snake_case, next-then-previous move precedence, no duplicate add, artwork hash), imports favorites before mutations, active-plan metadata, listening sessions/attempts/daily aggregates, journals unresolved tracks/lyrics and path/duration; reruns are idempotent via `legacy_import_state`.
+- Tests: `LibrarySchemaTest` validates every indexed column, exact table count and core columns; `LibraryDatabaseTest`/`LegacyMirrorImporterTest` compile (instrumentation); host tests 282/282.
+- Limitation: instrumentation tests not executed (no device/emulator).
+- Review: Round 3 PASS (earlier rounds found @Upsert/cascade, mutation replay, listening/favorites, rating-trigger and test-fixture issues; all fixed and re-verified).
+
+- Map note: the snapshot was rebuilt from the existing CGC index (source read fine), so the 11 newly added Kotlin files are not yet in the symbol index; a full reindex is the first step of the next task.

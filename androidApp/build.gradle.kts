@@ -56,6 +56,10 @@ val hasReleaseSigning = listOf(
     releaseKeyPassword,
 ).all { !it.isNullOrBlank() }
 
+ksp {
+    arg("room.schemaLocation", "$projectDir/schemas")
+}
+
 plugins {
     alias(libs.plugins.androidApplication)
     alias(libs.plugins.composeCompiler)
