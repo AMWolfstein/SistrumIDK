@@ -82,3 +82,11 @@
 - `LocalLibraryCatalog` uses the item URI as the playable path; missing files are logged with the id and path and never queue.
 - Tests: device `FfmpegDescriptorTest` proves decode and preload from an open descriptor (MP3 fixture), and the updated `LocalLibraryCatalogTest` asserts the SAF URI is exposed — 6/6 PASS on OnePlus CPH2307 (Android 15). Host suites: androidApp 364/364, sharedLogic 59/59; `assembleDevDebug` succeeds.
 - Limitations: no emulator/device audio capture, so real SAF playback under a provider, crossfade/EQ timing and route changes are covered by T12 evidence rather than by an automated assertion here; Mood Radio and listening history still read the legacy store until T19/T20.
+
+## M001-T012 — Playback verification
+
+- Device matrix `PlaybackFormatMatrixTest` decodes and seeks every shipped fixture through the descriptor path: MP3 (including Unicode tags), FLAC, M4A, Opus, WAV, APE, DSF, DFF and TTA all report a duration and accept a mid-file seek. A second case prepares with equalizer, focus gain and normalization gains and starts/pauses playback without a native error.
+- Existing host player suites (queue, crossfade maths, normalization gain, playback session, request building) remain green: androidApp 364/364, sharedLogic 59/59. `assembleDevDebug` succeeds.
+- PASS: decode/seek matrix for all supported fixtures; DSP configuration accepted; local descriptor playback; queue restore filters.
+- UNVERIFIED (needs an audible session or capture): real output route/Bluetooth/AirPlay switching, audio focus duck/pause, gapless/crossfade wall-clock timing, underrun counts and process-death restore during playback. No emulator or capture device was used; the phone was driven through instrumentation only.
+- No behavior changes were needed, so there is no regression to fix in this task.

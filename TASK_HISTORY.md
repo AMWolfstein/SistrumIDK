@@ -14,3 +14,4 @@
 - M001-T009 — Metadata separators and derived-relationship rebuild
 - M001-T010 — Local library queries, search and UI wiring
 - M001-T011 — Local URI playback and queue integration
+- M001-T012 — Playback verification (crossfade/EQ/normalization/route)
