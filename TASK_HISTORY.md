@@ -8,3 +8,4 @@
 - M001-T003 — SAF sources, grants and library settings UI
 - M001-T004 — SAF scanner, checkpoint and scan service
 - M001-T005 — TagLib integration, metadata extraction and identity
+- M001-T006 — Incremental reconciliation and publication

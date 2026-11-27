@@ -1,13 +1,13 @@
 {
   "missions": {
     "M001": {
-      "next_task": 6,
+      "next_task": 7,
       "nonce": "45356c82baed4375811369ee33874b57",
       "path": "specs/001-standalone-player",
       "title": "Complete standalone Android music player"
     }
   },
-  "next_completion": 9,
+  "next_completion": 10,
   "next_mission": 2,
   "next_tor": 4,
   "tasks": {
@@ -125,6 +125,29 @@
       "record": "specs/001-standalone-player/tasks.md",
       "status": "complete",
       "title": "TagLib integration, metadata extraction and identity"
+    },
+    "M001-T006": {
+      "completion": 9,
+      "evidence": {
+        "checks": "transactional publication; idempotent document-key upserts; content-key re-key preserves favorites/ratings/playlists/lyrics/analysis; global-unique then same-source fallback; membership-based missing logic; partial enumeration never hides; cross-source/overlap source removal preserves shared items; deterministic ordering; 332 host tests PASS; independent review PASS",
+        "graph": {
+          "impact": "ScanPublisher/LibraryRepository, ScanCoordinator publication, SafSourceRepository removal, LibraryDao item/membership queries, scan publisher tests",
+          "queries": 3,
+          "revision": "5beb52665bcef004e60d346abcaf12cb0430adc7",
+          "status": "PASS",
+          "tool": "0.6.13"
+        },
+        "result": "PASS",
+        "reviewer": "independent-subagent",
+        "round": 3
+      },
+      "final": false,
+      "kind": "T",
+      "mission": "M001",
+      "nonce": "1193db642db04d39ba2e54e4a4115e88",
+      "record": "specs/001-standalone-player/tasks.md",
+      "status": "complete",
+      "title": "Incremental reconciliation and publication"
     },
     "TOR001": {
       "completion": 1,

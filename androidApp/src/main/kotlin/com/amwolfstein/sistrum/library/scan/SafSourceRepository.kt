@@ -4,6 +4,7 @@ import android.content.Context
 import android.content.Intent
 import android.net.Uri
 import android.provider.DocumentsContract
+import com.amwolfstein.sistrum.library.LibraryRepository
 import com.amwolfstein.sistrum.library.db.LibraryDatabase
 import com.amwolfstein.sistrum.library.db.LibrarySourceEntity
 import kotlinx.coroutines.Dispatchers
@@ -57,7 +58,7 @@ class SafSourceRepository(
     }
 
     suspend fun remove(source: LibrarySourceEntity) = withContext(Dispatchers.IO) {
-        dao.deleteSource(source.id)
+        LibraryRepository(context, database).removeSource(source)
         val uri = runCatching { Uri.parse(source.treeUri) }.getOrNull()
         if (uri != null) {
             val grant = context.contentResolver.persistedUriPermissions.firstOrNull { it.uri == uri }

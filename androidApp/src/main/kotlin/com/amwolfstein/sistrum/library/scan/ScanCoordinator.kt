@@ -3,6 +3,7 @@ package com.amwolfstein.sistrum.library.scan
 import android.content.Context
 import android.content.Intent
 import android.os.Build
+import com.amwolfstein.sistrum.library.LibraryRepository
 import com.amwolfstein.sistrum.library.db.LibraryDatabase
 import com.amwolfstein.sistrum.library.db.ScanRunEntity
 import kotlinx.coroutines.CancellationException
@@ -135,16 +136,22 @@ object ScanCoordinator {
                 scanControl,
             )
             repository.finish(scanRun, result, result.errors.size, result.entries.size)
+            var publishError: String? = null
+            runCatching { LibraryRepository(app).publish(source, scanRun.id, result.complete) }
+                .onFailure { failure ->
+                    if (failure is CancellationException) throw failure
+                    publishError = failure.message
+                }
             val terminal = repository.runProgress.value
             progressJob?.cancelAndJoin()
             progressJob = null
             progress.value = terminal.copy(state = result.state)
             dao.upsertSource(
                 source.copy(
-                    available = result.state != ScanState.FAILED,
+                    available = result.state != ScanState.FAILED && publishError == null,
                     lastScannedAt = System.currentTimeMillis(),
                     lastSeenAt = System.currentTimeMillis(),
-                    lastScanError = result.errors.firstOrNull()?.message,
+                    lastScanError = publishError ?: result.errors.firstOrNull()?.message,
                 ),
             )
         } catch (cancelled: ScanCancelledException) {

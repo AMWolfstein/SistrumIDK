@@ -46,6 +46,46 @@ interface LibraryDao {
     @Query("SELECT * FROM library_items WHERE contentKey = :contentKey")
     suspend fun itemsByContentKey(contentKey: String): List<LibraryItemEntity>
 
+    @Query(
+        "SELECT library_items.* FROM library_items " +
+            "INNER JOIN item_sources ON library_items.id = item_sources.itemId " +
+            "WHERE item_sources.sourceId = :sourceId",
+    )
+    suspend fun itemsForSource(sourceId: String): List<LibraryItemEntity>
+
+    @Query("SELECT * FROM item_sources WHERE itemId = :itemId ORDER BY sourceId, fileUri")
+    suspend fun itemSources(itemId: String): List<ItemSourceEntity>
+
+    @Query("SELECT * FROM item_sources WHERE sourceId = :sourceId ORDER BY itemId, fileUri")
+    suspend fun itemSourcesForSource(sourceId: String): List<ItemSourceEntity>
+
+    @Query("SELECT * FROM library_items WHERE id = :itemId")
+    suspend fun itemById(itemId: String): LibraryItemEntity?
+
+    @Query("DELETE FROM item_sources WHERE itemId = :itemId AND sourceId = :sourceId")
+    suspend fun deleteItemSource(itemId: String, sourceId: String)
+
+    @Query("DELETE FROM item_sources WHERE itemId = :itemId AND sourceId != :keepSourceId")
+    suspend fun deleteItemSourcesExcept(itemId: String, keepSourceId: String)
+
+    @Query(
+        "DELETE FROM library_items WHERE sourceId = :sourceId " +
+            "AND id NOT IN (SELECT itemId FROM item_sources)",
+    )
+    suspend fun deleteOrphanItemsForSource(sourceId: String)
+
+    @Query("DELETE FROM track_artists WHERE trackId = :trackId")
+    suspend fun deleteTrackArtists(trackId: String)
+
+    @Query("DELETE FROM track_album_artists WHERE trackId = :trackId")
+    suspend fun deleteTrackAlbumArtists(trackId: String)
+
+    @Query("DELETE FROM track_genres WHERE trackId = :trackId")
+    suspend fun deleteTrackGenres(trackId: String)
+
+    @Query("DELETE FROM track_composers WHERE trackId = :trackId")
+    suspend fun deleteTrackComposers(trackId: String)
+
     @Query("SELECT COUNT(*) FROM library_items")
     suspend fun itemCount(): Int
 
