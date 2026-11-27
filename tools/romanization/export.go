@@ -1,4 +1,4 @@
-// Run from the repository root: go run ./mobile/tools/romanization/export.go
+// Run from the repository root: go run ./tools/romanization/export.go
 // Regeneration only; the Android build consumes the checked-in output.
 package main
 
@@ -12,7 +12,7 @@ import (
 )
 
 func main() {
-	file, err := os.Create("mobile/androidApp/src/main/assets/romanization/characters.tsv")
+	file, err := os.Create("androidApp/src/main/assets/romanization/characters.tsv")
 	if err != nil {
 		panic(err)
 	}

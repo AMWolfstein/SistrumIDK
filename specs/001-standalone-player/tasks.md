@@ -281,3 +281,5 @@ Rules: each task starts with a full map refresh, records evidence, implements, r
 - **Checks**: full diff review, cross-language/data/runtime boundaries, final test/APK evidence.
 - **Acceptance**: no unresolved mandatory blocker; final report path/hash/commits.
 - **Depends**: T25, T26.
+
+- [x] M001-T001 Reproducible baseline and build enablement

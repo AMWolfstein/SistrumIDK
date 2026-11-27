@@ -8,13 +8,14 @@
 | Korean rules | [koreanromanizer v1.0.0](https://github.com/misa198/koreanromanizer/tree/v1.0.0), based on koroman e529729b923f8a9d9acc62b2c9c0887b00e9bd88 | MIT, Copyright (c) 2025 Donghe Youn (Daissue) |
 
 Korean rules are ported to Kotlin, preserving the Go implementation's unchanged
-non-Hangul text. Chinese conversion follows the desktop engine. Gradle copies
-the unmodified phrase/OpenCC files from `internal/infra/romanization/data` into
-generated Android assets. No runtime download is performed.
+non-Hangul text. Chinese conversion follows the desktop engine. The unmodified
+phrase/OpenCC files are checked into
+`androidApp/src/main/assets/romanization/` from the pinned desktop data. No
+runtime download is performed.
 
 `characters.tsv` contains hexadecimal Unicode code points and the first
 tone-marked reading from go-pinyin. Regenerate from the repository root with
-`go run ./mobile/tools/romanization/export.go`; output is sorted and checked in.
+`go run ./tools/romanization/export.go`; output is sorted and checked in.
 Ordinary Android builds do not require Go. Update the Android engine version
 when changing dictionaries or rules, and re-run the desktop reading fixtures.
 

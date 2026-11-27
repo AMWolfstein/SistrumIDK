@@ -74,14 +74,7 @@ val subsetMaterialSymbolsFont =
         localProperties.getProperty("python3")?.let { python3Executable = it }
     }
 
-val romanizationAssets = tasks.register<Sync>("romanizationAssets") {
-    from(rootProject.file("../internal/infra/romanization/data"))
-    from(rootProject.file("tools/romanization/ATTRIBUTION.md"))
-    from(rootProject.file("tools/romanization/LICENSE-OpenCC.txt"))
-    into(layout.buildDirectory.dir("generated/romanizationAssets/romanization"))
-}
-
-tasks.named("preBuild") { dependsOn(subsetMaterialSymbolsFont, romanizationAssets) }
+tasks.named("preBuild") { dependsOn(subsetMaterialSymbolsFont) }
 
 kotlin {
     compilerOptions {
@@ -135,7 +128,6 @@ dependencies {
 }
 
 android {
-    sourceSets.getByName("main").assets.directories.add(layout.buildDirectory.dir("generated/romanizationAssets").get().asFile.path)
     namespace = "com.amwolfstein.sistrum"
     compileSdk = libs.versions.android.compileSdk.get().toInt()
     ndkVersion = "30.0.16248370"

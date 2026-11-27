@@ -12,3 +12,13 @@
 - Owner decisions (2026-11-27): add aubio 0.4.9 + FFTW 3.3.11 (revised from in-house reimplementation); add 0–5 ratings; fix M3U8/relative/BOM and add bounded Last.fm retry. Remaining decisions: PiP/Android equivalents, release signing, device coverage.
 - Added by owner: a dedicated native-build/APK-size optimization phase (T25, separate commit) after all features, before final audit/APK; Looper/mpv_audio_kit/libmpv-scripts is reference only.
 - Next: independent planning review → fixes → one planning commit → allocate task IDs → execute T01.
+
+## M001-T001 — Reproducible baseline and build enablement
+
+- Map: source unchanged since planning; snapshot rebuilt from the existing CGC index (3,483 symbols, 5,662 relationships; 5 unindexed: 4 Gradle `.kts` + `LivingArtworkShader.kt`).
+- Changes: removed the `../internal/infra/romanization/data` sibling dependency and generated-asset task; added upstream `pinyin.txt`/`TSCharacters.txt` with attribution/license to `androidApp/src/main/assets/romanization/`; test reads app assets.
+- Baseline: FFmpeg 9.0.2 arm64-v8a built by `scripts/build-ffmpeg-android.sh` (shared libs: avcodec 6.9M, avformat 1.2M, avutil 504K, swresample 68K); `libsistrum_player.so` 228K with 24 JNI exports.
+- Tests: androidApp 281/281 host tests; sharedLogic 59/59; `assembleDevDebug` succeeds.
+- APK: `androidApp-dev-debug.apk`, 71 MB, `com.amwolfstein.sistrum.dev` 0.1.0 (1), arm64-v8a, debug V2 cert SHA-256 `86547a5a…`.
+- Limitations: no device/emulator; APK size is the pre-T25 baseline; debug variant includes debug tooling.
+- Review: Round 1 PASS from an independent read-only reviewer (build/data/test/APK/JNI evidence verified).
