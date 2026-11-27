@@ -81,6 +81,16 @@ class LibraryRepository(
             ).publish(source, runId, complete)
         }
 
+    suspend fun publishEntry(
+        source: LibrarySourceEntity,
+        entry: ScanEntryEntity,
+    ): PublishResult = database.withTransaction {
+        ScanPublisher(
+            store = RoomLibraryStore(dao),
+            metadataProvider = { item -> extractor.read(Uri.parse(item.fileUri)).getOrNull()?.metadata },
+        ).publishEntry(source, entry)
+    }
+
     /**
      * Removes a root without deleting items another root still provides. Items that no longer have
      * any membership are deleted; the rest are re-pointed to a surviving source before the FK cascade.

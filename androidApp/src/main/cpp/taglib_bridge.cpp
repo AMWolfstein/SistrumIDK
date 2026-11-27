@@ -2,14 +2,21 @@
 
 #include <cstdio>
 #include <string>
+#include <vector>
 
 #include <taglib/audioproperties.h>
 #include <taglib/fileref.h>
+#include <taglib/tfilestream.h>
 #include <taglib/tag.h>
 #include <taglib/tpropertymap.h>
 #include <taglib/tvariant.h>
 #include <taglib/tstring.h>
 #include <taglib/tstringlist.h>
+
+extern "C" {
+#include <libavformat/avformat.h>
+#include <libavcodec/avcodec.h>
+}
 
 namespace {
 
@@ -204,4 +211,173 @@ Java_com_amwolfstein_sistrum_library_tags_TagLibBridge_nativeReadArtwork(JNIEnv 
     } catch (...) {
         return nullptr;
     }
+}
+
+namespace {
+
+TagLib::String jstringToTagLib(JNIEnv *env, jstring value) {
+    if (value == nullptr) return {};
+    const jchar *chars = env->GetStringChars(value, nullptr);
+    if (chars == nullptr) return {};
+    const jsize length = env->GetStringLength(value);
+    std::string utf8;
+    utf8.reserve(static_cast<size_t>(length) * 3);
+    size_t i = 0;
+    while (i < static_cast<size_t>(length)) {
+        uint32_t codePoint = chars[i++];
+        if (codePoint >= 0xD800 && codePoint <= 0xDBFF && i < static_cast<size_t>(length)) {
+            const uint32_t low = chars[i];
+            if (low >= 0xDC00 && low <= 0xDFFF) {
+                codePoint = 0x10000 + ((codePoint - 0xD800) << 10) + (low - 0xDC00);
+                i += 1;
+            }
+        }
+        if (codePoint < 0x80) {
+            utf8 += static_cast<char>(codePoint);
+        } else if (codePoint < 0x800) {
+            utf8 += static_cast<char>(0xC0 | (codePoint >> 6));
+            utf8 += static_cast<char>(0x80 | (codePoint & 0x3F));
+        } else if (codePoint < 0x10000) {
+            utf8 += static_cast<char>(0xE0 | (codePoint >> 12));
+            utf8 += static_cast<char>(0x80 | ((codePoint >> 6) & 0x3F));
+            utf8 += static_cast<char>(0x80 | (codePoint & 0x3F));
+        } else {
+            utf8 += static_cast<char>(0xF0 | (codePoint >> 18));
+            utf8 += static_cast<char>(0x80 | ((codePoint >> 12) & 0x3F));
+            utf8 += static_cast<char>(0x80 | ((codePoint >> 6) & 0x3F));
+            utf8 += static_cast<char>(0x80 | (codePoint & 0x3F));
+        }
+    }
+    env->ReleaseStringChars(value, chars);
+    return TagLib::String(utf8, TagLib::String::UTF8);
+}
+
+void replaceIfPresent(
+    TagLib::PropertyMap &map,
+    const char *key,
+    JNIEnv *env,
+    jstring value) {
+    if (value == nullptr) return;
+    const TagLib::String text = jstringToTagLib(env, value);
+    if (text.isEmpty()) {
+        map.erase(key);
+    } else {
+        map.replace(key, TagLib::StringList(text));
+    }
+}
+
+}  // namespace
+
+extern "C" JNIEXPORT jboolean JNICALL
+Java_com_amwolfstein_sistrum_library_tags_TagLibBridge_nativeWriteTags(
+    JNIEnv *env,
+    jclass,
+    jint fd,
+    jstring title,
+    jstring artist,
+    jstring album,
+    jstring albumArtist,
+    jstring genre,
+    jstring composer,
+    jstring comment,
+    jint year,
+    jint track,
+    jint disc,
+    jstring isrc,
+    jstring label,
+    jstring copyright) {
+    try {
+        const std::string path = "/proc/self/fd/" + std::to_string(fd);
+        TagLib::FileStream stream(path.c_str(), false);
+        if (!stream.isOpen()) return JNI_FALSE;
+        TagLib::FileRef ref(&stream, false, TagLib::AudioProperties::Fast);
+        if (ref.isNull() || ref.file()->readOnly()) return JNI_FALSE;
+
+        TagLib::PropertyMap map = ref.properties();
+        replaceIfPresent(map, "TITLE", env, title);
+        replaceIfPresent(map, "ARTIST", env, artist);
+        replaceIfPresent(map, "ALBUM", env, album);
+        replaceIfPresent(map, "ALBUMARTIST", env, albumArtist);
+        replaceIfPresent(map, "GENRE", env, genre);
+        replaceIfPresent(map, "COMPOSER", env, composer);
+        replaceIfPresent(map, "COMMENT", env, comment);
+        replaceIfPresent(map, "ISRC", env, isrc);
+        replaceIfPresent(map, "LABEL", env, label);
+        replaceIfPresent(map, "COPYRIGHT", env, copyright);
+        if (year > 0) map.replace("DATE", TagLib::StringList(std::to_string(year)));
+        if (track > 0) map.replace("TRACKNUMBER", TagLib::StringList(std::to_string(track)));
+        if (disc > 0) map.replace("DISCNUMBER", TagLib::StringList(std::to_string(disc)));
+
+        ref.setProperties(map);
+        return ref.save() ? JNI_TRUE : JNI_FALSE;
+    } catch (...) {
+        return JNI_FALSE;
+    }
+}
+
+extern "C" JNIEXPORT jboolean JNICALL
+Java_com_amwolfstein_sistrum_library_tags_TagLibBridge_nativeWriteArtwork(
+    JNIEnv *env,
+    jclass,
+    jint fd,
+    jbyteArray data,
+    jstring mimeType,
+    jstring description) {
+    try {
+        if (data == nullptr) return JNI_FALSE;
+        const jsize size = env->GetArrayLength(data);
+        std::vector<unsigned char> bytes(static_cast<size_t>(size));
+        env->GetByteArrayRegion(data, 0, size, reinterpret_cast<jbyte *>(bytes.data()));
+
+        const std::string path = "/proc/self/fd/" + std::to_string(fd);
+        TagLib::FileStream stream(path.c_str(), false);
+        if (!stream.isOpen()) return JNI_FALSE;
+        TagLib::FileRef ref(&stream, false, TagLib::AudioProperties::Fast);
+        if (ref.isNull() || ref.file()->readOnly()) return JNI_FALSE;
+
+        TagLib::VariantMap picture;
+        picture.insert("data", TagLib::Variant(TagLib::ByteVector(
+            reinterpret_cast<const char *>(bytes.data()), static_cast<unsigned int>(bytes.size()))));
+        picture.insert("mimeType", TagLib::Variant(jstringToTagLib(env, mimeType)));
+        picture.insert("description", TagLib::Variant(jstringToTagLib(env, description)));
+        picture.insert("pictureType", TagLib::Variant(TagLib::String("Front Cover")));
+        TagLib::List<TagLib::VariantMap> pictures;
+        pictures.append(picture);
+        if (!ref.setComplexProperties("PICTURE", pictures)) return JNI_FALSE;
+        return ref.save() ? JNI_TRUE : JNI_FALSE;
+    } catch (...) {
+        return JNI_FALSE;
+    }
+}
+
+
+extern "C" JNIEXPORT jstring JNICALL
+Java_com_amwolfstein_sistrum_library_tags_TagLibBridge_nativeAudioFingerprint(JNIEnv *env, jclass, jint fd) {
+    AVFormatContext *context = nullptr;
+    const std::string path = "/proc/self/fd/" + std::to_string(fd);
+    if (avformat_open_input(&context, path.c_str(), nullptr, nullptr) < 0) return nullptr;
+    avformat_find_stream_info(context, nullptr);
+    const int audio = av_find_best_stream(context, AVMEDIA_TYPE_AUDIO, -1, -1, nullptr, 0);
+    if (audio < 0) {
+        avformat_close_input(&context);
+        return nullptr;
+    }
+    uint64_t hash = 1469598103934665603ULL;
+    AVPacket *packet = av_packet_alloc();
+    while (packet != nullptr && av_read_frame(context, packet) >= 0) {
+        if (packet->stream_index == audio && packet->data != nullptr && packet->size > 0) {
+            for (int i = 0; i < packet->size; i += 1) {
+                hash ^= static_cast<unsigned char>(packet->data[i]);
+                hash *= 1099511628211ULL;
+            }
+            hash ^= static_cast<uint64_t>(packet->size);
+            hash *= 1099511628211ULL;
+        }
+        av_packet_unref(packet);
+    }
+    av_packet_free(&packet);
+    avformat_close_input(&context);
+    char buffer[32];
+    snprintf(buffer, sizeof(buffer), "%016llx", static_cast<unsigned long long>(hash));
+    return env->NewStringUTF(buffer);
 }

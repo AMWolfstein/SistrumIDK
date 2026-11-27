@@ -239,6 +239,6 @@ interface LibraryDao {
     @Upsert
     suspend fun upsertTagWriteJournal(value: TagWriteJournalEntity)
 
-    @Query("SELECT * FROM tag_write_journal WHERE state IN ('STAGED','VERIFIED')")
+    @Query("SELECT * FROM tag_write_journal WHERE state IN ('STAGED','VERIFIED','WRITING','FAILED') ORDER BY createdAt")
     suspend fun incompleteTagWrites(): List<TagWriteJournalEntity>
 }

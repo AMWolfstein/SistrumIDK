@@ -1,13 +1,13 @@
 {
   "missions": {
     "M001": {
-      "next_task": 7,
+      "next_task": 8,
       "nonce": "45356c82baed4375811369ee33874b57",
       "path": "specs/001-standalone-player",
       "title": "Complete standalone Android music player"
     }
   },
-  "next_completion": 10,
+  "next_completion": 11,
   "next_mission": 2,
   "next_tor": 4,
   "tasks": {
@@ -148,6 +148,29 @@
       "record": "specs/001-standalone-player/tasks.md",
       "status": "complete",
       "title": "Incremental reconciliation and publication"
+    },
+    "M001-T007": {
+      "completion": 10,
+      "evidence": {
+        "checks": "staged .part copy and hash-checked original; journal STAGED->WRITING->DONE with startup recovery incl. FAILED retry and backup retention; audio-packet fingerprint unchanged; blank-field clear semantics; artwork write+JPEG; batch failure isolation; single editor UI; reindex via publishEntry; device 3/3 TagWriter and 6/6 TagLibBridge; 332 host tests PASS; independent review PASS",
+        "graph": {
+          "impact": "TagWriter journal/staging, TagLibBridge native write+audio fingerprint, LibraryRepository.publishEntry, LibraryDao journal query, TagEditViewModel, MetadataEditorContent, MainActivity recovery, TagWriter device tests",
+          "queries": 4,
+          "revision": "83347fe25a46311cd6f2fc0c21f55120bfce233c",
+          "status": "PASS",
+          "tool": "0.6.13"
+        },
+        "result": "PASS",
+        "reviewer": "independent-subagent",
+        "round": 3
+      },
+      "final": false,
+      "kind": "T",
+      "mission": "M001",
+      "nonce": "d70a45d6601f40dea4149a28847cbfc1",
+      "record": "specs/001-standalone-player/tasks.md",
+      "status": "complete",
+      "title": "Metadata editor and safe tag/artwork writes"
     },
     "TOR001": {
       "completion": 1,

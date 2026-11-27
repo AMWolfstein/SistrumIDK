@@ -455,4 +455,20 @@
     <string name="library_scan_resume">Resume</string>
     <string name="library_scan_cancel">Cancel scan</string>
     <string name="library_scan_scanned">Scanned %1$d files</string>
+    <string name="metadata_editor_title">Edit metadata</string>
+    <string name="metadata_editor_save">Save</string>
+    <string name="metadata_editor_cancel">Cancel</string>
+    <string name="metadata_editor_title_field">Title</string>
+    <string name="metadata_editor_artist">Artist</string>
+    <string name="metadata_editor_album">Album</string>
+    <string name="metadata_editor_album_artist">Album artist</string>
+    <string name="metadata_editor_genre">Genre</string>
+    <string name="metadata_editor_composer">Composer</string>
+    <string name="metadata_editor_comment">Comment</string>
+    <string name="metadata_editor_year">Year</string>
+    <string name="metadata_editor_track">Track number</string>
+    <string name="metadata_editor_disc">Disc number</string>
+    <string name="metadata_editor_replace_artwork">Replace artwork</string>
+    <string name="metadata_editor_saved">Metadata saved</string>
+    <string name="metadata_editor_failed">Could not write metadata: %1$s</string>
 </resources>

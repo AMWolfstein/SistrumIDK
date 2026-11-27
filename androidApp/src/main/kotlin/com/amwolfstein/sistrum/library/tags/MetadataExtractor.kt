@@ -18,6 +18,28 @@ object TagLibBridge {
     external fun nativeReadMetadata(fd: Int): String
 
     external fun nativeReadArtwork(fd: Int): ByteArray?
+
+    external fun nativeWriteTags(
+        fd: Int,
+        title: String?,
+        artist: String?,
+        album: String?,
+        albumArtist: String?,
+        genre: String?,
+        composer: String?,
+        comment: String?,
+        year: Int,
+        track: Int,
+        disc: Int,
+        isrc: String?,
+        label: String?,
+        copyright: String?,
+    ): Boolean
+
+    external fun nativeWriteArtwork(fd: Int, data: ByteArray, mimeType: String?, description: String?): Boolean
+
+    /** Hash of demuxed audio packets only: tag/artwork edits must not change it. */
+    external fun nativeAudioFingerprint(fd: Int): String?
 }
 
 data class ExtractedMetadata(

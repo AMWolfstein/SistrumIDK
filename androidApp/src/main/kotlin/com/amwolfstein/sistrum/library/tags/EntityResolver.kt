@@ -32,7 +32,9 @@ class EntityResolver {
             .ifEmpty { artists }
         val albumTitle = TagAliases.first(metadata, TagAliases.albumKeys) ?: metadata.album ?: ""
         val genres = TagAliases.all(metadata, listOf("GENRE"))
+            .ifEmpty { listOfNotNull(metadata.genre).filter { it.isNotBlank() } }
         val composers = TagAliases.all(metadata, listOf("COMPOSER"))
+            .ifEmpty { listOfNotNull(metadata.composer).filter { it.isNotBlank() } }
         val albumKeyName = albumTitle.ifBlank { "Unknown Album" }
         val albumKeyArtist = albumArtists.firstOrNull().orEmpty()
 

@@ -70,6 +70,57 @@ class TagLibBridgeTest {
     }
 
     @Test
+    fun writesTagsAndArtworkToACopy() {
+        val source = fixture("fixture.flac")
+        val target = File(context.cacheDir, "write-target.flac")
+        source.copyTo(target, overwrite = true)
+
+        ParcelFileDescriptor.open(target, ParcelFileDescriptor.MODE_READ_WRITE).use { descriptor ->
+            val written = TagLibBridge.nativeWriteTags(
+                descriptor.fd,
+                "New Title 🎵",
+                "New Artist",
+                "New Album",
+                "New Album Artist",
+                "Jazz",
+                "New Composer",
+                "New Comment",
+                2024,
+                7,
+                2,
+                "ISRC999",
+                "New Label",
+                "(c) 2024",
+            )
+            assertTrue(written)
+        }
+        val metadata = readFile(target)
+        assertEquals("New Title 🎵", metadata.title)
+        assertEquals("New Artist", metadata.artist)
+        assertEquals("New Album", metadata.album)
+        assertEquals("New Album Artist", metadata.albumArtist)
+        assertEquals("Jazz", metadata.genre)
+        assertEquals("New Composer", metadata.composer)
+        assertEquals(2024, metadata.year)
+        assertEquals(7, metadata.track)
+        assertEquals(2, metadata.disc)
+        assertEquals("ISRC999", metadata.first("ISRC"))
+
+        val artwork = fixture("fixture.mp3").let { mp3 ->
+            ParcelFileDescriptor.open(mp3, ParcelFileDescriptor.MODE_READ_ONLY).use { descriptor ->
+                TagLibBridge.nativeReadArtwork(descriptor.fd)
+            }
+        }
+        assertNotNull(artwork)
+        ParcelFileDescriptor.open(target, ParcelFileDescriptor.MODE_READ_WRITE).use { descriptor ->
+            assertTrue(TagLibBridge.nativeWriteArtwork(descriptor.fd, artwork!!, "image/png", "Cover"))
+        }
+        val withArt = readFile(target)
+        assertTrue(withArt.hasArtwork)
+        assertNotNull(withArt.artworkMime)
+    }
+
+    @Test
     fun unreadableDescriptorReturnsEmptyMetadata() {
         val empty = File(context.cacheDir, "not-audio.bin").apply { writeText("no audio") }
         ParcelFileDescriptor.open(empty, ParcelFileDescriptor.MODE_READ_ONLY).use { descriptor ->
@@ -78,8 +129,9 @@ class TagLibBridgeTest {
         }
     }
 
-    private fun read(name: String): TagMetadata {
-        val file = fixture(name)
+    private fun read(name: String): TagMetadata = readFile(fixture(name))
+
+    private fun readFile(file: File): TagMetadata {
         ParcelFileDescriptor.open(file, ParcelFileDescriptor.MODE_READ_ONLY).use { descriptor ->
             return TagMetadataJson.parse(TagLibBridge.nativeReadMetadata(descriptor.fd))
         }

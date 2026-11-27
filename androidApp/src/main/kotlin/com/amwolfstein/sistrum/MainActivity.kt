@@ -263,6 +263,12 @@ class MainActivity : ComponentActivity() {
         lastFm = AndroidLastFmRuntime.initialize(applicationContext, AndroidSyncRuntime.syncStore())
         handleLastFmIntent(intent)
         AndroidPlaybackRuntime.initialize(applicationContext, AndroidSyncRuntime.syncStore())
+        lifecycleScope.launch {
+            com.amwolfstein.sistrum.library.tags.TagWriter(
+                applicationContext,
+                com.amwolfstein.sistrum.library.db.LibraryDatabase.get(applicationContext).libraryDao(),
+            ).recoverIncompleteWrites()
+        }
         // Start the service once per app process so it can rebuild the last
         // private playback session before Compose observes its StateFlows.
         startService(Intent(this, PlaybackService::class.java))
