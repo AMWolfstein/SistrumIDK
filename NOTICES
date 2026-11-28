@@ -182,3 +182,17 @@ Copyright (c) 2006-2024 Nemanja Trifunovic and contributors.
 Distributed under the Boost Software License, Version 1.0. Header-only; compiled into
 the TagLib static library linked into libsistrum_player.so.
 https://www.boost.org/LICENSE_1_0.txt
+
+aubio 0.4.9 (https://aubio.org, tarball SHA-256
+d48282ae4dab83b3dc94c16cf011bcb63835c1c02b515490e1883049c3d1f3da)
+Copyright (C) 2003-2021 Paul Brossier and aubio contributors.
+Licensed under the GNU General Public License v3 or later. Statically linked into
+libsistrum_player.so for tempo/onset analysis; source and license text at
+https://aubio.org/pub/aubio-0.4.9.tar.bz2 and https://www.gnu.org/licenses/gpl-3.0.html.
+
+FFTW 3.3.11 (https://fftw.org, tarball SHA-256
+5630c24cdeb33b131612f7eb4b1a9934234754f9f388ff8617458d0be6f239a1; single-precision)
+Copyright (C) 2003-2023 Matteo Frigo and Steven G. Johnson.
+Licensed under the GNU General Public License v2 or later. Statically linked into
+libsistrum_player.so as the FFT backend for aubio; source and license text at
+https://fftw.org/fftw-3.3.11.tar.gz and https://www.gnu.org/licenses/old-licenses/gpl-2.0.html.
