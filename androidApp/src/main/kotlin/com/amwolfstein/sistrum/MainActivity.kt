@@ -544,6 +544,11 @@ class MainActivity : ComponentActivity() {
                         onCreateWithTracks = { name, artwork, trackIds -> playlistsViewModel.createPlaylist(name, artwork, trackIds) },
                         onImportM3u8 = playlistsViewModel::importM3u8,
                         onExportM3u8 = playlistsViewModel::exportM3u8,
+                        onCreateSmart = { name, config ->
+                            playlistsViewModel.createSmartPlaylist(name, config) {
+                                viewModel.dispatch(AppIntent.NavigateBack)
+                            }
+                        },
                         onMembershipChange = playlistsViewModel::changePlaylistMembership,
                     ),
                     search = LibrarySearchModel(

@@ -62,7 +62,7 @@ internal class LocalLibraryCatalog(
             rows.map { row -> row.toLibraryComposer(null) }
         }
 
-    override val playlists: Flow<List<LibraryPlaylist>> = playlistRepository.observePlaylists()
+    override val playlists: Flow<List<LibraryPlaylist>> = playlistRepository.observePlaylists(tracks)
 
     override val lastListenedAt: Flow<Map<String, Long>> =
         dao.observeLocalLastListened().map { rows -> rows.associate { it.trackId to it.lastListenedAt } }

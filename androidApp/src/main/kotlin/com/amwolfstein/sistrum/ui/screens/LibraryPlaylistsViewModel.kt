@@ -160,6 +160,20 @@ internal class LibraryPlaylistsViewModel(private val context: Context, syncStore
         }
     }
 
+    fun createSmartPlaylist(
+        name: String,
+        config: com.amwolfstein.sistrum.library.playlist.SmartPlaylistConfig,
+        onCreated: (String) -> Unit = {},
+    ) {
+        viewModelScope.launch {
+            runCatching {
+                val repository = com.amwolfstein.sistrum.library.playlist.LocalPlaylistRepository(context)
+                repository.createSmart(name, config, syncStore.tracks.first())
+            }.onSuccess(onCreated)
+                .onFailure { Log.w("LibraryPlaylists", "Smart playlist create failed", it) }
+        }
+    }
+
     fun changePlaylistMembership(playlistId: String, trackIds: List<String>, add: Boolean) {
         if (playlistId == FavoritesPlaylistId) return
         val operation = if (add) PlaylistMutationOperation.ADD_TRACK else PlaylistMutationOperation.REMOVE_TRACK

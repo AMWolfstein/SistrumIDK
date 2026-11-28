@@ -1,13 +1,13 @@
 {
   "missions": {
     "M001": {
-      "next_task": 14,
+      "next_task": 15,
       "nonce": "45356c82baed4375811369ee33874b57",
       "path": "specs/001-standalone-player",
       "title": "Complete standalone Android music player"
     }
   },
-  "next_completion": 17,
+  "next_completion": 18,
   "next_mission": 2,
   "next_tor": 4,
   "tasks": {
@@ -309,6 +309,29 @@
       "record": "specs/001-standalone-player/tasks.md",
       "status": "complete",
       "title": "Manual playlists, favorites and M3U8"
+    },
+    "M001-T014": {
+      "completion": 17,
+      "evidence": {
+        "checks": "host tests 379/379 + sharedLogic 59/59; device engine/repository/builder 4/4 on CPH2307 Android 15; assembleDevDebug; existing-smart edit entry point and mood fields deferred",
+        "graph": {
+          "impact": "androidApp/src/main/kotlin/com/amwolfstein/sistrum/library/playlist/{SmartRules,LocalPlaylistRepository}.kt, sync/LocalLibraryCatalog.kt, ui/screens/{SmartPlaylistContent,LibraryPlaylistsViewModel,LibraryPlaylistsContent}.kt, ui/navigation/AppDestinationContent.kt, AppDestination.kt, AppNavigationMetadata.kt, AppDestinationModels.kt, MainActivity.kt, res/values*/strings.xml, tests",
+          "queries": 3,
+          "revision": "eeb9b1e44c046afa28293cd5b3b7028042b75a58",
+          "status": "PASS",
+          "tool": "0.6.13"
+        },
+        "result": "PASS",
+        "reviewer": "Author review",
+        "round": 3
+      },
+      "final": false,
+      "kind": "T",
+      "mission": "M001",
+      "nonce": "d19df96619c549c4860fde26e3cdf073",
+      "record": "specs/001-standalone-player/tasks.md",
+      "status": "complete",
+      "title": "Smart playlist rule engine and UI"
     },
     "TOR001": {
       "completion": 1,

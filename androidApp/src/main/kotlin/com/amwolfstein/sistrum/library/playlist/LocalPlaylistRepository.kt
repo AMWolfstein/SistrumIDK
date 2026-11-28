@@ -31,23 +31,36 @@ class LocalPlaylistRepository(
     private val dao = database.libraryDao()
     private val artworkCache = ArtworkCache(context, dao, now)
 
-    fun observePlaylists(): Flow<List<LibraryPlaylist>> =
-        combine(dao.observePlaylists(), dao.observeAllPlaylistTracks()) { rows, tracks ->
-            rows.asSequence()
-                .filter { it.systemKind != FAVORITES_KIND }
-                .map { playlist ->
-                    LibraryPlaylist(
-                        id = playlist.id,
-                        name = playlist.name,
-                        trackIds = tracks.filter { it.playlistId == playlist.id }
-                            .sortedWith(compareBy({ it.position }, { it.trackId }))
-                            .map { it.trackId },
-                        metadataJson = metadataJson(playlist),
-                        syncFailed = false,
-                    )
+    fun observePlaylists(
+        libraryTracks: Flow<List<com.amwolfstein.sistrum.sync.LibraryTrack>>,
+    ): Flow<List<LibraryPlaylist>> = combine(
+        dao.observePlaylists(),
+        dao.observeAllPlaylistTracks(),
+        libraryTracks,
+    ) { rows, memberships, tracks ->
+        rows.asSequence()
+            .filter { it.systemKind != FAVORITES_KIND }
+            .map { playlist ->
+                val storedIds = memberships.filter { it.playlistId == playlist.id }
+                    .sortedWith(compareBy({ it.position }, { it.trackId }))
+                    .map { it.trackId }
+                val ids = if (playlist.isSmart && playlist.liveUpdating) {
+                    SmartPlaylistJson.decode(playlist.rulesJson)
+                        ?.let { config -> SmartRules.evaluate(config, tracks).map { it.id } }
+                        ?: emptyList()
+                } else {
+                    storedIds
                 }
-                .toList()
-        }
+                LibraryPlaylist(
+                    id = playlist.id,
+                    name = playlist.name,
+                    trackIds = ids,
+                    metadataJson = metadataJson(playlist),
+                    syncFailed = false,
+                )
+            }
+            .toList()
+    }
 
     suspend fun create(
         mutation: PlaylistMutation,
@@ -77,6 +90,69 @@ class LocalPlaylistRepository(
                 dao.upsertPlaylistTracks(listOf(PlaylistTrackEntity(playlistId, trackId, rank)))
                 previous = rank
             }
+        }
+    }
+
+    /** Creates a smart playlist; a frozen (non-live) playlist materialises its match once. */
+    suspend fun createSmart(
+        name: String,
+        config: SmartPlaylistConfig,
+        libraryTracks: List<com.amwolfstein.sistrum.sync.LibraryTrack>,
+        id: String = java.util.UUID.randomUUID().toString(),
+    ): String = withContext(Dispatchers.IO) {
+        SmartRules.validate(config)?.let { error(it) }
+        val matched = SmartRules.evaluate(config, libraryTracks)
+        database.withTransaction {
+            dao.upsertPlaylist(
+                PlaylistEntity(
+                    id = id,
+                    name = name,
+                    isSmart = true,
+                    rulesJson = SmartPlaylistJson.encode(config),
+                    liveUpdating = config.liveUpdating,
+                    limitEnabled = config.limit.enabled,
+                    limitCount = config.limit.count,
+                    limitSort = config.limit.by,
+                    createdAt = now(),
+                    updatedAt = now(),
+                ),
+            )
+            replaceSnapshot(id, if (config.liveUpdating) emptyList() else matched.map { it.id })
+        }
+        id
+    }
+
+    suspend fun updateSmart(
+        playlistId: String,
+        config: SmartPlaylistConfig,
+        libraryTracks: List<com.amwolfstein.sistrum.sync.LibraryTrack>,
+    ) = withContext(Dispatchers.IO) {
+        SmartRules.validate(config)?.let { error(it) }
+        val playlist = dao.playlist(playlistId) ?: return@withContext
+        require(playlist.isSmart) { "Not a smart playlist" }
+        val matched = SmartRules.evaluate(config, libraryTracks)
+        database.withTransaction {
+            dao.upsertPlaylist(
+                playlist.copy(
+                    rulesJson = SmartPlaylistJson.encode(config),
+                    liveUpdating = config.liveUpdating,
+                    limitEnabled = config.limit.enabled,
+                    limitCount = config.limit.count,
+                    limitSort = config.limit.by,
+                    updatedAt = now(),
+                ),
+            )
+            replaceSnapshot(playlistId, if (config.liveUpdating) emptyList() else matched.map { it.id })
+        }
+    }
+
+    private suspend fun replaceSnapshot(playlistId: String, trackIds: List<String>) {
+        dao.playlistTracksList(playlistId).forEach { dao.deletePlaylistTrack(playlistId, it.trackId) }
+        var previous: String? = null
+        trackIds.distinct().forEach { trackId ->
+            val rank = LexoRank.between(previous, null)
+            dao.upsertPlaylistTracks(listOf(PlaylistTrackEntity(playlistId, trackId, rank)))
+            previous = rank
         }
     }
 

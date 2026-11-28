@@ -125,6 +125,7 @@ internal data class LibraryPlaylistsModel(
     val onCreateWithTracks: (String, Uri?, List<String>) -> Unit = { _, _, _ -> },
     val onImportM3u8: (Uri) -> Unit = {},
     val onExportM3u8: (String, Uri) -> Unit = { _, _ -> },
+    val onCreateSmart: (String, com.amwolfstein.sistrum.library.playlist.SmartPlaylistConfig) -> Unit = { _, _ -> },
     val onMembershipChange: (String, List<String>, Boolean) -> Unit = { _, _, _ -> },
 )
 

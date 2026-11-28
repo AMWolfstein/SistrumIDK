@@ -16,3 +16,4 @@
 - M001-T011 — Local URI playback and queue integration
 - M001-T012 — Playback verification (crossfade/EQ/normalization/route)
 - M001-T013 — Manual playlists, favorites and M3U8
+- M001-T014 — Smart playlist rule engine and UI

@@ -46,36 +46,36 @@ class LocalPlaylistRepositoryTest {
     @Test
     fun createAddMoveRemoveRenameDelete() = runBlocking {
         val id = repository.createWithoutMutation("Mix", listOf("t1", "t2"))
-        assertEquals(listOf("t1", "t2"), repository.observePlaylists().first().single().trackIds)
+        assertEquals(listOf("t1", "t2"), repository.observePlaylists(kotlinx.coroutines.flow.flowOf(emptyList())).first().single().trackIds)
 
         repository.moveTrack(id, "t2", null, "t1")
-        assertEquals(listOf("t2", "t1"), repository.observePlaylists().first().single().trackIds)
+        assertEquals(listOf("t2", "t1"), repository.observePlaylists(kotlinx.coroutines.flow.flowOf(emptyList())).first().single().trackIds)
 
         repository.addTrack(id, "t3", index = 0)
-        assertEquals(listOf("t3", "t2", "t1"), repository.observePlaylists().first().single().trackIds)
+        assertEquals(listOf("t3", "t2", "t1"), repository.observePlaylists(kotlinx.coroutines.flow.flowOf(emptyList())).first().single().trackIds)
         repository.addTrack(id, "t1")
-        assertEquals(3, repository.observePlaylists().first().single().trackIds.size)
+        assertEquals(3, repository.observePlaylists(kotlinx.coroutines.flow.flowOf(emptyList())).first().single().trackIds.size)
 
         repository.removeTrack(id, "t2")
-        assertEquals(listOf("t3", "t1"), repository.observePlaylists().first().single().trackIds)
+        assertEquals(listOf("t3", "t1"), repository.observePlaylists(kotlinx.coroutines.flow.flowOf(emptyList())).first().single().trackIds)
 
         repository.update(id, "Renamed", "desc")
-        val playlist = repository.observePlaylists().first().single()
+        val playlist = repository.observePlaylists(kotlinx.coroutines.flow.flowOf(emptyList())).first().single()
         assertEquals("Renamed", playlist.name)
         assertTrue(playlist.metadataJson.contains("desc"))
 
         repository.delete(id)
-        assertTrue(repository.observePlaylists().first().isEmpty())
+        assertTrue(repository.observePlaylists(kotlinx.coroutines.flow.flowOf(emptyList())).first().isEmpty())
         assertNull(database.libraryDao().playlist(id))
     }
 
     @Test
     fun addTrackIgnoresUnknownAndDuplicateTracks() = runBlocking {
         val id = repository.createWithoutMutation("Mix", listOf("t1", "t1", "missing"))
-        assertEquals(listOf("t1"), repository.observePlaylists().first().single().trackIds)
+        assertEquals(listOf("t1"), repository.observePlaylists(kotlinx.coroutines.flow.flowOf(emptyList())).first().single().trackIds)
         repository.addTrack(id, "missing")
         repository.addTrack(id, "t1")
-        assertEquals(listOf("t1"), repository.observePlaylists().first().single().trackIds)
+        assertEquals(listOf("t1"), repository.observePlaylists(kotlinx.coroutines.flow.flowOf(emptyList())).first().single().trackIds)
     }
 
     @Test
@@ -83,7 +83,7 @@ class LocalPlaylistRepositoryTest {
         database.libraryDao().upsertPlaylist(
             PlaylistEntity("favorites", "Favorites", systemKind = "favorites"),
         )
-        assertTrue(repository.observePlaylists().first().isEmpty())
+        assertTrue(repository.observePlaylists(kotlinx.coroutines.flow.flowOf(emptyList())).first().isEmpty())
         var failed = false
         try {
             repository.update("favorites", "x", null)

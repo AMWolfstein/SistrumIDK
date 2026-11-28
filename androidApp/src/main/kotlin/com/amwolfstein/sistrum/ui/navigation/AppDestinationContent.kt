@@ -60,6 +60,7 @@ import com.amwolfstein.sistrum.ui.screens.LibrarySettingsContent
 import com.amwolfstein.sistrum.ui.screens.IntegrationContent
 import com.amwolfstein.sistrum.ui.screens.OnlineArtworkContent
 import com.amwolfstein.sistrum.ui.screens.SeparatorsContent
+import com.amwolfstein.sistrum.ui.screens.SmartPlaylistContent
 import com.amwolfstein.sistrum.ui.screens.LastFmContent
 import com.amwolfstein.sistrum.ui.screens.LyricsContent
 import com.amwolfstein.sistrum.ui.screens.PlaybackSettingsContent
@@ -672,6 +673,13 @@ internal fun AppDestinationContent(
                                 onPlaylistDelete = onPlaylistDelete,
                                 onImportM3u8 = library.playlists.onImportM3u8,
                                 onExportM3u8 = library.playlists.onExportM3u8,
+                                onNewSmartPlaylist = {
+                                    onIntent(AppIntent.OpenPage(AppStackPage.SmartPlaylistEditor))
+                                },
+                            )
+                            AppStackPage.SmartPlaylistEditor -> SmartPlaylistContent(
+                                modifier = Modifier.fillMaxSize(),
+                                onSave = library.playlists.onCreateSmart,
                             )
                             AppStackPage.PlaylistDetails -> PlaylistDetailsContent(
                                 uiState = selectedPlaylistDetails,

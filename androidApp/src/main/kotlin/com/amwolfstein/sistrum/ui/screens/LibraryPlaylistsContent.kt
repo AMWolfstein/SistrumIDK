@@ -37,6 +37,7 @@ internal fun LibraryPlaylistsContent(
     onPlaylistDelete: (String) -> Unit = {},
     onImportM3u8: (android.net.Uri) -> Unit = {},
     onExportM3u8: (String, android.net.Uri) -> Unit = { _, _ -> },
+    onNewSmartPlaylist: () -> Unit = {},
 ) {
     val importLauncher = androidx.activity.compose.rememberLauncherForActivityResult(
         androidx.activity.result.contract.ActivityResultContracts.OpenDocument(),
@@ -71,6 +72,12 @@ internal fun LibraryPlaylistsContent(
                 importLauncher.launch(arrayOf("audio/x-mpegurl", "audio/mpegurl", "text/plain", "*/*"))
             }, modifier = Modifier.testTag("playlists-import-m3u8")) {
                 androidx.compose.material3.Text(stringResource(R.string.playlists_import_m3u8))
+            }
+            androidx.compose.material3.TextButton(
+                onClick = onNewSmartPlaylist,
+                modifier = Modifier.testTag("playlists-new-smart"),
+            ) {
+                androidx.compose.material3.Text(stringResource(R.string.smart_playlist_title))
             }
         },
         emptyContent = {
