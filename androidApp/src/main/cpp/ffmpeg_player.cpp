@@ -2,6 +2,8 @@
 #include <jni.h>
 #include <unistd.h>
 
+#include "fd_io.h"
+
 #include <algorithm>
 #include <array>
 #include <atomic>
@@ -61,6 +63,7 @@ namespace {
     };
 
     struct SourceSlot {
+        sistrum::FdMedia media;
         AVFormatContext *format = nullptr;
         AVCodecContext *codec = nullptr;
         AVPacket *packet = nullptr;
@@ -123,7 +126,9 @@ namespace {
         av_frame_free(&slot.frame);
         av_packet_free(&slot.packet);
         avcodec_free_context(&slot.codec);
-        avformat_close_input(&slot.format);
+        // The demuxer owns the descriptor; SAF paths are never reopened.
+        sistrum::fd_close_format(slot.media);
+        slot.format = nullptr;
         slot.audio_stream = -1;
     }
 
@@ -193,7 +198,8 @@ namespace {
             }
             if (slot.packet->stream_index == slot.audio_stream && avcodec_send_packet(slot.codec, slot.packet) >= 0) {
                 while (avcodec_receive_frame(slot.codec, slot.frame) >= 0) {
-                    const int out_frames = swr_get_out_samples(slot.resampler, slot.frame->nb_samples);
+                    const int out_frames = std::max(0, swr_get_out_samples(slot.resampler, slot.frame->nb_samples));
+                    if (out_frames == 0) continue;
                     output.resize(static_cast<size_t>(out_frames) * kOutputChannels);
                     uint8_t *out_data[] = {reinterpret_cast<uint8_t *>(output.data())};
                     const int converted = swr_convert(slot.resampler, out_data, out_frames,
@@ -232,13 +238,12 @@ namespace {
 
     bool open_slot(SourceSlot &slot, int fd, int output_rate, float normalization_gain_db, std::string &error) {
         release_slot(slot);
-        const std::string path = "/proc/self/fd/" + std::to_string(fd);
-        if (avformat_open_input(&slot.format, path.c_str(), nullptr, nullptr) < 0 ||
-                avformat_find_stream_info(slot.format, nullptr) < 0) {
-            error = "FFmpeg could not open this audio file";
+        slot.media.fd = fd;
+        if (!sistrum::fd_open_format(slot.media, error)) {
             free_media(slot);
             return false;
         }
+        slot.format = slot.media.format;
         slot.audio_stream = av_find_best_stream(slot.format, AVMEDIA_TYPE_AUDIO, -1, -1, nullptr, 0);
         if (slot.audio_stream < 0) {
             error = "No audio stream in file";
@@ -481,12 +486,22 @@ extern "C" JNIEXPORT void JNICALL Java_com_amwolfstein_sistrum_player_FfmpegDeco
 extern "C" JNIEXPORT void JNICALL Java_com_amwolfstein_sistrum_player_FfmpegDecoder_nativePrepare(JNIEnv *env, jclass, jlong value, jint fd, jfloat gain) {
     auto *engine = reinterpret_cast<PlaybackEngine *>(value);
     std::string error;
-    if (engine == nullptr || !open_output(*engine, error) || !open_slot(engine->slots[0], fd, engine->output_rate, gain, error)) {
+    if (engine == nullptr) {
+        close(fd);
+        throw_java(env, "Player is closed");
+        return;
+    }
+    if (!open_output(*engine, error)) {
+        // The demuxer never took the descriptor.
         close(fd);
         throw_java(env, error.empty() ? "Player is closed" : error.c_str());
         return;
     }
-    close(fd);
+    if (!open_slot(engine->slots[0], fd, engine->output_rate, gain, error)) {
+        // open_slot owns and already released the descriptor on failure.
+        throw_java(env, error.empty() ? "Player is closed" : error.c_str());
+        return;
+    }
     release_slot(engine->slots[1]);
     engine->active_slot.store(0, std::memory_order_release);
     engine->preloaded_slot.store(kNoSlot, std::memory_order_release);
@@ -503,8 +518,8 @@ extern "C" JNIEXPORT jboolean JNICALL Java_com_amwolfstein_sistrum_player_Ffmpeg
         throw_java(env, "Player is not prepared");
         return JNI_FALSE;
     }
-    if (engine->preloaded_slot.load() != kNoSlot) {
-        const int previous = engine->preloaded_slot.exchange(kNoSlot);
+    const int previous = engine->preloaded_slot.exchange(kNoSlot);
+    if (previous != kNoSlot) {
         wait_for_callback_quiescence(*engine);
         release_slot(engine->slots[previous]);
     }
@@ -520,11 +535,10 @@ extern "C" JNIEXPORT jboolean JNICALL Java_com_amwolfstein_sistrum_player_Ffmpeg
     // new std::thread assignment would terminate the process.
     release_slot(engine->slots[target]);
     if (!open_slot(engine->slots[target], fd, engine->output_rate, gain, error)) {
-        close(fd);
+        // open_slot already released the descriptor.
         throw_java(env, error.empty() ? "Unable to preload source" : error.c_str());
         return JNI_FALSE;
     }
-    close(fd);
     engine->preloaded_slot.store(target, std::memory_order_release);
     return JNI_TRUE;
 }
@@ -561,6 +575,7 @@ extern "C" JNIEXPORT void JNICALL Java_com_amwolfstein_sistrum_player_FfmpegDeco
     auto *engine = reinterpret_cast<PlaybackEngine *>(value);
     if (engine == nullptr || engine->crossfading.load() || engine->preloaded_slot.load() == kNoSlot) return;
     const int incoming = engine->preloaded_slot.exchange(kNoSlot);
+    if (incoming == kNoSlot) return;
     const int outgoing = engine->active_slot.exchange(incoming);
     engine->outgoing_slot.store(outgoing, std::memory_order_release);
     engine->fade_frames_total.store(std::max<int64_t>(1, duration_ms * engine->output_rate / 1000), std::memory_order_release);

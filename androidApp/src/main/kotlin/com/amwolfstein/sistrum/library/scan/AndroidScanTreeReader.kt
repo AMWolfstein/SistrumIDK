@@ -14,8 +14,8 @@ import kotlinx.coroutines.withContext
  */
 class AndroidScanTreeReader(
     private val context: Context,
-    private val retries: Int = 2,
-    private val retryDelayMs: Long = 250L,
+    private val retries: Int = 3,
+    private val retryDelayMs: Long = 2_000L,
 ) : ScanTreeReader {
 
     override suspend fun children(treeUri: String, documentId: String): List<ScanDocument> =
@@ -61,7 +61,7 @@ class AndroidScanTreeReader(
                 } catch (failure: Exception) {
                     if (attempt >= retries) throw failure
                     attempt += 1
-                    delay(retryDelayMs * attempt)
+                    delay(retryDelayMs)
                 }
             }
             @Suppress("UNREACHABLE_CODE")

@@ -9,7 +9,7 @@
   },
   "next_completion": 23,
   "next_mission": 2,
-  "next_tor": 4,
+  "next_tor": 7,
   "tasks": {
     "M001-T001": {
       "completion": 4,
@@ -447,6 +447,36 @@
       "record": "specs/001-standalone-player/tasks.md",
       "status": "complete",
       "title": "Local Mood Radio"
+    },
+    "M001-TOR004": {
+      "completion": null,
+      "final": false,
+      "kind": "TOR",
+      "mission": "M001",
+      "nonce": "368c4eda3fb54d6593cf94d44efe3c75",
+      "record": "specs/001-standalone-player/tasks.md",
+      "status": "reserved",
+      "title": "Restore SAF ingest, migration and catalog identity"
+    },
+    "M001-TOR005": {
+      "completion": null,
+      "final": false,
+      "kind": "TOR",
+      "mission": "M001",
+      "nonce": "852b8a4b2d0e464fbf8e3b864a103169",
+      "record": "specs/001-standalone-player/tasks.md",
+      "status": "reserved",
+      "title": "Repair local library, playback and editing flows"
+    },
+    "M001-TOR006": {
+      "completion": null,
+      "final": false,
+      "kind": "TOR",
+      "mission": "M001",
+      "nonce": "5853d964c33640cebb0b62f623a9e872",
+      "record": "specs/001-standalone-player/tasks.md",
+      "status": "reserved",
+      "title": "Restore analysis parity and verify device playback"
     },
     "TOR001": {
       "completion": 1,

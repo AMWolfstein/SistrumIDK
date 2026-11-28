@@ -13,6 +13,7 @@ import com.amwolfstein.sistrum.library.db.LibraryDao
 import com.amwolfstein.sistrum.library.db.LibraryDatabase
 import com.amwolfstein.sistrum.library.db.LibraryItemEntity
 import com.amwolfstein.sistrum.library.db.LibrarySourceEntity
+import com.amwolfstein.sistrum.library.db.SearchIndexer
 import com.amwolfstein.sistrum.library.db.ScanEntryEntity
 import com.amwolfstein.sistrum.library.db.TrackAlbumArtistEntity
 import com.amwolfstein.sistrum.library.db.TrackArtistEntity
@@ -21,6 +22,7 @@ import com.amwolfstein.sistrum.library.db.TrackGenreEntity
 import com.amwolfstein.sistrum.library.scan.LibraryStore
 import com.amwolfstein.sistrum.library.scan.PublishResult
 import com.amwolfstein.sistrum.library.scan.ScanPublisher
+import com.amwolfstein.sistrum.library.scan.ScannedMetadata
 import com.amwolfstein.sistrum.library.scan.detachSource
 import com.amwolfstein.sistrum.library.tags.MetadataExtractor
 import kotlinx.coroutines.flow.first
@@ -73,25 +75,53 @@ class LibraryRepository(
     private val extractor = MetadataExtractor(context)
     private val separators = com.amwolfstein.sistrum.library.metadata.SeparatorPreferences(context)
 
-    suspend fun publish(source: LibrarySourceEntity, runId: String, complete: Boolean): PublishResult =
-        database.withTransaction {
+    suspend fun publish(source: LibrarySourceEntity, runId: String, complete: Boolean): PublishResult {
+        // Metadata extraction (SAF reads plus full PCM fingerprinting) must not hold the
+        // single Room writer connection that playback, favorites and playlists share.
+        val entries = dao.scanEntries(runId).filter { it.state == "SEEN" }
+        val prepared = prepareMetadata(entries)
+        return database.withTransaction {
             ScanPublisher(
                 store = RoomLibraryStore(dao),
-                metadataProvider = { entry ->
-                    extractor.read(Uri.parse(entry.fileUri)).getOrNull()?.metadata
-                },
+                metadataProvider = { entry -> prepared[entry.documentKey] },
                 separators = separators.settings.first(),
             ).publish(source, runId, complete)
         }
+    }
+
+    private suspend fun prepareMetadata(entries: List<ScanEntryEntity>): Map<String, ScannedMetadata?> =
+        entries
+            .filter { entry ->
+                val existing = dao.itemByDocumentKey(entry.documentKey)
+                existing == null || entry.changed || existing.otherMetadataJson == "{}"
+            }
+            .associate { entry ->
+                entry.documentKey to extractor.read(
+                    uri = Uri.parse(entry.fileUri),
+                    includeFingerprint = true,
+                    startMs = entry.cueStartMs ?: 0,
+                    endMs = entry.cueEndMs ?: -1,
+                ).getOrNull()?.let { ScannedMetadata(it.metadata, it.fingerprint) }
+            }
 
     suspend fun publishEntry(
         source: LibrarySourceEntity,
         entry: ScanEntryEntity,
-    ): PublishResult = database.withTransaction {
-        ScanPublisher(
-            store = RoomLibraryStore(dao),
-            metadataProvider = { item -> extractor.read(Uri.parse(item.fileUri)).getOrNull()?.metadata },
-        ).publishEntry(source, entry)
+    ): PublishResult {
+        val prepared = prepareMetadata(listOf(entry))
+        val result = database.withTransaction {
+            ScanPublisher(
+                store = RoomLibraryStore(dao),
+                metadataProvider = { prepared[it.documentKey] },
+                separators = separators.settings.first(),
+            ).publishEntry(source, entry)
+        }
+        // A tag edit changes searchable text; refresh just this row.
+        val itemId = dao.itemByDocumentKey(entry.documentKey)?.id
+        if (itemId != null) {
+            dao.itemById(itemId)?.let { SearchIndexer(database).indexItem(it) }
+        }
+        return result
     }
 
     /**

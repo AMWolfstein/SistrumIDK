@@ -1,6 +1,8 @@
 #include <jni.h>
 #include <unistd.h>
 
+#include "fd_io.h"
+
 #include <algorithm>
 #include <cmath>
 #include <vector>
@@ -38,26 +40,30 @@ struct Analysis {
     float brightness = 0;
 };
 
-bool decode_mono(int fd, std::vector<float> &out) {
-    AVFormatContext *format = nullptr;
-    if (avformat_open_input(&format, ("/proc/self/fd/" + std::to_string(fd)).c_str(), nullptr, nullptr) < 0) {
+bool decode_mono(int fd, int64_t startMs, int64_t endMs, std::vector<float> &out) {
+    sistrum::FdMedia media;
+    media.fd = fd;
+    std::string error;
+    if (!sistrum::fd_open_format(media, error)) {
+        sistrum::fd_media_release(media);
         return false;
     }
-    if (avformat_find_stream_info(format, nullptr) < 0) {
-        avformat_close_input(&format);
-        return false;
-    }
+    AVFormatContext *format = media.format;
     const AVCodec *codec = nullptr;
     int stream = av_find_best_stream(format, AVMEDIA_TYPE_AUDIO, -1, -1, &codec, 0);
     if (stream < 0 || codec == nullptr) {
-        avformat_close_input(&format);
+        sistrum::fd_media_release(media);
         return false;
     }
     AVCodecContext *ctx = avcodec_alloc_context3(codec);
-    avcodec_parameters_to_context(ctx, format->streams[stream]->codecpar);
+    if (ctx == nullptr || avcodec_parameters_to_context(ctx, format->streams[stream]->codecpar) < 0) {
+        avcodec_free_context(&ctx);
+        sistrum::fd_media_release(media);
+        return false;
+    }
     if (avcodec_open2(ctx, codec, nullptr) < 0) {
         avcodec_free_context(&ctx);
-        avformat_close_input(&format);
+        sistrum::fd_media_release(media);
         return false;
     }
     AVChannelLayout mono = AV_CHANNEL_LAYOUT_MONO;
@@ -67,50 +73,105 @@ bool decode_mono(int fd, std::vector<float> &out) {
     if (!swr || swr_init(swr) < 0) {
         if (swr) swr_free(&swr);
         avcodec_free_context(&ctx);
-        avformat_close_input(&format);
+        sistrum::fd_media_release(media);
         return false;
     }
     AVPacket *packet = av_packet_alloc();
     AVFrame *frame = av_frame_alloc();
     std::vector<float> converted(4096);
-    while (av_read_frame(format, packet) >= 0) {
+    const int64_t startUs = std::max<int64_t>(0, startMs) * 1000;
+    const int64_t endUs = endMs > 0 ? endMs * 1000 : -1;
+    if (startMs > 0) {
+        const int64_t target = av_rescale_q(
+            startUs, AVRational{1, AV_TIME_BASE}, format->streams[stream]->time_base);
+        av_seek_frame(format, stream, target, AVSEEK_FLAG_BACKWARD);
+        avcodec_flush_buffers(ctx);
+    }
+
+    /** Returns false for frames wholly before the segment; [pastEnd] marks the end. */
+    auto segment = [&](const AVFrame *value, int &skip, int &take, bool &pastEnd) {
+        pastEnd = false;
+        skip = 0;
+        take = value->nb_samples;
+        const int64_t pts = value->best_effort_timestamp;
+        if (pts == AV_NOPTS_VALUE) return true;
+        const int64_t frameStart = av_rescale_q(pts, format->streams[stream]->time_base,
+                                                AVRational{1, AV_TIME_BASE});
+        const int64_t frameEnd = frameStart + av_rescale(value->nb_samples, AV_TIME_BASE, ctx->sample_rate);
+        if (endUs >= 0 && frameStart >= endUs) {
+            pastEnd = true;
+            return false;
+        }
+        if (startUs > 0 && frameEnd <= startUs) return false;
+        if (startUs > 0 && frameStart < startUs) {
+            skip = static_cast<int>(std::min<int64_t>(
+                value->nb_samples, av_rescale(startUs - frameStart, ctx->sample_rate, AV_TIME_BASE)));
+        }
+        if (endUs >= 0 && frameEnd > endUs) {
+            take = static_cast<int>(std::max<int64_t>(0, std::min<int64_t>(
+                value->nb_samples - skip,
+                av_rescale(endUs - frameStart, ctx->sample_rate, AV_TIME_BASE) - skip)));
+        }
+        return take > 0;
+    };
+
+    auto append = [&](const AVFrame *value, int skip, int take) {
+        if (take <= 0) return;
+        const uint8_t **input = const_cast<const uint8_t **>(value->extended_data);
+        std::vector<const uint8_t *> shifted;
+        if (skip > 0) {
+            const auto format = static_cast<AVSampleFormat>(value->format);
+            const int bytes = av_get_bytes_per_sample(format);
+            const int planes = av_sample_fmt_is_planar(format)
+                ? std::max(1, value->ch_layout.nb_channels)
+                : 1;
+            shifted.resize(static_cast<size_t>(planes));
+            for (int plane = 0; plane < planes; ++plane) {
+                shifted[static_cast<size_t>(plane)] =
+                    value->extended_data[plane] + static_cast<size_t>(skip) * bytes;
+            }
+            input = shifted.data();
+        }
+        const int maxOut = static_cast<int>(av_rescale_rnd(
+            swr_get_delay(swr, ctx->sample_rate) + take, kSampleRate,
+            ctx->sample_rate, AV_ROUND_UP));
+        if (maxOut <= 0) return;
+        converted.resize(maxOut);
+        uint8_t *dst = reinterpret_cast<uint8_t *>(converted.data());
+        const int got = swr_convert(swr, &dst, maxOut, input, take);
+        for (int i = 0; i < got; ++i) out.push_back(converted[i]);
+    };
+
+    bool done = false;
+    while (!done && av_read_frame(format, packet) >= 0) {
         if (packet->stream_index == stream && avcodec_send_packet(ctx, packet) >= 0) {
             while (avcodec_receive_frame(ctx, frame) >= 0) {
-                const int maxOut = static_cast<int>(av_rescale_rnd(
-                    swr_get_delay(swr, ctx->sample_rate) + frame->nb_samples, kSampleRate,
-                    ctx->sample_rate, AV_ROUND_UP));
-                if (maxOut > 0) {
-                    converted.resize(maxOut);
-                    uint8_t *dst = reinterpret_cast<uint8_t *>(converted.data());
-                    const int got = swr_convert(swr, &dst, maxOut,
-                                                const_cast<const uint8_t **>(frame->extended_data),
-                                                frame->nb_samples);
-                    for (int i = 0; i < got; ++i) out.push_back(converted[i]);
+                int skip = 0;
+                int take = frame->nb_samples;
+                bool pastEnd = false;
+                if (segment(frame, skip, take, pastEnd)) append(frame, skip, take);
+                if (pastEnd) {
+                    done = true;
+                    break;
                 }
             }
         }
         av_packet_unref(packet);
     }
-    // Flush the decoder.
+    // Flush the decoder with the same segment bounds.
     avcodec_send_packet(ctx, nullptr);
-    while (avcodec_receive_frame(ctx, frame) >= 0) {
-        const int maxOut = static_cast<int>(av_rescale_rnd(
-            swr_get_delay(swr, ctx->sample_rate) + frame->nb_samples, kSampleRate,
-            ctx->sample_rate, AV_ROUND_UP));
-        if (maxOut > 0) {
-            converted.resize(maxOut);
-            uint8_t *dst = reinterpret_cast<uint8_t *>(converted.data());
-            const int got = swr_convert(swr, &dst, maxOut,
-                                        const_cast<const uint8_t **>(frame->extended_data),
-                                        frame->nb_samples);
-            for (int i = 0; i < got; ++i) out.push_back(converted[i]);
-        }
+    while (!done && avcodec_receive_frame(ctx, frame) >= 0) {
+        int skip = 0;
+        int take = frame->nb_samples;
+        bool pastEnd = false;
+        if (segment(frame, skip, take, pastEnd)) append(frame, skip, take);
+        if (pastEnd) done = true;
     }
     av_frame_free(&frame);
     av_packet_free(&packet);
     swr_free(&swr);
     avcodec_free_context(&ctx);
-    avformat_close_input(&format);
+    sistrum::fd_media_release(media);
     return !out.empty();
 }
 
@@ -180,7 +241,17 @@ Analysis analyze(const std::vector<float> &pcm) {
             lastOnset = time;
         }
         if (frames % 86 == 0) { // ~1 s windows at hop 512 / 44.1 kHz
-            loudnessWindows.push_back(20.0 * std::log10(std::max(1e-9, rms)) - 0.691);
+            double windowSquares = 0;
+            const size_t windowStart = offset >= static_cast<size_t>(kSampleRate)
+                ? offset + kHop - static_cast<size_t>(kSampleRate)
+                : 0;
+            const size_t windowEnd = std::min(pcm.size(), windowStart + static_cast<size_t>(kSampleRate));
+            for (size_t i = windowStart; i < windowEnd; ++i) {
+                windowSquares += static_cast<double>(pcm[i]) * pcm[i];
+            }
+            const double count = static_cast<double>(std::max<size_t>(1, windowEnd - windowStart));
+            const double windowRms = std::sqrt(windowSquares / count);
+            loudnessWindows.push_back(20.0 * std::log10(std::max(1e-9, windowRms)) - 0.691);
         }
     }
     result.tempo = aubio_tempo_get_bpm(tempo);
@@ -235,9 +306,10 @@ Java_com_amwolfstein_sistrum_player_AnalysisBridge_nativeTempoProbe(JNIEnv *, jo
 }
 
 extern "C" JNIEXPORT jfloatArray JNICALL
-Java_com_amwolfstein_sistrum_player_AnalysisBridge_nativeAnalyzeFd(JNIEnv *env, jobject, jint fd) {
+Java_com_amwolfstein_sistrum_player_AnalysisBridge_nativeAnalyzeFd(
+    JNIEnv *env, jobject, jint fd, jlong startMs, jlong endMs) {
     std::vector<float> pcm;
-    if (!decode_mono(fd, pcm) || pcm.size() < static_cast<size_t>(kHop)) {
+    if (!decode_mono(fd, startMs, endMs, pcm) || pcm.size() < static_cast<size_t>(kHop)) {
         return env->NewFloatArray(0);
     }
     const Analysis a = analyze(pcm);

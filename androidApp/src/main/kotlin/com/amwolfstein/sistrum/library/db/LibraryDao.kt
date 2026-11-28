@@ -4,6 +4,8 @@ import androidx.room.Dao
 import androidx.room.Insert
 import androidx.room.OnConflictStrategy
 import androidx.room.Query
+import androidx.room.RawQuery
+import androidx.sqlite.db.SupportSQLiteQuery
 import androidx.room.Update
 import kotlinx.coroutines.flow.Flow
 import androidx.room.Upsert
@@ -91,6 +93,25 @@ interface LibraryDao {
 
     @Query("SELECT * FROM albums ORDER BY id")
     suspend fun allAlbums(): List<AlbumEntity>
+
+    @Query("SELECT * FROM genres ORDER BY id")
+    suspend fun allGenres(): List<GenreEntity>
+
+    @Query("SELECT * FROM composers ORDER BY id")
+    suspend fun allComposers(): List<ComposerEntity>
+
+    @Query("DELETE FROM library_search")
+    suspend fun clearSearchIndex()
+
+    @Query("SELECT COUNT(*) FROM library_search")
+    suspend fun searchIndexCount(): Int
+
+    @Insert(onConflict = OnConflictStrategy.REPLACE)
+    suspend fun insertSearch(values: List<LibrarySearchEntity>)
+
+    /** Raw because Room's compiler cannot validate the FTS4 virtual table. */
+    @RawQuery
+    suspend fun searchRaw(query: SupportSQLiteQuery): List<LibrarySearchHit>
 
     @Query("SELECT * FROM artists ORDER BY id")
     suspend fun allArtists(): List<ArtistEntity>
@@ -187,6 +208,26 @@ interface LibraryDao {
 
     @Query("SELECT COUNT(*) FROM library_items WHERE available = 1")
     suspend fun availableItemCount(): Int
+
+    /** Hides items whose every current membership belongs to a disabled or unavailable source. */
+    @Query(
+        "UPDATE library_items SET available = 0, missingSince = :now, updatedAt = :now " +
+            "WHERE available = 1 AND NOT EXISTS (" +
+            "SELECT 1 FROM item_sources JOIN library_sources ON library_sources.id = item_sources.sourceId " +
+            "WHERE item_sources.itemId = library_items.id " +
+            "AND library_sources.available = 1 AND library_sources.enabled = 1)",
+    )
+    suspend fun hideUnavailableItems(now: Long)
+
+    /** Re-exposes preserved data when a membership becomes available again. */
+    @Query(
+        "UPDATE library_items SET available = 1, missingSince = NULL, updatedAt = :now " +
+            "WHERE available = 0 AND EXISTS (" +
+            "SELECT 1 FROM item_sources JOIN library_sources ON library_sources.id = item_sources.sourceId " +
+            "WHERE item_sources.itemId = library_items.id " +
+            "AND library_sources.available = 1 AND library_sources.enabled = 1)",
+    )
+    suspend fun revealAvailableItems(now: Long)
 
     @Update
     suspend fun updateItem(item: LibraryItemEntity)
@@ -430,6 +471,12 @@ interface LibraryDao {
     @Query("SELECT * FROM library_exclusions WHERE sourceId = :sourceId")
     suspend fun exclusions(sourceId: String): List<LibraryExclusionEntity>
 
+    @Upsert
+    suspend fun upsertExclusion(value: LibraryExclusionEntity)
+
+    @Query("DELETE FROM library_exclusions WHERE id = :id")
+    suspend fun deleteExclusion(id: String)
+
     @Insert(onConflict = OnConflictStrategy.IGNORE)
     suspend fun insertScanError(value: ScanErrorEntity)
 
@@ -456,6 +503,15 @@ interface LibraryDao {
 
     @Query("SELECT COUNT(*) FROM legacy_track_refs WHERE resolution = 'unresolved'")
     suspend fun unresolvedLegacyRefCount(): Int
+
+    @Query("SELECT * FROM legacy_track_refs ORDER BY legacyTrackId")
+    suspend fun legacyRefs(): List<LegacyTrackRefEntity>
+
+    @Query("SELECT * FROM legacy_track_refs WHERE resolution = 'unresolved' ORDER BY legacyTrackId")
+    suspend fun unresolvedLegacyRefs(): List<LegacyTrackRefEntity>
+
+    @Query("SELECT * FROM playlists WHERE id LIKE 'legacy:%' ORDER BY id")
+    suspend fun legacyPlaylists(): List<PlaylistEntity>
 
     @Upsert
     suspend fun upsertLegacyImportState(value: LegacyImportStateEntity)

@@ -41,6 +41,7 @@ class ScanService : Service() {
             ACTION_PAUSE -> ScanCoordinator.pause()
             ACTION_RESUME -> ScanCoordinator.resume()
             ACTION_CANCEL -> ScanCoordinator.cancel()
+            ACTION_START_ALL -> ScanCoordinator.beginAll(applicationContext)
             ACTION_START -> {
                 val sourceId = intent.getStringExtra(EXTRA_SOURCE_ID)
                 if (sourceId != null) {
@@ -57,6 +58,12 @@ class ScanService : Service() {
     }
 
     override fun onBind(intent: Intent?): IBinder? = null
+
+    /** Android 15 dataSync budget exhausted: keep the checkpoint and let the user resume. */
+    override fun onTimeout(startId: Int) {
+        ScanCoordinator.pause()
+        stopSelf(startId)
+    }
 
     override fun onDestroy() {
         observer?.cancel()
@@ -137,6 +144,7 @@ class ScanService : Service() {
 
     companion object {
         const val ACTION_START = "com.amwolfstein.sistrum.scan.START"
+        const val ACTION_START_ALL = "com.amwolfstein.sistrum.scan.START_ALL"
         const val ACTION_PAUSE = "com.amwolfstein.sistrum.scan.PAUSE"
         const val ACTION_RESUME = "com.amwolfstein.sistrum.scan.RESUME"
         const val ACTION_CANCEL = "com.amwolfstein.sistrum.scan.CANCEL"

@@ -22,6 +22,11 @@ data class ResolvedTrack(
     val genreNames: List<String>,
     val composerNames: List<String>,
     val releaseDate: String?,
+    /** Values exactly as tagged, before delimiter splitting; kept for rebuilds. */
+    val rawArtistNames: List<String> = artistNames,
+    val rawAlbumArtistNames: List<String> = albumArtistNames,
+    val rawGenreNames: List<String> = genreNames,
+    val rawComposerNames: List<String> = composerNames,
 )
 
 class EntityResolver(private val separators: SeparatorConfig = SeparatorConfig()) {
@@ -29,12 +34,16 @@ class EntityResolver(private val separators: SeparatorConfig = SeparatorConfig()
         val title = TagAliases.first(metadata, TagAliases.titleKeys)
             ?: metadata.title
             ?: TagNormalizer.fileTitle(relativePath)
-        val artists = names(metadata, TagAliases.artistKeys, metadata.artist, SeparatorCategory.ARTIST)
-        val albumArtists = names(metadata, TagAliases.albumArtistKeys, metadata.albumArtist, SeparatorCategory.ALBUM_ARTIST)
+        val rawArtists = rawNames(metadata, TagAliases.artistKeys, metadata.artist)
+        val artists = splitNames(rawArtists, SeparatorCategory.ARTIST)
+        val rawAlbumArtists = rawNames(metadata, TagAliases.albumArtistKeys, metadata.albumArtist)
+        val albumArtists = splitNames(rawAlbumArtists, SeparatorCategory.ALBUM_ARTIST)
             .ifEmpty { artists }
         val albumTitle = TagAliases.first(metadata, TagAliases.albumKeys) ?: metadata.album ?: ""
-        val genres = names(metadata, listOf("GENRE"), metadata.genre, SeparatorCategory.GENRE)
-        val composers = names(metadata, listOf("COMPOSER"), metadata.composer, SeparatorCategory.COMPOSER)
+        val rawGenres = rawNames(metadata, listOf("GENRE"), metadata.genre)
+        val genres = splitNames(rawGenres, SeparatorCategory.GENRE)
+        val rawComposers = rawNames(metadata, listOf("COMPOSER"), metadata.composer)
+        val composers = splitNames(rawComposers, SeparatorCategory.COMPOSER)
         val albumKeyName = albumTitle.ifBlank { "Unknown Album" }
         val albumKeyArtist = albumArtists.firstOrNull().orEmpty()
 
@@ -60,18 +69,19 @@ class EntityResolver(private val separators: SeparatorConfig = SeparatorConfig()
             composerNames = composers,
             releaseDate = TagAliases.first(metadata, TagAliases.dateKeys)
                 ?: metadata.year?.toString(),
+            rawArtistNames = rawArtists.ifEmpty { artists },
+            rawAlbumArtistNames = rawAlbumArtists.ifEmpty { albumArtists },
+            rawGenreNames = rawGenres.ifEmpty { genres },
+            rawComposerNames = rawComposers.ifEmpty { composers },
         )
     }
 
-    private fun names(
-        metadata: TagMetadata,
-        keys: List<String>,
-        fallback: String?,
-        category: SeparatorCategory,
-    ): List<String> {
-        val raw = TagAliases.all(metadata, keys)
+    private fun rawNames(metadata: TagMetadata, keys: List<String>, fallback: String?): List<String> =
+        TagAliases.all(metadata, keys)
             .ifEmpty { listOfNotNull(fallback).map { it.trim() }.filter { it.isNotEmpty() } }
-        return if (separators.delimitersFor(category).isEmpty()) raw.distinct() else
-            Separators.splitAll(raw, separators.delimitersFor(category))
+
+    private fun splitNames(raw: List<String>, category: SeparatorCategory): List<String> {
+        val delimiters = separators.delimitersFor(category)
+        return if (delimiters.isEmpty()) raw.distinct() else Separators.splitAll(raw, delimiters)
     }
 }

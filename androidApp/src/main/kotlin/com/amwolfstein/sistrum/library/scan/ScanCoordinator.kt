@@ -34,6 +34,36 @@ object ScanCoordinator {
         startService(context, ScanService.ACTION_START, sourceId)
     }
 
+    /** Runs the enabled sources one after another under a single foreground run. */
+    fun startAll(context: Context, sourceIds: List<String>) {
+        if (sourceIds.isEmpty() || isRunning) return
+        pendingPause = false
+        pendingCancel = false
+        progress.value = ScanProgress("", sourceIds.first(), ScanState.RUNNING)
+        scanQueue = sourceIds
+        startService(context, ScanService.ACTION_START_ALL, null)
+    }
+
+    @Volatile private var scanQueue: List<String> = emptyList()
+
+    /** Called by the foreground service for an automatic/manual multi-source run. */
+    fun beginAll(context: Context) {
+        if (isRunning) return
+        val ids = scanQueue
+        if (ids.isEmpty()) return
+        val app = context.applicationContext
+        job = scope.launch {
+            ids.forEach { id ->
+                val scanControl = ScanControl().also {
+                    control = it
+                    if (pendingCancel) it.cancel() else if (pendingPause) it.pause()
+                }
+                runScan(app, id, scanControl)
+            }
+            scanQueue = emptyList()
+        }
+    }
+
     /** Called by the foreground service; performs the actual scan work. */
     fun begin(context: Context, sourceId: String) {
         if (isRunning) return
@@ -137,11 +167,23 @@ object ScanCoordinator {
             )
             repository.finish(scanRun, result, result.errors.size, result.entries.size)
             var publishError: String? = null
+            var metadataFailures = 0
             runCatching { LibraryRepository(app).publish(source, scanRun.id, result.complete) }
+                .onSuccess { metadataFailures = it.metadataFailures }
                 .onFailure { failure ->
                     if (failure is CancellationException) throw failure
                     publishError = failure.message
                 }
+            // Legacy playlist/favorite references can only be linked once real items exist.
+            if (publishError == null && result.complete) {
+                runCatching {
+                    com.amwolfstein.sistrum.library.db.LegacyRelinker(database).relinkIfNeeded()
+                }
+            }
+            // Search must see the new library exactly when publication succeeds.
+            if (publishError == null) {
+                runCatching { com.amwolfstein.sistrum.library.db.SearchIndexer(database).rebuild() }
+            }
             // Artwork is post-publication enrichment: a decode/network problem must never mark the
             // scanned source unavailable or fail the scan.
             if (publishError == null) {
@@ -159,10 +201,22 @@ object ScanCoordinator {
                     available = result.state != ScanState.FAILED && publishError == null,
                     lastScannedAt = System.currentTimeMillis(),
                     lastSeenAt = System.currentTimeMillis(),
-                    lastScanError = publishError ?: result.errors.firstOrNull()?.message,
+                    lastScanError = publishError
+                        ?: result.errors.firstOrNull()?.message
+                        ?: metadataFailures.takeIf { it > 0 }?.let { "$it files could not be read" },
                 ),
             )
+            val now = System.currentTimeMillis()
+            dao.hideUnavailableItems(now)
+            dao.revealAvailableItems(now)
         } catch (cancelled: ScanCancelledException) {
+            // Files already enumerated are checkpointed; publish them without removals so a
+            // cancelled scan still keeps the work it finished.
+            val run = scanRun
+            val owner = source
+            if (run != null && owner != null) {
+                runCatching { LibraryRepository(app).publish(owner, run.id, complete = false) }
+            }
             scanRun?.let { repository.setState(it, ScanState.CANCELLED) }
             progressJob?.cancelAndJoin()
             progressJob = null
@@ -171,7 +225,12 @@ object ScanCoordinator {
             throw cancelled
         } catch (failure: Exception) {
             scanRun?.let { repository.setState(it, ScanState.FAILED) }
-            source?.let { dao.setSourceAvailability(it.id, false, failure.message) }
+            source?.let {
+                dao.setSourceAvailability(it.id, false, failure.message)
+                val now = System.currentTimeMillis()
+                dao.hideUnavailableItems(now)
+                dao.revealAvailableItems(now)
+            }
             progressJob?.cancelAndJoin()
             progressJob = null
             progress.value = progress.value.copy(state = ScanState.FAILED)

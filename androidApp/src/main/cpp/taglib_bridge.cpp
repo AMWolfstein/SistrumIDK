@@ -1,11 +1,17 @@
+#include <fcntl.h>
 #include <jni.h>
+#include <unistd.h>
 
+#include <algorithm>
+#include <cerrno>
 #include <cstdio>
+#include <cstring>
 #include <string>
 #include <vector>
 
 #include <taglib/audioproperties.h>
 #include <taglib/fileref.h>
+#include <taglib/tiostream.h>
 #include <taglib/tfilestream.h>
 #include <taglib/tag.h>
 #include <taglib/tpropertymap.h>
@@ -13,9 +19,15 @@
 #include <taglib/tstring.h>
 #include <taglib/tstringlist.h>
 
+#include "fd_io.h"
+
 extern "C" {
 #include <libavformat/avformat.h>
 #include <libavcodec/avcodec.h>
+#include <libavutil/channel_layout.h>
+#include <libavutil/opt.h>
+#include <libavutil/samplefmt.h>
+#include <libswresample/swresample.h>
 }
 
 namespace {
@@ -91,17 +103,159 @@ jstring utf8ToJString(JNIEnv *env, const std::string &utf8) {
     return env->NewString(reinterpret_cast<const jchar *>(utf16.data()), static_cast<jsize>(utf16.size()));
 }
 
+/**
+ * TagLib stream over an authorized descriptor.
+ *
+ * SAF descriptors cannot be reopened by the path their /proc/self/fd symlink
+ * points at, so every read/write/seek goes through pread/pwrite on the
+ * descriptor itself. Sizes are queried with fstat, fallback to lseek.
+ */
+class FdIOStream : public TagLib::IOStream {
+public:
+    explicit FdIOStream(int fd) : fd_(fd), name_("fd:" + std::to_string(fd)) {
+        length_ = fdLength();
+    }
+
+    ~FdIOStream() override = default;
+
+    TagLib::FileName name() const override { return name_.c_str(); }
+
+    TagLib::ByteVector readBlock(size_t length) override {
+        if (length == 0) return {};
+        TagLib::ByteVector block(static_cast<unsigned int>(length));
+        size_t total = 0;
+        while (total < length) {
+            const ssize_t read = sistrum::fd_pread(fd_, block.data() + total, length - total, position_ + total);
+            if (read <= 0) break;
+            total += static_cast<size_t>(read);
+        }
+        position_ += total;
+        block.resize(static_cast<unsigned int>(total));
+        return block;
+    }
+
+    void writeBlock(const TagLib::ByteVector &data) override {
+        writeAt(position_, data);
+        position_ += data.size();
+        if (position_ > length_) length_ = position_;
+    }
+
+    void insert(const TagLib::ByteVector &data, TagLib::offset_t start = 0, size_t replace = 0) override {
+        const int64_t from = static_cast<int64_t>(start);
+        const int64_t replaced = std::min<int64_t>(static_cast<int64_t>(replace), std::max<int64_t>(0, length_ - from));
+        const int64_t delta = static_cast<int64_t>(data.size()) - replaced;
+        if (from < 0 || from > length_) return;
+        if (delta > 0) {
+            // Grow the tail first, copying backwards so source and destination never overlap.
+            int64_t remaining = length_ - (from + replaced);
+            std::vector<char> chunk(256 * 1024);
+            while (remaining > 0) {
+                const size_t take = static_cast<size_t>(std::min<int64_t>(remaining, chunk.size()));
+                const int64_t source = from + replaced + remaining - take;
+                if (sistrum::fd_pread(fd_, chunk.data(), take, source) != static_cast<ssize_t>(take)) return;
+                if (sistrum::fd_pwrite(fd_, chunk.data(), take, source + delta) != static_cast<ssize_t>(take)) return;
+                remaining -= take;
+            }
+            length_ += delta;
+        } else if (delta < 0) {
+            int64_t remaining = length_ - (from + replaced);
+            std::vector<char> chunk(256 * 1024);
+            int64_t done = 0;
+            while (done < remaining) {
+                const size_t take = static_cast<size_t>(std::min<int64_t>(remaining - done, chunk.size()));
+                const int64_t source = from + replaced + done;
+                if (sistrum::fd_pread(fd_, chunk.data(), take, source) != static_cast<ssize_t>(take)) return;
+                if (sistrum::fd_pwrite(fd_, chunk.data(), take, source + delta) != static_cast<ssize_t>(take)) return;
+                done += take;
+            }
+            length_ += delta;
+            (void) ftruncate(fd_, length_);
+        }
+        writeAt(from, data);
+    }
+
+    void removeBlock(TagLib::offset_t start = 0, size_t length = 0) override {
+        insert({}, start, length);
+    }
+
+    bool readOnly() const override {
+        const int mode = accessMode(fd_);
+        return mode != O_RDWR && mode != O_WRONLY;
+    }
+
+    bool isOpen() const override { return fd_ >= 0; }
+
+    void seek(TagLib::offset_t offset, Position p = Beginning) override {
+        int64_t target = static_cast<int64_t>(offset);
+        switch (p) {
+        case Current: target += position_; break;
+        case End: target += length_; break;
+        case Beginning: break;
+        }
+        position_ = std::max<int64_t>(0, target);
+    }
+
+    TagLib::offset_t tell() const override { return position_; }
+
+    TagLib::offset_t length() override { return length_; }
+
+    void truncate(TagLib::offset_t length) override {
+        if (ftruncate(fd_, static_cast<off_t>(length)) != 0) return;
+        if (static_cast<int64_t>(length) > length_) {
+            std::vector<char> zeros(64 * 1024, 0);
+            int64_t at = length_;
+            while (at < static_cast<int64_t>(length)) {
+                const size_t take = static_cast<size_t>(std::min<int64_t>(length - at, zeros.size()));
+                if (sistrum::fd_pwrite(fd_, zeros.data(), take, at) != static_cast<ssize_t>(take)) break;
+                at += take;
+            }
+        }
+        length_ = static_cast<int64_t>(length);
+        if (position_ > length_) position_ = length_;
+    }
+
+private:
+    static int accessMode(int fd) {
+        // F_GETFL returns the descriptor status flags; O_ACCMODE extracts read/write mode.
+        const int flags = fcntl(fd, F_GETFL);
+        if (flags < 0) return O_RDONLY;
+        return flags & O_ACCMODE;
+    }
+
+    int64_t fdLength() const {
+        struct stat info {};
+        if (fstat(fd_, &info) == 0 && S_ISREG(info.st_mode)) return static_cast<int64_t>(info.st_size);
+        const off_t end = lseek(fd_, 0, SEEK_END);
+        return end < 0 ? 0 : static_cast<int64_t>(end);
+    }
+
+    void writeAt(int64_t offset, const TagLib::ByteVector &data) {
+        size_t total = 0;
+        while (total < data.size()) {
+            const ssize_t written = sistrum::fd_pwrite(fd_, data.data() + total, data.size() - total, offset + total);
+            if (written <= 0) return;
+            total += static_cast<size_t>(written);
+        }
+    }
+
+    int fd_ = -1;
+    std::string name_;
+    int64_t position_ = 0;
+    int64_t length_ = 0;
+};
+
 class StreamFileRef {
 public:
-    explicit StreamFileRef(int fd) {
-        const std::string path = "/proc/self/fd/" + std::to_string(fd);
-        fileRef_ = TagLib::FileRef(path.c_str(), true, TagLib::AudioProperties::Average);
+    explicit StreamFileRef(int fd) : stream_(fd) {
+        if (!stream_.isOpen()) return;
+        fileRef_ = TagLib::FileRef(&stream_, true, TagLib::AudioProperties::Average);
     }
 
     TagLib::FileRef &get() { return fileRef_; }
     bool isValid() const { return !fileRef_.isNull() && fileRef_.file() != nullptr; }
 
 private:
+    FdIOStream stream_;
     TagLib::FileRef fileRef_;
 };
 
@@ -287,8 +441,7 @@ Java_com_amwolfstein_sistrum_library_tags_TagLibBridge_nativeWriteTags(
     jstring label,
     jstring copyright) {
     try {
-        const std::string path = "/proc/self/fd/" + std::to_string(fd);
-        TagLib::FileStream stream(path.c_str(), false);
+        FdIOStream stream(fd);
         if (!stream.isOpen()) return JNI_FALSE;
         TagLib::FileRef ref(&stream, false, TagLib::AudioProperties::Fast);
         if (ref.isNull() || ref.file()->readOnly()) return JNI_FALSE;
@@ -323,8 +476,7 @@ Java_com_amwolfstein_sistrum_library_tags_TagLibBridge_nativeWriteProperties(
     jobjectArray keys,
     jobjectArray values) {
     try {
-        const std::string path = "/proc/self/fd/" + std::to_string(fd);
-        TagLib::FileStream stream(path.c_str(), false);
+        FdIOStream stream(fd);
         if (!stream.isOpen()) return JNI_FALSE;
         TagLib::FileRef ref(&stream, false, TagLib::AudioProperties::Fast);
         if (ref.isNull() || ref.file()->readOnly()) return JNI_FALSE;
@@ -362,8 +514,7 @@ Java_com_amwolfstein_sistrum_library_tags_TagLibBridge_nativeWriteArtwork(
         std::vector<unsigned char> bytes(static_cast<size_t>(size));
         env->GetByteArrayRegion(data, 0, size, reinterpret_cast<jbyte *>(bytes.data()));
 
-        const std::string path = "/proc/self/fd/" + std::to_string(fd);
-        TagLib::FileStream stream(path.c_str(), false);
+        FdIOStream stream(fd);
         if (!stream.isOpen()) return JNI_FALSE;
         TagLib::FileRef ref(&stream, false, TagLib::AudioProperties::Fast);
         if (ref.isNull() || ref.file()->readOnly()) return JNI_FALSE;
@@ -385,32 +536,189 @@ Java_com_amwolfstein_sistrum_library_tags_TagLibBridge_nativeWriteArtwork(
 
 
 extern "C" JNIEXPORT jstring JNICALL
-Java_com_amwolfstein_sistrum_library_tags_TagLibBridge_nativeAudioFingerprint(JNIEnv *env, jclass, jint fd) {
-    AVFormatContext *context = nullptr;
-    const std::string path = "/proc/self/fd/" + std::to_string(fd);
-    if (avformat_open_input(&context, path.c_str(), nullptr, nullptr) < 0) return nullptr;
-    avformat_find_stream_info(context, nullptr);
-    const int audio = av_find_best_stream(context, AVMEDIA_TYPE_AUDIO, -1, -1, nullptr, 0);
-    if (audio < 0) {
-        avformat_close_input(&context);
+Java_com_amwolfstein_sistrum_library_tags_TagLibBridge_nativeProbeAudio(JNIEnv *env, jclass, jint fd) {
+    try {
+        sistrum::FdMedia media;
+        media.fd = fd;
+        std::string error;
+        if (!sistrum::fd_open_format(media, error)) {
+            sistrum::fd_media_release(media);
+            return env->NewStringUTF("{}");
+        }
+        std::string json = "{";
+        const int stream = av_find_best_stream(media.format, AVMEDIA_TYPE_AUDIO, -1, -1, nullptr, 0);
+        if (stream >= 0) {
+            const AVCodecParameters *parameters = media.format->streams[stream]->codecpar;
+            if (parameters->codec_id != AV_CODEC_ID_NONE) {
+                json += std::string("\"codec\":\"") + avcodec_get_name(parameters->codec_id) + "\"";
+            }
+            int depth = parameters->bits_per_raw_sample;
+            if (depth <= 0) depth = parameters->bits_per_coded_sample;
+            if (depth <= 0) {
+                const AVSampleFormat format = static_cast<AVSampleFormat>(parameters->format);
+                if (format != AV_SAMPLE_FMT_NONE && format != AV_SAMPLE_FMT_NB) {
+                    depth = av_get_bytes_per_sample(format) * 8;
+                }
+            }
+            if (depth > 0) {
+                if (json.size() > 1) json += ",";
+                json += "\"bitsPerSample\":" + std::to_string(depth);
+            }
+        }
+        json += "}";
+        sistrum::fd_media_release(media);
+        return utf8ToJString(env, json);
+    } catch (...) {
+        return env->NewStringUTF("{}");
+    }
+}
+
+namespace {
+
+constexpr int kFingerprintRate = 44100;
+
+/**
+ * Versioned content fingerprint over decoded PCM only.
+ *
+ * The descriptor is read through the shared pread demuxer, resampled to the
+ * canonical stream (mono, 44.1 kHz, float32) and hashed incrementally, so tag
+ * and container edits cannot move the audio identity while a re-encode does.
+ * [startMs]/[endMs] bound one CUE segment; 0 and -1 mean the whole file.
+ */
+bool fingerprint_pcm(int fd, int64_t start_ms, int64_t end_ms, std::string &out) {
+    sistrum::FdMedia media;
+    media.fd = fd;
+    std::string error;
+    if (!sistrum::fd_open_format(media, error)) {
+        sistrum::fd_media_release(media);
+        return false;
+    }
+    struct Cleanup {
+        sistrum::FdMedia &media;
+        AVCodecContext *codec = nullptr;
+        SwrContext *swr = nullptr;
+        AVPacket *packet = nullptr;
+        AVFrame *frame = nullptr;
+        ~Cleanup() {
+            if (packet != nullptr) av_packet_free(&packet);
+            if (frame != nullptr) av_frame_free(&frame);
+            if (swr != nullptr) swr_free(&swr);
+            if (codec != nullptr) avcodec_free_context(&codec);
+            sistrum::fd_media_release(media);
+        }
+    } cleanup{media};
+
+    const int stream = av_find_best_stream(media.format, AVMEDIA_TYPE_AUDIO, -1, -1, nullptr, 0);
+    if (stream < 0) return false;
+    const AVCodecParameters *parameters = media.format->streams[stream]->codecpar;
+    const AVCodec *decoder = avcodec_find_decoder(parameters->codec_id);
+    if (decoder == nullptr) return false;
+    cleanup.codec = avcodec_alloc_context3(decoder);
+    if (cleanup.codec == nullptr ||
+            avcodec_parameters_to_context(cleanup.codec, parameters) < 0 ||
+            avcodec_open2(cleanup.codec, decoder, nullptr) < 0) return false;
+
+    AVChannelLayout mono = AV_CHANNEL_LAYOUT_MONO;
+    if (swr_alloc_set_opts2(&cleanup.swr, &mono, AV_SAMPLE_FMT_FLT, kFingerprintRate,
+            &cleanup.codec->ch_layout, cleanup.codec->sample_fmt, cleanup.codec->sample_rate,
+            0, nullptr) < 0 || swr_init(cleanup.swr) < 0) return false;
+
+    cleanup.packet = av_packet_alloc();
+    cleanup.frame = av_frame_alloc();
+    if (cleanup.packet == nullptr || cleanup.frame == nullptr) return false;
+
+    const int64_t start_us = std::max<int64_t>(0, start_ms) * 1000;
+    const int64_t end_us = end_ms > 0 ? end_ms * 1000 : -1;
+    if (start_ms > 0) {
+        const int64_t target = av_rescale_q(
+            start_us, AVRational{1, AV_TIME_BASE}, media.format->streams[stream]->time_base);
+        av_seek_frame(media.format, stream, target, AVSEEK_FLAG_BACKWARD);
+        avcodec_flush_buffers(cleanup.codec);
+    }
+
+    sistrum::Sha256 sha;
+    std::vector<float> converted(8192);
+    size_t hashed = 0;
+    auto consume = [&](const AVFrame *frame) -> bool {
+        const int capacity = static_cast<int>(av_rescale_rnd(
+            swr_get_delay(cleanup.swr, cleanup.codec->sample_rate) + frame->nb_samples,
+            kFingerprintRate, cleanup.codec->sample_rate, AV_ROUND_UP));
+        if (capacity <= 0) return true;
+        converted.resize(static_cast<size_t>(capacity));
+        uint8_t *target = reinterpret_cast<uint8_t *>(converted.data());
+        const int got = swr_convert(cleanup.swr, &target, capacity,
+                                    const_cast<const uint8_t **>(frame->extended_data),
+                                    frame->nb_samples);
+        if (got <= 0) return true;
+        int begin = 0;
+        int count = got;
+        const int64_t pts = frame->best_effort_timestamp;
+        int64_t frame_start_us = 0;
+        if (pts != AV_NOPTS_VALUE) {
+            frame_start_us = av_rescale_q(
+                pts, media.format->streams[stream]->time_base, AVRational{1, AV_TIME_BASE});
+            const int64_t frame_end_us = frame_start_us +
+                av_rescale(frame->nb_samples, AV_TIME_BASE, cleanup.codec->sample_rate);
+            if (start_us > 0 && frame_end_us <= start_us) return true;
+            if (start_us > 0 && frame_start_us < start_us) {
+                begin = static_cast<int>(std::min<int64_t>(
+                    count, av_rescale(start_us - frame_start_us, kFingerprintRate, AV_TIME_BASE)));
+            }
+            if (end_us >= 0 && frame_end_us > end_us) {
+                const int64_t keep = av_rescale(end_us - frame_start_us, kFingerprintRate, AV_TIME_BASE);
+                count = static_cast<int>(std::max<int64_t>(0, std::min<int64_t>(count - begin, keep)));
+            }
+        }
+        if (count > 0) {
+            sha.update(converted.data() + begin, static_cast<size_t>(count) * sizeof(float));
+            hashed += static_cast<size_t>(count);
+        }
+        if (end_us >= 0 && pts != AV_NOPTS_VALUE) {
+            const int64_t kept_end_us = frame_start_us +
+                av_rescale(begin + count, AV_TIME_BASE, kFingerprintRate);
+            if (kept_end_us >= end_us) return false;
+        }
+        return true;
+    };
+
+    while (av_read_frame(media.format, cleanup.packet) >= 0) {
+        if (cleanup.packet->stream_index == stream &&
+                avcodec_send_packet(cleanup.codec, cleanup.packet) >= 0) {
+            while (avcodec_receive_frame(cleanup.codec, cleanup.frame) >= 0) {
+                const bool keep_going = consume(cleanup.frame);
+                av_frame_unref(cleanup.frame);
+                if (!keep_going) {
+                    av_packet_unref(cleanup.packet);
+                    out = "pcm-sha256-v1:" + sha.hex();
+                    return hashed > 0;
+                }
+            }
+        }
+        av_packet_unref(cleanup.packet);
+    }
+    avcodec_send_packet(cleanup.codec, nullptr);
+    while (avcodec_receive_frame(cleanup.codec, cleanup.frame) >= 0) {
+        if (!consume(cleanup.frame)) {
+            av_frame_unref(cleanup.frame);
+            break;
+        }
+        av_frame_unref(cleanup.frame);
+    }
+    if (hashed == 0) return false;
+    out = "pcm-sha256-v1:" + sha.hex();
+    return true;
+}
+
+}  // namespace
+
+extern "C" JNIEXPORT jstring JNICALL
+Java_com_amwolfstein_sistrum_library_tags_TagLibBridge_nativeAudioFingerprint(
+    JNIEnv *env, jclass, jint fd, jlong startMs, jlong endMs) {
+    try {
+        std::string fingerprint;
+        if (!fingerprint_pcm(fd, startMs, endMs, fingerprint)) return nullptr;
+        return env->NewStringUTF(fingerprint.c_str());
+    } catch (...) {
         return nullptr;
     }
-    uint64_t hash = 1469598103934665603ULL;
-    AVPacket *packet = av_packet_alloc();
-    while (packet != nullptr && av_read_frame(context, packet) >= 0) {
-        if (packet->stream_index == audio && packet->data != nullptr && packet->size > 0) {
-            for (int i = 0; i < packet->size; i += 1) {
-                hash ^= static_cast<unsigned char>(packet->data[i]);
-                hash *= 1099511628211ULL;
-            }
-            hash ^= static_cast<uint64_t>(packet->size);
-            hash *= 1099511628211ULL;
-        }
-        av_packet_unref(packet);
-    }
-    av_packet_free(&packet);
-    avformat_close_input(&context);
-    char buffer[32];
-    snprintf(buffer, sizeof(buffer), "%016llx", static_cast<unsigned long long>(hash));
-    return env->NewStringUTF(buffer);
 }

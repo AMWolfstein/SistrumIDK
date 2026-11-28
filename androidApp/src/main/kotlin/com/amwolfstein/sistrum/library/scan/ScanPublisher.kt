@@ -53,8 +53,14 @@ interface LibraryStore {
     suspend fun deleteTrackComposers(trackId: String)
 }
 
+/** One scan read: parsed tags plus the optional decoded-PCM identity. */
+data class ScannedMetadata(
+    val tag: TagMetadata,
+    val fingerprint: String? = null,
+)
+
 fun interface TrackMetadataProvider {
-    suspend fun read(entry: ScanEntryEntity): TagMetadata?
+    suspend fun read(entry: ScanEntryEntity): ScannedMetadata?
 }
 
 data class PublishResult(
@@ -123,13 +129,15 @@ class ScanPublisher(
                 return@forEach
             }
 
-            val metadata = runCatching { metadataProvider.read(entry) }
+            val scanned = runCatching { metadataProvider.read(entry) }
                 .onFailure { if (it is kotlinx.coroutines.CancellationException) throw it }
                 .getOrNull()
-            if (metadata == null) metadataFailures += 1
+            if (scanned == null) metadataFailures += 1
+            val metadata = scanned?.tag
+            val fingerprint = scanned?.fingerprint
 
             // A transient read failure must not rewrite a good row from filename fallbacks.
-            if (metadata == null && existingByDocument != null) {
+            if (scanned == null && existingByDocument != null) {
                 store.upsertItemSources(
                     listOf(ItemSourceEntity(existingByDocument.id, source.id, entry.fileUri)),
                 )
@@ -140,7 +148,7 @@ class ScanPublisher(
 
             val tag = mergeCue(entry, metadata ?: TagMetadata())
             val resolved = resolver.resolve(tag, entry.relativePath.ifBlank { entry.name }, entry.documentKey)
-            val contentKey = contentKey(entry, tag, resolved)
+            val contentKey = contentKey(entry, tag, resolved, fingerprint, existingByDocument)
 
             val moveCandidate = if (existingByDocument == null) {
                 uniqueMoveCandidate(contentKey, claimedIds, source)
@@ -157,6 +165,7 @@ class ScanPublisher(
                 source = source,
                 resolved = resolved,
                 metadata = tag,
+                fingerprint = fingerprint,
                 contentKey = contentKey,
                 existing = base,
                 id = itemId,
@@ -227,12 +236,15 @@ class ScanPublisher(
                     missing += 1
                 } else {
                     val primary = remaining.minBy { it.sourceId + "\u0000" + it.fileUri }
+                    val stillAvailable = remaining.any { link ->
+                        store.source(link.sourceId)?.let { it.available && it.enabled } == true
+                    }
                     store.upsertItem(
                         item.copy(
                             sourceId = primary.sourceId,
                             fileUri = primary.fileUri,
-                            available = true,
-                            missingSince = null,
+                            available = stillAvailable,
+                            missingSince = if (stillAvailable) null else now(),
                             updatedAt = now(),
                         ),
                     )
@@ -317,6 +329,7 @@ class ScanPublisher(
         source: LibrarySourceEntity,
         resolved: ResolvedTrack,
         metadata: TagMetadata,
+        fingerprint: String?,
         contentKey: String,
         existing: LibraryItemEntity?,
         id: String,
@@ -340,30 +353,35 @@ class ScanPublisher(
             sortTitle = resolved.sortTitle,
             albumTitle = resolved.albumTitle,
             albumSortTitle = resolved.albumSortTitle,
-            rawArtistNames = json.encodeToString(resolved.artistNames),
-            rawAlbumArtistNames = json.encodeToString(resolved.albumArtistNames),
-            rawGenreNames = json.encodeToString(resolved.genreNames),
-            rawComposerNames = json.encodeToString(resolved.composerNames),
+            // Pre-split values so a later delimiter change can rebuild the same entities.
+            rawArtistNames = json.encodeToString(resolved.rawArtistNames),
+            rawAlbumArtistNames = json.encodeToString(resolved.rawAlbumArtistNames),
+            rawGenreNames = json.encodeToString(resolved.rawGenreNames),
+            rawComposerNames = json.encodeToString(resolved.rawComposerNames),
             copyright = TagAliases.first(metadata, TagAliases.copyrightKeys) ?: existing?.copyright,
             label = metadata.first("LABEL"),
             isrc = metadata.first("ISRC"),
             year = metadata.year ?: existing?.year,
             trackNumber = metadata.track ?: existing?.trackNumber,
             discNumber = metadata.disc ?: existing?.discNumber,
-            totalTracks = existing?.totalTracks,
-            totalDiscs = existing?.totalDiscs,
+            totalTracks = metadata.first("TRACKTOTAL")?.toIntOrNull()
+                ?: metadata.first("TOTALTRACKS")?.toIntOrNull()
+                ?: existing?.totalTracks,
+            totalDiscs = metadata.first("DISCTOTAL")?.toIntOrNull()
+                ?: metadata.first("TOTALDISCS")?.toIntOrNull()
+                ?: existing?.totalDiscs,
             durationSeconds = metadata.durationMs / 1000,
             bitrate = metadata.bitrate,
             sampleRate = metadata.sampleRate,
             bitDepth = metadata.bitsPerSample,
-            codec = null,
+            codec = metadata.codec,
             format = entry.name.substringAfterLast('.', "").ifBlank { null },
             releaseDate = resolved.releaseDate,
             isFavorite = existing?.isFavorite ?: false,
             rating = existing?.rating,
             playCount = existing?.playCount ?: 0,
             artworkKey = existing?.artworkKey,
-            audioFingerprint = existing?.audioFingerprint,
+            audioFingerprint = fingerprint ?: existing?.audioFingerprint,
             contentKey = contentKey,
             addedAt = existing?.addedAt ?: timestamp,
             updatedAt = timestamp,
@@ -387,20 +405,45 @@ class ScanPublisher(
         )
     }
 
-    private fun contentKey(entry: ScanEntryEntity, metadata: TagMetadata, resolved: ResolvedTrack): String {
-        val parts = listOf(
-            entry.size?.toString().orEmpty(),
-            metadata.durationMs.toString(),
-            resolved.title,
-            resolved.artistNames.joinToString("|"),
-            resolved.albumTitle,
-            metadata.track?.toString().orEmpty(),
-            entry.cueStartMs?.toString().orEmpty(),
-            entry.cueEndMs?.toString().orEmpty(),
-        )
+    /**
+     * Move/rename identity. When decoded audio is available the key is
+     * `{size, duration, fingerprint}` as the data model specifies; otherwise it
+     * is a clearly weaker `metadata-` fallback.
+     */
+    private fun contentKey(
+        entry: ScanEntryEntity,
+        metadata: TagMetadata,
+        resolved: ResolvedTrack,
+        fingerprint: String?,
+        existing: LibraryItemEntity?,
+    ): String {
+        // A missing fingerprint on an incremental read must not downgrade a strong identity.
+        if (fingerprint == null && existing?.contentKey != null) return existing.contentKey
+        val durationSeconds = metadata.durationMs / 1000
+        val payload = if (fingerprint != null) {
+            listOf(
+                entry.size?.toString().orEmpty(),
+                durationSeconds.toString(),
+                entry.cueStartMs?.toString().orEmpty(),
+                entry.cueEndMs?.toString().orEmpty(),
+                fingerprint,
+            )
+        } else {
+            listOf(
+                entry.size?.toString().orEmpty(),
+                durationSeconds.toString(),
+                resolved.title,
+                resolved.artistNames.joinToString("|"),
+                resolved.albumTitle,
+                metadata.track?.toString().orEmpty(),
+                entry.cueStartMs?.toString().orEmpty(),
+                entry.cueEndMs?.toString().orEmpty(),
+            )
+        }
         val digest = MessageDigest.getInstance("SHA-256")
-            .digest(parts.joinToString("\u0000").toByteArray(Charsets.UTF_8))
-        return "ck_" + digest.take(16).joinToString("") { "%02x".format(it) }
+            .digest(payload.joinToString("\u0000").toByteArray(Charsets.UTF_8))
+        val prefix = if (fingerprint != null) "ck_" else "metadata-"
+        return prefix + digest.take(16).joinToString("") { "%02x".format(it) }
     }
 }
 

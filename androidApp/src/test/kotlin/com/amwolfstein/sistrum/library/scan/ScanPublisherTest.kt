@@ -313,7 +313,7 @@ class ScanPublisherTest {
     ): PublishResult {
         val publisher = ScanPublisher(
             store = store,
-            metadataProvider = { metadata },
+            metadataProvider = { metadata?.let { ScannedMetadata(it) } },
             now = { 5_000L },
         )
         return publisher.publish(source, "run1", complete)

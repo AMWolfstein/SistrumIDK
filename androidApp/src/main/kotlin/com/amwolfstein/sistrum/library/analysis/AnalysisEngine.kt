@@ -51,7 +51,9 @@ class AnalysisEngine(
             val item = dao.itemById(trackId) ?: error("Unknown track $trackId")
             val descriptor = openDescriptor(item.fileUri)
                 ?: error("Unable to open audio for $trackId")
-            val values = descriptor.use { AnalysisBridge.nativeAnalyzeFd(it.fd) }
+            val values = descriptor.use {
+                AnalysisBridge.nativeAnalyzeFd(it.fd, item.cueStartMs ?: 0, item.cueEndMs ?: -1)
+            }
             if (values.size < 15) error("Analysis returned ${values.size} fields for $trackId")
             val result = TrackAnalysisEntity(
                 trackId = trackId,

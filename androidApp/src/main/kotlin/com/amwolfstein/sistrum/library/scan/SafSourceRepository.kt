@@ -54,7 +54,8 @@ class SafSourceRepository(
             )
         }
         dao.upsertSource(entity)
-        return@withContext entity
+        reconcileItemAvailability()
+        entity
     }
 
     suspend fun remove(source: LibrarySourceEntity) = withContext(Dispatchers.IO) {
@@ -69,9 +70,35 @@ class SafSourceRepository(
         }
     }
 
-    suspend fun setEnabled(source: LibrarySourceEntity, enabled: Boolean) {
+    suspend fun setEnabled(source: LibrarySourceEntity, enabled: Boolean) = withContext(Dispatchers.IO) {
         dao.setSourceEnabled(source.id, enabled)
+        reconcileItemAvailability()
     }
+
+    suspend fun exclusions(sourceId: String): List<com.amwolfstein.sistrum.library.db.LibraryExclusionEntity> =
+        dao.exclusions(sourceId)
+
+    /** Adds one excluded file or folder; the path is relative to the selected root. */
+    suspend fun addExclusion(source: LibrarySourceEntity, relativePath: String, isFolder: Boolean) {
+        val normalized = relativePath.trim().trim('/').replace('\\', '/')
+        if (normalized.isBlank()) return
+        val kind = if (isFolder) "folder" else "file"
+        val id = "ex_" + java.security.MessageDigest.getInstance("SHA-256")
+            .digest("${source.id}\u0000$kind\u0000$normalized".toByteArray())
+            .joinToString("") { "%02x".format(it) }
+            .take(32)
+        dao.upsertExclusion(
+            com.amwolfstein.sistrum.library.db.LibraryExclusionEntity(
+                id = id,
+                sourceId = source.id,
+                relativePath = normalized,
+                kind = kind,
+                createdAt = System.currentTimeMillis(),
+            ),
+        )
+    }
+
+    suspend fun removeExclusion(id: String) = dao.deleteExclusion(id)
 
     suspend fun refreshAvailability() = withContext(Dispatchers.IO) {
         dao.sources().forEach { source ->
@@ -79,6 +106,18 @@ class SafSourceRepository(
             val probe = if (!hasReadGrant(uri)) false else runCatching { canListRoot(uri) }.getOrNull()
             if (probe != null) dao.setSourceAvailability(source.id, probe)
         }
+        reconcileItemAvailability()
+    }
+
+    /**
+     * Item visibility follows the union of its memberships: a track disappears
+     * (data retained) when every enabled source that provided it is unavailable,
+     * and returns when one becomes readable again.
+     */
+    private suspend fun reconcileItemAvailability() {
+        val now = System.currentTimeMillis()
+        dao.hideUnavailableItems(now)
+        dao.revealAvailableItems(now)
     }
 
     private fun hasReadGrant(uri: Uri): Boolean = runCatching {

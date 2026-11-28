@@ -15,9 +15,10 @@ internal object AnalysisBridge {
      * Decodes [fd] through FFmpeg and returns:
      * loudness LUFS, loudness range, true peak dBFS, RMS dBFS, crest dB, spectral centroid,
      * rolloff, flatness, flux, ZCR/s, tempo BPM, onset variance, energy, danceability, brightness.
+     * [startMs]/[endMs] bound one CUE segment; 0 and -1 analyse the whole file.
      * An empty array means the file could not be decoded.
      */
-    external fun nativeAnalyzeFd(fd: Int): FloatArray
+    external fun nativeAnalyzeFd(fd: Int, startMs: Long, endMs: Long): FloatArray
 
     /** Kept for the decoder descriptor convention used by the rest of the native bridge. */
     @Suppress("unused")

@@ -99,6 +99,12 @@ class SafScanner(
 
             cueDocuments.forEach { (document, relativePath) ->
                 val cueKey = documentKeyOf(document)
+                // The audio bytes may be untouched while the sheet's titles, offsets or
+                // performers changed; every segment then needs a metadata refresh.
+                val cueVersion = request.priorVersions[cueKey]
+                val cueChanged = cueVersion == null ||
+                    cueVersion.modTime != document.lastModified ||
+                    cueVersion.size != document.size
                 val expanded = try {
                     val text = reader.readText(document)
                     val sheet = SafCueParser.parse(text)
@@ -123,7 +129,8 @@ class SafScanner(
                 }.map { entry ->
                     val previous = request.priorVersions[entry.documentKey]
                     entry.copy(
-                        changed = previous == null ||
+                        changed = cueChanged ||
+                            previous == null ||
                             previous.modTime != entry.modTime ||
                             previous.size != entry.size,
                     )

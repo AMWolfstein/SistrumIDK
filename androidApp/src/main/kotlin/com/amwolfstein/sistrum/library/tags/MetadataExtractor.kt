@@ -38,11 +38,17 @@ object TagLibBridge {
 
     external fun nativeWriteArtwork(fd: Int, data: ByteArray, mimeType: String?, description: String?): Boolean
 
+    /** Demuxer-header fields TagLib does not expose: codec name and bits per sample. */
+    external fun nativeProbeAudio(fd: Int): String
+
     /** Replaces arbitrary text properties (ReplayGain/R128), preserving unrelated tags. */
     external fun nativeWriteProperties(fd: Int, keys: Array<String>, values: Array<String>): Boolean
 
-    /** Hash of demuxed audio packets only: tag/artwork edits must not change it. */
-    external fun nativeAudioFingerprint(fd: Int): String?
+    /**
+     * Versioned fingerprint of decoded PCM (`pcm-sha256-v1:…`) for one file or CUE segment.
+     * Tag and container edits keep it stable; re-encoded audio changes it.
+     */
+    external fun nativeAudioFingerprint(fd: Int, startMs: Long, endMs: Long): String?
 }
 
 fun readRawTags(fd: Int): Map<String, List<String>> =
@@ -51,22 +57,29 @@ fun readRawTags(fd: Int): Map<String, List<String>> =
 data class ExtractedMetadata(
     val metadata: TagMetadata,
     val artwork: ByteArray? = null,
+    val fingerprint: String? = null,
 )
 
 class MetadataExtractor(private val context: Context) {
 
-    suspend fun read(uri: Uri, includeArtwork: Boolean = false): Result<ExtractedMetadata> =
+    suspend fun read(
+        uri: Uri,
+        includeArtwork: Boolean = false,
+        includeFingerprint: Boolean = false,
+        startMs: Long = 0,
+        endMs: Long = -1,
+    ): Result<ExtractedMetadata> =
         withContext(Dispatchers.IO) {
             runCatching {
                 context.contentResolver.openFileDescriptor(uri, "r")?.use { descriptor ->
                     if (isSeekable(descriptor)) {
-                        readDescriptor(descriptor, includeArtwork)
+                        readDescriptor(descriptor, includeArtwork, includeFingerprint, startMs, endMs)
                     } else {
                         // Cloud providers can hand out pipes; TagLib needs a seekable file, so stage it.
                         val staged = stage(uri)
                         try {
                             ParcelFileDescriptor.open(staged, ParcelFileDescriptor.MODE_READ_ONLY).use {
-                                readDescriptor(it, includeArtwork)
+                                readDescriptor(it, includeArtwork, includeFingerprint, startMs, endMs)
                             }
                         } finally {
                             staged.delete()
@@ -76,14 +89,31 @@ class MetadataExtractor(private val context: Context) {
             }
         }
 
-    private fun readDescriptor(descriptor: ParcelFileDescriptor, includeArtwork: Boolean): ExtractedMetadata {
-        val metadata = TagMetadataJson.parse(TagLibBridge.nativeReadMetadata(descriptor.fd))
+    private fun readDescriptor(
+        descriptor: ParcelFileDescriptor,
+        includeArtwork: Boolean,
+        includeFingerprint: Boolean,
+        startMs: Long,
+        endMs: Long,
+    ): ExtractedMetadata {
+        val parsed = TagMetadataJson.parse(TagLibBridge.nativeReadMetadata(descriptor.fd))
+        // The probe runs after the TagLib stream is closed; both share the same descriptor.
+        val probe = TagMetadataJson.parse(runCatching { TagLibBridge.nativeProbeAudio(descriptor.fd) }.getOrDefault("{}"))
+        val metadata = parsed.copy(
+            codec = parsed.codec ?: probe.codec,
+            bitsPerSample = parsed.bitsPerSample ?: probe.bitsPerSample,
+        )
         val artwork = if (includeArtwork && metadata.hasArtwork) {
             TagLibBridge.nativeReadArtwork(descriptor.fd)
         } else {
             null
         }
-        return ExtractedMetadata(metadata, artwork)
+        val fingerprint = if (includeFingerprint) {
+            TagLibBridge.nativeAudioFingerprint(descriptor.fd, startMs, endMs)
+        } else {
+            null
+        }
+        return ExtractedMetadata(metadata, artwork, fingerprint)
     }
 
     private fun isSeekable(descriptor: ParcelFileDescriptor): Boolean =
