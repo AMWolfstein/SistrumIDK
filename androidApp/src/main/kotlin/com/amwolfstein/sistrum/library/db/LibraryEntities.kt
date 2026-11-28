@@ -1,6 +1,8 @@
 package com.amwolfstein.sistrum.library.db
 
 import androidx.room.Entity
+import androidx.room.Fts4
+import androidx.room.FtsOptions
 import androidx.room.ForeignKey
 import androidx.room.Index
 import androidx.room.PrimaryKey
@@ -565,4 +567,33 @@ data class MoodRadioRow(
     val danceability: Double?,
     val brightness: Double?,
     val tempo: Double?,
+)
+
+
+/**
+ * One searchable entity. Rows are the source of truth; triggers mirror them into
+ * the `library_search_fts` virtual table so the FTS index cannot drift from Room.
+ */
+@Entity(tableName = "library_search", indices = [Index("kind"), Index(value = ["kind", "entityId"], unique = true)])
+data class LibrarySearchEntity(
+    @PrimaryKey val id: String,
+    val kind: String,
+    val entityId: String,
+    val title: String,
+    val subtitle: String = "",
+    val terms: String = "",
+)
+
+data class LibrarySearchHit(val kind: String, val entityId: String)
+
+/** FTS4 table Room creates and validates; triggers keep it in sync with [LibrarySearchEntity]. */
+@Fts4(tokenizer = FtsOptions.TOKENIZER_UNICODE61)
+@Entity(tableName = "library_search_fts")
+data class LibrarySearchFtsEntity(
+    @androidx.room.PrimaryKey @androidx.room.ColumnInfo(name = "rowid") val rowId: Int = 0,
+    val kind: String,
+    val entityId: String,
+    val title: String,
+    val subtitle: String,
+    val terms: String,
 )

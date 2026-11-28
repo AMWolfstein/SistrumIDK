@@ -302,3 +302,15 @@ Task numbers refer to [`tasks.md`](tasks.md).
 | N27 | Smart playlist dialog | `SmartPlaylistDialog.vue` | Compose builder | T14 |
 | N28 | Confirmation/restart/update dialogs | dialogs | Existing Compose components | T21/T22 |
 | N29 | Device revoke / remote server / QR | desktop-only | Excluded | K03/K04 |
+
+
+## Remediation notes (2026-11-28)
+
+| Requirement | Production path | Evidence | Status |
+| --- | --- | --- | --- |
+| Provider-backed metadata/artwork/playback/analysis | `androidApp/src/main/cpp/fd_io.h`, `taglib_bridge.cpp`, `ffmpeg_player.cpp`, `analysis_bridge.cpp` | `SafNativeIoTest` (real `content://`), `SafPublishTest`, `PlaybackFormatMatrixTest` on CPH2307/Android 15 | Implemented; permission-loss path unverified |
+| Decoded-PCM identity | `TagLibBridge.nativeAudioFingerprint`, `ScanPublisher.contentKey` | `SafPublishTest` asserts `pcm-sha256-v1:` and publication | Implemented and device-checked |
+| Legacy import/relink | `LegacyMirrorImporter` + `LegacyRelinker` | Host compile + review; no populated legacy DB on device | Implemented but unverified on real legacy data |
+| Transactional FTS | `SearchIndexSql`, `SearchIndexer`, `LocalLibraryCatalog.searchCandidates` | `SafPublishTest` indexes and finds fixture titles; migration 2→3 | Implemented; 10k scale unmeasured |
+| Album regrouping | `RelationshipRebuilder` | Host unit suite; no device re-run of the separators button | Implemented but unverified on device |
+| Lyrics Save as LRC / Embed | `LyricsFileWriter`, `TagWriter` | Code path reviewed; no device write on a copy yet | Implemented but unverified |

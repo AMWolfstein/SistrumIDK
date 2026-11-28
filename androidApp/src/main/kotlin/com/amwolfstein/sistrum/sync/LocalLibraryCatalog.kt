@@ -8,7 +8,7 @@ import java.io.File
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.combine
-import kotlinx.coroutines.flow.flowOf
+import kotlinx.coroutines.flow.flow
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.withContext
 
@@ -67,11 +67,24 @@ internal class LocalLibraryCatalog(
     override val lastListenedAt: Flow<Map<String, Long>> =
         dao.observeLocalLastListened().map { rows -> rows.associate { it.trackId to it.lastListenedAt } }
 
+    private val searchIndexer = com.amwolfstein.sistrum.library.db.SearchIndexer(database)
+
     /**
-     * The search screen narrows through these ids and then matches in memory; an empty list is
-     * treated as "no narrowing" so local search still returns results.
+     * Narrows the in-memory display matcher through the Room FTS index. Hits cover
+     * tracks, albums, artists, genres, composers and playlists in one transaction.
      */
-    override fun searchCandidates(query: String): Flow<List<LibrarySearchCandidate>> = flowOf(emptyList())
+    override fun searchCandidates(query: String): Flow<List<LibrarySearchCandidate>> = flow {
+        val text = query.trim()
+        if (text.isEmpty()) {
+            emit(emptyList())
+            return@flow
+        }
+        emit(
+            searchIndexer.search(text).map { hit ->
+                LibrarySearchCandidate(entityType = hit.kind, entityId = hit.entityId)
+            },
+        )
+    }
 
     override suspend fun analysis(trackId: String): TrackAnalysis? = withContext(Dispatchers.IO) {
         val row = dao.analysis(trackId) ?: return@withContext null

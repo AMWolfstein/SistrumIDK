@@ -22,6 +22,9 @@ import androidx.compose.material3.Surface
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.key
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.Dp
@@ -61,6 +64,7 @@ import com.amwolfstein.sistrum.ui.screens.IntegrationContent
 import com.amwolfstein.sistrum.ui.screens.OnlineArtworkContent
 import com.amwolfstein.sistrum.ui.screens.SeparatorsContent
 import com.amwolfstein.sistrum.ui.screens.SmartPlaylistContent
+import com.amwolfstein.sistrum.ui.screens.smartConfig
 import com.amwolfstein.sistrum.ui.screens.LastFmContent
 import com.amwolfstein.sistrum.ui.screens.LyricsContent
 import com.amwolfstein.sistrum.ui.screens.PlaybackSettingsContent
@@ -183,6 +187,8 @@ internal fun AppDestinationContent(
     val selectedPlaylistDetails = remember(playlistDetailsUiState, selectedPlaylistId) {
         selectedPlaylistId?.let { playlistDetailsUiStateFor(playlistDetailsUiState, it) } ?: PlaylistDetailsUiState()
     }
+    // Set while the smart editor opens an existing playlist instead of a new one.
+    var editingSmartPlaylistId by remember { androidx.compose.runtime.mutableStateOf<String?>(null) }
     val selectedArtistDetails = remember(artistDetailsUiState, selectedArtistId) {
         selectedArtistId?.let { artistDetailsUiStateFor(artistDetailsUiState, it) } ?: ArtistDetailsUiState()
     }
@@ -686,13 +692,27 @@ internal fun AppDestinationContent(
                                 onImportM3u8 = library.playlists.onImportM3u8,
                                 onExportM3u8 = library.playlists.onExportM3u8,
                                 onNewSmartPlaylist = {
+                                    editingSmartPlaylistId = null
                                     onIntent(AppIntent.OpenPage(AppStackPage.SmartPlaylistEditor))
                                 },
                             )
-                            AppStackPage.SmartPlaylistEditor -> SmartPlaylistContent(
-                                modifier = Modifier.fillMaxSize(),
-                                onSave = library.playlists.onCreateSmart,
-                            )
+                            AppStackPage.SmartPlaylistEditor -> {
+                                val editing = editingSmartPlaylistId?.let {
+                                    playlistDetailsUiStateFor(playlistDetailsUiState, it).playlist
+                                }
+                                SmartPlaylistContent(
+                                    modifier = Modifier.fillMaxSize(),
+                                    initialName = editing?.name.orEmpty(),
+                                    initialConfig = editing?.smartConfig(),
+                                    onSave = { name, config ->
+                                        if (editing != null) {
+                                            library.playlists.onUpdateSmart(editing.id, name, config)
+                                        } else {
+                                            library.playlists.onCreateSmart(name, config)
+                                        }
+                                    },
+                                )
+                            }
                             AppStackPage.PlaylistDetails -> PlaylistDetailsContent(
                                 uiState = selectedPlaylistDetails,
                                 contentPadding = contentPadding,
@@ -716,6 +736,10 @@ internal fun AppDestinationContent(
                                 onPlaylistDelete = { playlistId ->
                                     onPlaylistDelete(playlistId)
                                     onIntent(AppIntent.NavigateBack)
+                                },
+                                onEditSmartRules = { playlistId ->
+                                    editingSmartPlaylistId = playlistId
+                                    onIntent(AppIntent.OpenPage(AppStackPage.SmartPlaylistEditor))
                                 },
                             )
                             AppStackPage.LibraryTracks -> LibraryTracksContent(

@@ -56,14 +56,20 @@ internal fun SmartPlaylistContent(
     modifier: Modifier = Modifier,
     error: String? = null,
     saving: Boolean = false,
+    initialName: String = "",
+    initialConfig: SmartPlaylistConfig? = null,
     onSave: (String, SmartPlaylistConfig) -> Unit = { _, _ -> },
 ) {
-    var name by remember { mutableStateOf("") }
-    val root = remember { GroupDraft().also { it.rules += RuleDraft() } }
-    var live by remember { mutableStateOf(true) }
-    var limitEnabled by remember { mutableStateOf(false) }
-    var limitCount by remember { mutableStateOf("25") }
-    var limitBy by remember { mutableStateOf("random") }
+    var name by remember(initialConfig) { mutableStateOf(initialName) }
+    val root = remember(initialConfig) {
+        initialConfig?.root?.toDraft() ?: GroupDraft().also { it.rules += RuleDraft() }
+    }
+    var live by remember(initialConfig) { mutableStateOf(initialConfig?.liveUpdating ?: true) }
+    var limitEnabled by remember(initialConfig) { mutableStateOf(initialConfig?.limit?.enabled ?: false) }
+    var limitCount by remember(initialConfig) {
+        mutableStateOf((initialConfig?.limit?.count ?: 25).toString())
+    }
+    var limitBy by remember(initialConfig) { mutableStateOf(initialConfig?.limit?.by ?: "random") }
     var localError by remember { mutableStateOf<String?>(null) }
 
     Column(
@@ -239,6 +245,24 @@ private fun SortPicker(selected: String, onSelected: (String) -> Unit) {
 }
 
 private fun GroupDraft.setMatch(value: String) { match = value }
+
+/** Loads a persisted rule tree back into the editable drafts. */
+private fun SmartRuleGroup.toDraft(): GroupDraft = GroupDraft(match).also { draft ->
+    rules.forEach { rule ->
+        val values = when (val value = rule.value) {
+            is JsonArray -> value.mapNotNull { (it as? JsonPrimitive)?.content }
+            is JsonPrimitive -> listOfNotNull(value.content)
+            else -> emptyList()
+        }
+        draft.rules += RuleDraft(
+            field = rule.field,
+            op = rule.op,
+            value = values.firstOrNull().orEmpty(),
+            secondValue = values.getOrNull(1).orEmpty(),
+        )
+    }
+    groups.forEach { draft.groups += it.toDraft() }
+}
 
 private fun GroupDraft.toGroup(): SmartRuleGroup = SmartRuleGroup(
     match = match,

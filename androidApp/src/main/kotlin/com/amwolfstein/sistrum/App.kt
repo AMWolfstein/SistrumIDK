@@ -697,6 +697,8 @@ internal fun App(
                     },
                     onSearchLyrics = playback.onSearchLyrics,
                     onLyricsSelected = playback.onLyricsSelected,
+                    onLyricsSaveAsLrc = playback.onLyricsSaveAsLrc,
+                    onLyricsEmbed = playback.onLyricsEmbed,
                     playlists = library.playlists.availablePlaylists,
                     onPlaylistMembershipChange = library.playlists.onMembershipChange,
                     onCreatePlaylistRequested = { trackIds ->

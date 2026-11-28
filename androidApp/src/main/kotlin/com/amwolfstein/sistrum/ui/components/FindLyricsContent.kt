@@ -8,6 +8,7 @@ import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.IntrinsicSize
 import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
@@ -21,11 +22,13 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.remember
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
@@ -128,9 +131,13 @@ internal fun FindLyricsPreviewContent(
     track: LibraryTrack,
     lyric: LyricsSearchResult,
     onSelected: suspend (String, LyricsSearchResult) -> Unit,
+    onSaveLrc: suspend (String, LyricsSearchResult) -> String? = { _, _ -> null },
+    onEmbed: suspend (String, LyricsSearchResult) -> String? = { _, _ -> null },
     onDismiss: () -> Unit,
 ) {
     val scope = rememberCoroutineScope()
+    val context = LocalContext.current
+    var persistMessage by remember { mutableStateOf<String?>(null) }
     val colors = LocalSistrumColors.current
     val density = LocalDensity.current
     val topSafeInset = with(density) { WindowInsets.statusBars.getTop(this).toDp() }
@@ -141,7 +148,40 @@ internal fun FindLyricsPreviewContent(
             LazyColumn(Modifier.weight(1f)) {
                 item { Text(lyric.content, style = MaterialTheme.typography.bodyMedium, color = colors.textMain) }
             }
-            SistrumPillButton(stringResource(R.string.find_lyrics_select), { scope.launch { onSelected(track.id, lyric); onDismiss() } }, SistrumPillButtonVariant.Primary, Modifier.padding(vertical = 12.dp))
+            SistrumPillButton(stringResource(R.string.find_lyrics_select), { scope.launch { onSelected(track.id, lyric); onDismiss() } }, SistrumPillButtonVariant.Primary, Modifier.padding(top = 12.dp))
+            Row(Modifier.fillMaxWidth().padding(top = 8.dp), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                SistrumPillButton(
+                    stringResource(R.string.find_lyrics_save_lrc),
+                    {
+                        scope.launch {
+                            persistMessage = onSaveLrc(track.id, lyric)
+                                ?: context.getString(R.string.find_lyrics_saved_lrc)
+                        }
+                    },
+                    SistrumPillButtonVariant.Secondary,
+                    Modifier.weight(1f),
+                )
+                SistrumPillButton(
+                    stringResource(R.string.find_lyrics_embed),
+                    {
+                        scope.launch {
+                            persistMessage = onEmbed(track.id, lyric)
+                                ?: context.getString(R.string.find_lyrics_embedded)
+                        }
+                    },
+                    SistrumPillButtonVariant.Secondary,
+                    Modifier.weight(1f),
+                )
+            }
+            persistMessage?.let { message ->
+                Text(
+                    message,
+                    style = MaterialTheme.typography.bodySmall,
+                    color = colors.textMuted,
+                    modifier = Modifier.padding(top = 8.dp),
+                )
+            }
+            Spacer(Modifier.height(12.dp))
         }
     }
 }

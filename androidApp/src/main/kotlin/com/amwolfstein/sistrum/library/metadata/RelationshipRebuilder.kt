@@ -2,10 +2,12 @@ package com.amwolfstein.sistrum.library.metadata
 
 import androidx.room.withTransaction
 import com.amwolfstein.sistrum.library.db.AlbumArtistEntity
+import com.amwolfstein.sistrum.library.db.AlbumEntity
 import com.amwolfstein.sistrum.library.db.ArtistEntity
 import com.amwolfstein.sistrum.library.db.ComposerEntity
 import com.amwolfstein.sistrum.library.db.GenreEntity
 import com.amwolfstein.sistrum.library.db.LibraryDatabase
+import com.amwolfstein.sistrum.library.db.LibraryItemEntity
 import com.amwolfstein.sistrum.library.db.TrackAlbumArtistEntity
 import com.amwolfstein.sistrum.library.db.TrackArtistEntity
 import com.amwolfstein.sistrum.library.db.TrackComposerEntity
@@ -23,14 +25,17 @@ data class RebuildResult(
     val genres: Int,
     val composers: Int,
     val albums: Int,
+    val regrouped: Int,
 )
 
 /**
  * Re-splits every stored raw tag value with the current delimiter configuration and rebuilds the
- * derived artist / album-artist / genre / composer entities and junctions.
+ * derived artist / album-artist / album / genre / composer entities and junctions.
  *
  * It reads only Room: no audio is opened, no tag is rewritten, and analysis is untouched. Raw
  * values, favorites, ratings, artwork, playlists, lyrics and analysis rows stay as they are.
+ * Album identity follows the configured album-artist split, so changing that delimiter groups
+ * tracks under the right album without a rescan.
  */
 class RelationshipRebuilder(private val database: LibraryDatabase) {
     private val json = Json { ignoreUnknownKeys = true }
@@ -44,21 +49,30 @@ class RelationshipRebuilder(private val database: LibraryDatabase) {
             val artists = dao.allArtists().associateByTo(linkedMapOf()) { it.id }
             val genres = linkedMapOf<String, GenreEntity>()
             val composers = linkedMapOf<String, ComposerEntity>()
+            val existingAlbums = dao.allAlbums()
+            // Regrouping re-keys an album id; keep artwork reachable by the title it belonged to.
+            val artworkByTitle = existingAlbums
+                .filter { it.artworkKey != null }
+                .associate { TagNormalizer.normalize(it.title) to (it.artworkKey to it.artworkSource) }
 
-            items.forEach { item ->
-                val artistNames = split(item.rawArtistNames, config.artist)
-                val albumArtistNames = split(item.rawAlbumArtistNames, config.albumArtist)
+            var regrouped = 0
+            val albumBuilders = linkedMapOf<String, AlbumBuilder>()
+
+            items.forEach { original ->
+                val artistNames = split(original.rawArtistNames, config.artist)
+                val albumArtistNames = split(original.rawAlbumArtistNames, config.albumArtist)
                     .ifEmpty { artistNames }
-                val genreNames = split(item.rawGenreNames, config.genre)
-                val composerNames = split(item.rawComposerNames, config.composer)
+                val genreNames = split(original.rawGenreNames, config.genre)
+                val composerNames = split(original.rawComposerNames, config.composer)
+
+                val item = regroup(original, albumArtistNames, albumBuilders, artworkByTitle)
+                if (item.albumId != original.albumId) regrouped += 1
 
                 val trackArtists = artistNames.mapIndexed { index, name ->
-                    val id = artistId(artists, name)
-                    TrackArtistEntity(item.id, id, index)
+                    TrackArtistEntity(item.id, artistId(artists, name), index)
                 }
                 val trackAlbumArtists = albumArtistNames.mapIndexed { index, name ->
-                    val id = artistId(artists, name)
-                    TrackAlbumArtistEntity(item.id, id, index)
+                    TrackAlbumArtistEntity(item.id, artistId(artists, name), index)
                 }
                 val trackGenres = genreNames.map { name ->
                     val id = TagNormalizer.key("genre", name)
@@ -96,28 +110,36 @@ class RelationshipRebuilder(private val database: LibraryDatabase) {
                 if (trackComposers.isNotEmpty()) dao.upsertTrackComposers(trackComposers)
             }
 
-            // Album artists are the union of their tracks' configured album-artist names.
-            val albums = dao.allAlbums()
-            var albumsUpdated = 0
-            albums.forEach { album ->
-                val albumArtistNames = dao.itemsForAlbum(album.id)
-                    .flatMap { item ->
-                        split(item.rawAlbumArtistNames, config.albumArtist)
-                            .ifEmpty { split(item.rawArtistNames, config.artist) }
-                    }
-                    .distinct()
-                val relations = albumArtistNames.mapIndexed { index, name ->
-                    AlbumArtistEntity(album.id, artistId(artists, name), index)
+            // Albums are derived from the regrouped items, not from their previous ids.
+            albumBuilders.values.forEach { builder ->
+                val artwork = builder.artworkKey ?: artworkByTitle[TagNormalizer.normalize(builder.title)]?.first
+                dao.upsertAlbums(
+                    listOf(
+                        AlbumEntity(
+                            id = builder.id,
+                            title = builder.title,
+                            sortTitle = TagNormalizer.sortName(builder.title),
+                            normalizationKey = TagNormalizer.normalize(
+                                builder.title + "\u0000" + builder.albumArtistNames.firstOrNull().orEmpty(),
+                            ),
+                            year = builder.year,
+                            primaryAlbumArtistId = builder.albumArtistNames.firstOrNull()
+                                ?.let { TagNormalizer.key("artist", it) },
+                            artworkKey = artwork,
+                        ),
+                    ),
+                )
+                val relations = builder.albumArtistNames.mapIndexed { index, name ->
+                    AlbumArtistEntity(builder.id, artistId(artists, name), index)
                 }
-                dao.deleteAlbumArtists(album.id)
+                dao.deleteAlbumArtists(builder.id)
                 if (relations.isNotEmpty()) {
                     dao.upsertArtists(relations.map { artists.getValue(it.artistId) }.distinctBy { it.id })
                     dao.upsertAlbumArtists(relations)
-                    dao.updateAlbumPrimaryArtist(album.id, relations.first().artistId)
+                    dao.updateAlbumPrimaryArtist(builder.id, relations.first().artistId)
                 } else {
-                    dao.updateAlbumPrimaryArtist(album.id, null)
+                    dao.updateAlbumPrimaryArtist(builder.id, null)
                 }
-                albumsUpdated += 1
             }
 
             if (artists.isNotEmpty()) dao.upsertArtists(artists.values.toList())
@@ -129,15 +151,72 @@ class RelationshipRebuilder(private val database: LibraryDatabase) {
             dao.deleteOrphanComposers()
             dao.deleteOrphanAlbums()
             dao.deleteOrphanArtists()
+            com.amwolfstein.sistrum.library.db.SearchIndexer(database).rebuild()
 
             RebuildResult(
                 items = items.size,
                 artists = artists.size,
                 genres = genres.size,
                 composers = composers.size,
-                albums = albumsUpdated,
+                albums = albumBuilders.size,
+                regrouped = regrouped,
             )
         }
+    }
+
+    /** Recomputes the album identity from the configured album-artist split. */
+    private suspend fun regroup(
+        item: LibraryItemEntity,
+        albumArtistNames: List<String>,
+        builders: MutableMap<String, AlbumBuilder>,
+        artworkByTitle: Map<String, Pair<String?, String?>>,
+    ): LibraryItemEntity {
+        val dao = database.libraryDao()
+        val albumTitle = item.albumTitle
+        val albumId = if (albumTitle.isBlank() && albumArtistNames.isEmpty()) {
+            null
+        } else {
+            TagNormalizer.key(
+                "album",
+                "${albumTitle.ifBlank { "Unknown Album" }}\u0000${albumArtistNames.firstOrNull().orEmpty()}",
+            )
+        }
+        albumId?.let { id ->
+            val builder = builders.getOrPut(id) {
+                AlbumBuilder(
+                    id = id,
+                    title = albumTitle.ifBlank { "Unknown Album" },
+                    albumArtistNames = albumArtistNames,
+                    year = item.year,
+                    artworkKey = artworkByTitle[TagNormalizer.normalize(albumTitle.ifBlank { "Unknown Album" })]?.first,
+                )
+            }
+            if (builder.year == null) builder.year = item.year
+        }
+        if (albumId == item.albumId) return item
+        // The foreign key requires the album row to exist before the item points at it.
+        albumId?.let { id ->
+            val builder = builders.getValue(id)
+            dao.upsertAlbums(
+                listOf(
+                    AlbumEntity(
+                        id = id,
+                        title = builder.title,
+                        sortTitle = TagNormalizer.sortName(builder.title),
+                        normalizationKey = TagNormalizer.normalize(
+                            builder.title + "\u0000" + builder.albumArtistNames.firstOrNull().orEmpty(),
+                        ),
+                        year = builder.year,
+                        primaryAlbumArtistId = builder.albumArtistNames.firstOrNull()
+                            ?.let { TagNormalizer.key("artist", it) },
+                        artworkKey = builder.artworkKey,
+                    ),
+                ),
+            )
+        }
+        val updated = item.copy(albumId = albumId)
+        dao.upsertItem(updated)
+        return updated
     }
 
     private fun artistId(artists: MutableMap<String, ArtistEntity>, name: String): String {
@@ -165,4 +244,12 @@ class RelationshipRebuilder(private val database: LibraryDatabase) {
             listOf(raw).map { it.trim() }.filter { it.isNotEmpty() }
         }
     }
+
+    private class AlbumBuilder(
+        val id: String,
+        val title: String,
+        val albumArtistNames: List<String>,
+        var year: Int?,
+        val artworkKey: String?,
+    )
 }

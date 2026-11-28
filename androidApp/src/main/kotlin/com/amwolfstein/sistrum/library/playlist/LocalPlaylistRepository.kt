@@ -124,6 +124,7 @@ class LocalPlaylistRepository(
 
     suspend fun updateSmart(
         playlistId: String,
+        name: String,
         config: SmartPlaylistConfig,
         libraryTracks: List<com.amwolfstein.sistrum.sync.LibraryTrack>,
     ) = withContext(Dispatchers.IO) {
@@ -134,6 +135,7 @@ class LocalPlaylistRepository(
         database.withTransaction {
             dao.upsertPlaylist(
                 playlist.copy(
+                    name = name.trim().takeIf { it.isNotBlank() } ?: playlist.name,
                     rulesJson = SmartPlaylistJson.encode(config),
                     liveUpdating = config.liveUpdating,
                     limitEnabled = config.limit.enabled,

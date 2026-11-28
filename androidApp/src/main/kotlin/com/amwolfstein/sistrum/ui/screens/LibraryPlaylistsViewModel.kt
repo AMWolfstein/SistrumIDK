@@ -174,6 +174,21 @@ internal class LibraryPlaylistsViewModel(private val context: Context, syncStore
         }
     }
 
+    fun updateSmartPlaylist(
+        playlistId: String,
+        name: String,
+        config: com.amwolfstein.sistrum.library.playlist.SmartPlaylistConfig,
+        onUpdated: () -> Unit = {},
+    ) {
+        viewModelScope.launch {
+            runCatching {
+                val repository = com.amwolfstein.sistrum.library.playlist.LocalPlaylistRepository(context)
+                repository.updateSmart(playlistId, name, config, syncStore.tracks.first())
+            }.onSuccess { onUpdated() }
+                .onFailure { Log.w("LibraryPlaylists", "Smart playlist update failed", it) }
+        }
+    }
+
     fun changePlaylistMembership(playlistId: String, trackIds: List<String>, add: Boolean) {
         if (playlistId == FavoritesPlaylistId) return
         val operation = if (add) PlaylistMutationOperation.ADD_TRACK else PlaylistMutationOperation.REMOVE_TRACK

@@ -31,6 +31,8 @@ data class TagEdit(
     val copyright: String? = null,
     val artwork: ByteArray? = null,
     val artworkMime: String? = "image/jpeg",
+    /** Embedded lyrics; written through the same staged/journaled path as other tags. */
+    val lyrics: String? = null,
 )
 
 sealed class TagWriteResult {
@@ -198,6 +200,16 @@ class TagWriter(
                     return false
                 }
             }
+            if (edit.lyrics != null) {
+                if (!TagLibBridge.nativeWriteProperties(
+                        descriptor.fd,
+                        arrayOf("LYRICS"),
+                        arrayOf(edit.lyrics),
+                    )
+                ) {
+                    return false
+                }
+            }
             return true
         }
     }
@@ -207,7 +219,7 @@ class TagWriter(
 
     private fun audioFingerprint(file: File): String? =
         ParcelFileDescriptor.open(file, ParcelFileDescriptor.MODE_READ_ONLY).use { descriptor ->
-            TagLibBridge.nativeAudioFingerprint(descriptor.fd)
+            TagLibBridge.nativeAudioFingerprint(descriptor.fd, 0, -1)
         }
 
     private fun verifyEdit(before: TagMetadata, after: TagMetadata, edit: TagEdit): String? {
@@ -235,6 +247,7 @@ class TagWriter(
             if (edit.disc != null && after.disc != edit.disc) error("Disc number was not written")
             if (edit.isrc != null && after.first("ISRC") != edit.isrc) error("ISRC was not written")
             if (edit.artwork != null && !after.hasArtwork) error("Artwork was not written")
+            if (edit.lyrics != null && after.lyrics != edit.lyrics) error("Lyrics were not written")
             null
         }.getOrElse { it.message ?: "Verification failed" }
     }

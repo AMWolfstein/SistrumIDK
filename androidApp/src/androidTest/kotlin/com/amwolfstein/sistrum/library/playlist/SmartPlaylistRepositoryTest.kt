@@ -70,6 +70,7 @@ class SmartPlaylistRepositoryTest {
 
         repository.updateSmart(
             id,
+            "A only",
             config.copy(root = SmartRuleGroup(rules = listOf(SmartRule("rating", "gte", JsonPrimitive(4))))),
             catalog.tracks.first(),
         )
@@ -77,6 +78,7 @@ class SmartPlaylistRepositoryTest {
 
         repository.updateSmart(
             id,
+            "A only",
             config.copy(root = SmartRuleGroup(rules = listOf(SmartRule("artist", "is", JsonPrimitive("B"))))),
             catalog.tracks.first(),
         )

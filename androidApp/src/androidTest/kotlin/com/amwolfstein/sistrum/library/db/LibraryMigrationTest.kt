@@ -46,7 +46,39 @@ class LibraryMigrationTest {
         }
     }
 
+    @Test
+    fun migrate2To3CreatesSearchIndexAndTriggers() {
+        helper.createDatabase(TEST_DB_2_3, 2).apply {
+            execSQL(
+                "INSERT INTO library_sources (id, treeUri, displayName, isRemovable, enabled, available, createdAt) " +
+                    "VALUES ('s1', 'content://authority/tree/x', 'Music', 0, 1, 1, 1)",
+            )
+            close()
+        }
+
+        val migrated = helper.runMigrationsAndValidate(
+            TEST_DB_2_3, 4, true, LibraryDatabase.MIGRATION_2_3, LibraryDatabase.MIGRATION_3_4,
+        )
+        migrated.execSQL(
+            "INSERT INTO library_search (id, kind, entityId, title, subtitle, terms) " +
+                "VALUES ('track:t1', 'track', 't1', 'Café 東京', '', 'Artist')",
+        )
+        migrated.query(
+            "SELECT entityId FROM library_search_fts WHERE library_search_fts MATCH 'Caf*'",
+        ).use { cursor ->
+            assertEquals(1, cursor.count)
+            cursor.moveToFirst()
+            assertEquals("t1", cursor.getString(0))
+        }
+        migrated.execSQL("DELETE FROM library_search WHERE id = 'track:t1'")
+        migrated.query("SELECT count(*) FROM library_search_fts").use { cursor ->
+            cursor.moveToFirst()
+            assertEquals(0, cursor.getInt(0))
+        }
+    }
+
     private companion object {
         const val TEST_DB = "library-migration-test.db"
+        const val TEST_DB_2_3 = "library-migration-2-3-test.db"
     }
 }

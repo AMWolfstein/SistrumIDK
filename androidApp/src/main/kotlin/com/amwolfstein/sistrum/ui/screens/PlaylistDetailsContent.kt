@@ -29,6 +29,7 @@ import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.dp
 import dev.chrisbanes.haze.HazeState
 import com.amwolfstein.sistrum.R
+import com.amwolfstein.sistrum.sync.LibraryPlaylist
 import com.amwolfstein.sistrum.ui.components.ArtworkHeroBackdrop
 import com.amwolfstein.sistrum.ui.components.DetailHero
 import com.amwolfstein.sistrum.ui.components.HeroCard
@@ -75,6 +76,7 @@ internal fun PlaylistDetailsContent(
     onPlaylistAddToQueue: (List<String>) -> Unit = {},
     onPlaylistUpdate: (String, String, android.net.Uri?, Boolean) -> Unit = { _, _, _, _ -> },
     onPlaylistDelete: (String) -> Unit = {},
+    onEditSmartRules: (String) -> Unit = {},
 ) {
     val playlist = uiState.playlist
     if (playlist == null) {
@@ -160,7 +162,14 @@ internal fun PlaylistDetailsContent(
                             onPlayNext = onPlaylistPlayNext,
                             onAddToQueue = onPlaylistAddToQueue,
                             onReorder = { isReordering = true },
-                            onEdit = { showPlaylistEditor = true },
+                            onEdit = {
+                                if (playlist.isSmartPlaylist()) {
+                                    playlistMenuExpanded = false
+                                    onEditSmartRules(playlist.id)
+                                } else {
+                                    showPlaylistEditor = true
+                                }
+                            },
                             onDelete = { showDeleteConfirmation = true },
                             anchor = action,
                         )
@@ -273,3 +282,18 @@ internal fun movePlaylistTrack(trackIds: List<String>, fromIndex: Int, toIndex: 
 
 // The playlist hero occupies LazyColumn index 0; track rows begin immediately after it.
 internal fun playlistTrackIndex(lazyListIndex: Int): Int = lazyListIndex - 1
+
+
+/** Smart playlists carry their rule flag in the catalog metadata. */
+internal fun LibraryPlaylist.isSmartPlaylist(): Boolean = runCatching {
+    val root = kotlinx.serialization.json.Json.parseToJsonElement(metadataJson)
+        as? kotlinx.serialization.json.JsonObject
+    (root?.get("is_smart") as? kotlinx.serialization.json.JsonPrimitive)?.content?.toBooleanStrictOrNull()
+}.getOrNull() == true
+
+/** Decoded rule configuration, or null for manual playlists. */
+internal fun LibraryPlaylist.smartConfig(): com.amwolfstein.sistrum.library.playlist.SmartPlaylistConfig? = runCatching {
+    val root = kotlinx.serialization.json.Json.parseToJsonElement(metadataJson)
+        as? kotlinx.serialization.json.JsonObject
+    root?.get("rules")?.toString()
+}.getOrNull().let(com.amwolfstein.sistrum.library.playlist.SmartPlaylistJson::decode)

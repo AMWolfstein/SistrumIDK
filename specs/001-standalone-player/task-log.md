@@ -147,3 +147,55 @@
 - `LocalLibraryCatalog`/`AndroidPlaybackRuntime` expose local mood candidates and readiness; Mood Radio start, refill and the 80/15/3 selection now use local data. The smart-playlist builder already exposes the same mood fields, which start returning matches once analyses exist.
 - Tests: device `MoodRepositoryTest` (only completed mood analyses become candidates, pending excluded, two-candidate gate) — 2/2 PASS on OnePlus CPH2307 (Android 15); existing sharedLogic Mood Radio weighting/selection tests remain green. Host suites: androidApp 390/390, sharedLogic 59/59; `assembleDevDebug` succeeds.
 - Limitation: selection quality was not listened to on the device; no audible check was possible.
+
+
+## Remediation TOR004/TOR005 (in progress) — SAF ingest, catalog identity, library flows
+
+**Baseline**: `3ed1de2`. **No PASS claimed for either TOR yet**; the checkboxes stay open until every mandatory item below is closed and independently reviewed.
+
+### Done and verified in this pass
+
+- **Native descriptor I/O (T001/T005/T011/T016)**: new `fd_io.h` implements a pread/pwrite AVIOContext plus a TagLib `IOStream`. Playback, metadata, artwork, analysis and fingerprinting no longer reopen `/proc/self/fd/<fd>`. The AVIO read callback returns `AVERROR_EOF` at end of file; returning `0` made FFmpeg's probe loop forever (found and fixed during device testing). The demuxer owns the descriptor only on the playback path (`detachFd`); TagLib/analysis/fingerprint leave the Kotlin descriptor open.
+- **Baseline record (T001)**: `baseline.md` records JDK/SDK/NDK/CMake, FFmpeg 9.0.2 source SHA-256 `84960df9…`, TagLib/aubio/FFTW hashes, configure flags, JNI exports, APK size (82,666,881 B), ABI, version and debug signature.
+- **Decoded-PCM identity (T005/T006)**: `nativeAudioFingerprint(fd, startMs, endMs)` streams decoded mono 44.1 kHz float32 through SHA-256 and returns `pcm-sha256-v1:<hex>`; CUE bounds are honoured. Scan publication now stores the fingerprint and builds `content_key` from `{size, duration, segment, fingerprint}` (metadata fallback otherwise). Metadata also carries codec and bit depth from a header-only demux probe.
+- **Metadata refresh (T005)**: rows whose `otherMetadataJson` is still `{}` are re-read on the next scan even when size/mtime are unchanged, so the pre-fix SAF catalog repairs itself.
+- **Legacy import and relink (T002/T013)**: `LegacyMirrorImporter.importIfNeeded()` now runs at startup; new `LegacyRelinker` matches unresolved refs by normalized title/artist/album, then path stem, then title+duration, writes resolved ids, appends memberships to the imported playlists with LexoRank, applies legacy favorites and keeps unmatched refs `unresolved`.
+- **Source visibility (T003)**: disabling an unavailable source or losing its grant now hides items whose every membership is unavailable, and reveals them again when a membership returns; rows and user state are preserved.
+- **Scanning (T004)**: retry budget is 3 × 2 s with `EXTRA_LOADING` handling; CUE text changes mark all its segments changed; cancel publishes the checkpointed rows without removals; `onTimeout` pauses the foreground scan instead of losing it; exclusions have add/remove UI; opt-out automatic scan runs at app start at most every 6 hours; metadata read failures surface as the source's last scan error.
+- **Search (T010)**: `library_search` canonical table plus an FTS4 `library_search_fts` index synchronised by triggers, migration 2→3, and a transactional `SearchIndexer` covering tracks/albums/artists/genres/composers/playlists. `LocalLibraryCatalog.searchCandidates` now queries it (prefix MATCH, LIKE fallback for scripts such as CJK).
+- **Separators/albums (T009)**: raw pre-split tag values are stored, so `RelationshipRebuilder` re-splits without audio reads; it now recomputes each item's album id from the configured album artist, rebuilds album rows/relations, preserves artwork by title, deletes orphans and rebuilds the search index.
+- **Editor (T007)**: the tag editor is reachable from the track context menu; saves use the staged/journaled `TagWriter`.
+- **Smart playlists (T014)**: the editor loads an existing playlist's name/rules/limit/live flag and saves through `updateSmart`; manual playlists keep the rename flow.
+- **Lyrics persistence (T015)**: Save as LRC creates/replaces `<stem>.lrc` beside the track via SAF (write grant required, UTF-8), and Embed writes `LYRICS` through the staged/journaled writer with audio-fingerprint verification.
+- **Verification**: host `:androidApp:testDevDebugUnitTest` 389/389 and `:sharedLogic:testAndroidHostTest` 59/59. Device (CPH2307, Android 15): `SafPublishTest` (3 formats published, `pcm-sha256-v1:` stored, FTS hits), `FfmpegDescriptorTest`, `PlaybackFormatMatrixTest`, `AnalysisEngineTest`, `LibraryDatabaseTest`, `LocalLibraryCatalogTest`, `LocalLyricsRepositoryTest`, `LibraryMigrationTest` — 21/21 PASS. Earlier in the pass, `SafNativeIoTest` passed against a real `content://` document (metadata, 15-field analysis, fingerprint, decoder duration) before the connected-test reinstall cleared app data and its persisted SAF grant.
+
+### Still open (blocks TOR004/TOR005/TOR006 closure)
+
+- T001: owner must supply a release keystore for a signed release APK; baseline currently records the debug artifact only.
+- T004: permissions-loss/SD-unmount/process-death and MediaStore fallback are implemented but not verified on device; the dataSync foreground-service budget on this device was exhausted (`Stop FGS timeout`), so a full 777-file UI scan could not finish.
+- T005/T007: complete alias/sort/totals matrix and batch editor UI are not verified; artwork add/replace/remove UI, atomic replace on providers without truncate support, and interrupted-write recovery need device tests on copies.
+- T008: album cover update/removal, size variants in the UI, and WebP cleanup are not re-verified.
+- T010: 10k-track latency/memory measurements are not recorded.
+- T011/T012: audible output, route/focus changes, gapless/crossfade/underrun measurements and WavPack on device remain unverified.
+- T014: `duration` units and `is_favorite` semantics still need comparison against upstream.
+- T016/T017/T018/T019 (TOR006): the analyzer still uses the mean-square loudness approximation, not the avfilter `ebur128` graph; upstream producer goldens cannot be generated because the Airmedy desktop producer is not installed on this machine (BL-18). Clean-install restoration and the final normalization/Mood checks depend on that work.
+
+
+### Independent review round 1 (native and Kotlin)
+
+Two independent read-only reviews ran over the diff. Fixes applied:
+
+- AVIO read now returns `AVERROR_EOF`; returning `0` made FFmpeg's probe loop forever (this was the real cause of the observed device hang).
+- Playback prepare no longer double-closes a failed `open_slot` descriptor; preload and crossfade handle a `-1` slot returned by a racing callback.
+- CUE seeks use the stream time base; segment analysis skips pre-start frames without ending and offsets planar channel pointers correctly; flush loops obey the segment end.
+- `EINTR` is retried; TagLib `insert` clamps `replace`; `length()` no longer treats pipes as regular files.
+- The metadata/header probe moved to its own JNI call after the TagLib stream closes.
+- Album regrouping inserts the new album row before re-pointing items (foreign-key order); the rebuilt album keeps its derived artwork.
+- Lyrics sidecars are written to a temporary document first and renamed; CUE segments get per-segment sidecar names.
+- Scan metadata/fingerprint extraction happens before the Room write transaction, so the single writer is no longer held during SAF reads.
+- FTS is a declared Room `@Fts4` entity (migration 3→4), so strict migration validation accepts it; the index is backfilled at startup when empty and refreshed per edited item/playlist.
+- Availability reconciliation also runs after scan failure and source re-add; surviving memberships no longer force `available=true` for a disabled source.
+- Unresolved legacy references are shown in Library settings (count only; never deleted).
+- Smart editing persists the edited name; `contentKey` no longer downgrades a strong identity when an incremental read lacks a fingerprint.
+
+Validation after fixes: `LibraryMigrationTest` 2/2 (1→2 and 2→4 with FTS validation), `SafPublishTest` 1/1, `SmartPlaylistRepositoryTest` 3/3 on CPH2307.

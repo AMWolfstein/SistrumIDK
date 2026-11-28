@@ -126,6 +126,7 @@ internal data class LibraryPlaylistsModel(
     val onImportM3u8: (Uri) -> Unit = {},
     val onExportM3u8: (String, Uri) -> Unit = { _, _ -> },
     val onCreateSmart: (String, com.amwolfstein.sistrum.library.playlist.SmartPlaylistConfig) -> Unit = { _, _ -> },
+    val onUpdateSmart: (String, String, com.amwolfstein.sistrum.library.playlist.SmartPlaylistConfig) -> Unit = { _, _, _ -> },
     val onMembershipChange: (String, List<String>, Boolean) -> Unit = { _, _, _ -> },
 )
 
@@ -224,6 +225,8 @@ internal data class PlaybackModel(
     val onRomanizationToggle: () -> Unit = {},
     val onSearchLyrics: suspend (LibraryTrack, String, String) -> List<LyricsSearchResult> = { _, _, _ -> emptyList() },
     val onLyricsSelected: suspend (String, LyricsSearchResult) -> Unit = { _, _ -> },
+    val onLyricsSaveAsLrc: suspend (String, LyricsSearchResult) -> String? = { _, _ -> null },
+    val onLyricsEmbed: suspend (String, LyricsSearchResult) -> String? = { _, _ -> null },
     val artworkCrossfade: ArtworkCrossfadeTransition? = null,
     val blendArtworkDuringCrossfade: Boolean = true,
     val livingArtworkBackground: Boolean = true,

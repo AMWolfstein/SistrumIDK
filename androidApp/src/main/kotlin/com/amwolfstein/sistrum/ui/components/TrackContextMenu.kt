@@ -41,6 +41,7 @@ import com.amwolfstein.sistrum.sync.LibraryPlaylist
 import com.amwolfstein.sistrum.sync.LibrarySyncProtocol
 import com.amwolfstein.sistrum.sync.metadataObject
 import com.amwolfstein.sistrum.ui.screens.isFavorite
+import com.amwolfstein.sistrum.ui.screens.EditTagsSheet
 import com.amwolfstein.sistrum.ui.theme.LocalSistrumColors
 
 /** Per-host visibility policy for the reusable track overflow sheet. */
@@ -56,6 +57,7 @@ data class TrackContextMenuActions(
     val goToArtists: Boolean = true,
     val removeFromPlaylist: Boolean = false,
     val moodRadio: Boolean = false,
+    val editTags: Boolean = true,
 )
 
 data class MoodRadioMenuActions(
@@ -101,6 +103,7 @@ sealed interface TrackContextBottomSheetRequest {
     data class FindLyrics(val track: LibraryTrack) : TrackContextBottomSheetRequest
     data class Playlist(val trackIds: List<String>, val addOnly: Boolean = false) : TrackContextBottomSheetRequest
     data class Artists(val artists: List<TrackContextArtist>) : TrackContextBottomSheetRequest
+    data class EditTags(val track: LibraryTrack) : TrackContextBottomSheetRequest
 }
 
 private sealed interface TrackContextSheet {
@@ -191,6 +194,7 @@ fun TrackContextMenu(
             if (showAddToQueue) add(ContextActionMenuEntry.Action(stringResource(R.string.track_context_add_to_queue), MaterialSymbols.AddToQueue) { closeAfter { onAddToQueue(track) } })
             if (actions.trackInfo) add(ContextActionMenuEntry.Action(stringResource(R.string.track_context_track_info), MaterialSymbols.Info) { requestBottomSheet(TrackContextBottomSheetRequest.Info(track)) })
             if (actions.findLyrics) add(ContextActionMenuEntry.Action(stringResource(R.string.track_context_find_lyrics), MaterialSymbols.Search) { requestBottomSheet(TrackContextBottomSheetRequest.FindLyrics(track)) })
+            if (actions.editTags) add(ContextActionMenuEntry.Action(stringResource(R.string.metadata_editor_title), MaterialSymbols.Edit) { requestBottomSheet(TrackContextBottomSheetRequest.EditTags(track)) })
             if (showMoodRadio && (showPlayNext || showAddToQueue || actions.trackInfo || actions.findLyrics)) add(ContextActionMenuEntry.Divider)
             if (showMoodRadio) add(ContextActionMenuEntry.Action(stringResource(R.string.track_context_start_mood_radio), MaterialSymbols.Sensors) { closeAfter { if (actions.moodRadio) onStartMoodRadio(track) else moodRadio.onStart(track.id) } })
             if (showMoodRadio && (actions.favorite || actions.addToPlaylist || hasNavigationActions || actions.removeFromPlaylist)) add(ContextActionMenuEntry.Divider)
@@ -232,6 +236,8 @@ internal fun TrackContextBottomSheet(
     onArtistSelected: (TrackContextArtist) -> Unit,
     onSearchLyrics: suspend (LibraryTrack, String, String) -> List<com.amwolfstein.sistrum.lyrics.LyricsSearchResult> = { _, _, _ -> emptyList() },
     onLyricsSelected: suspend (String, com.amwolfstein.sistrum.lyrics.LyricsSearchResult) -> Unit = { _, _ -> },
+    onLyricsSaveAsLrc: suspend (String, com.amwolfstein.sistrum.lyrics.LyricsSearchResult) -> String? = { _, _ -> null },
+    onLyricsEmbed: suspend (String, com.amwolfstein.sistrum.lyrics.LyricsSearchResult) -> String? = { _, _ -> null },
     modifier: Modifier = Modifier,
     playlists: List<LibraryPlaylist> = emptyList(),
     onPlaylistMembershipChange: (playlistId: String, trackIds: List<String>, add: Boolean) -> Unit = { _, _, _ -> },
@@ -251,6 +257,7 @@ internal fun TrackContextBottomSheet(
                         is TrackContextBottomSheetRequest.FindLyrics -> R.string.track_context_find_lyrics_title
                         is TrackContextBottomSheetRequest.Playlist -> R.string.track_context_playlist_picker_title
                         is TrackContextBottomSheetRequest.Artists -> R.string.track_context_artist_picker_title
+                        is TrackContextBottomSheetRequest.EditTags -> R.string.metadata_editor_title
                     }
                     is TrackContextSheet.LyricsPreview -> R.string.find_lyrics_preview
                 },
@@ -273,6 +280,10 @@ internal fun TrackContextBottomSheet(
                         onPlaylistMembershipChange = onPlaylistMembershipChange,
                         onCreatePlaylistRequested = onCreatePlaylistRequested,
                     )
+                    is TrackContextBottomSheetRequest.EditTags -> EditTagsSheet(
+                        trackId = rootRequest.track.id,
+                        onDismiss = onDismiss,
+                    )
                     is TrackContextBottomSheetRequest.Artists -> ContextActionMenu(
                         rootRequest.artists.map { artist ->
                             ContextActionMenuEntry.Action(artist.name, MaterialSymbols.Person) { onArtistSelected(artist) }
@@ -283,6 +294,8 @@ internal fun TrackContextBottomSheet(
                     track = sheet.track,
                     lyric = sheet.lyric,
                     onSelected = onLyricsSelected,
+                    onSaveLrc = onLyricsSaveAsLrc,
+                    onEmbed = onLyricsEmbed,
                     onDismiss = onDismiss,
                 )
             }

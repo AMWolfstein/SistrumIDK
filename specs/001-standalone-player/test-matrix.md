@@ -91,3 +91,15 @@ Compare: LUFS, LRA, true peak, RMS, crest, centroid, rolloff, flatness, flux, ZC
 - No remote/LAN/MQTT/mDNS endpoints or permissions.
 - APK: dev variant, version 0.1.0, arm64-v8a, signature, manifest, SHA256, size; dependency delta only approved libs (TagLib/aubio/FFTW) and T25 build changes.
 - Performance: scan/analysis time, memory, UI latency, playback underruns vs baseline; record environment/limitations.
+
+
+## Remediation test runs (2026-11-28)
+
+| Check | Command | Result |
+| --- | --- | --- |
+| Host unit | `./gradlew :androidApp:testDevDebugUnitTest` | 389/389 PASS |
+| Host shared logic | `./gradlew :sharedLogic:testAndroidHostTest` | 59/59 PASS |
+| Device SAF read/play/analyze/fingerprint | `connectedDevDebugAndroidTest -e class …SafNativeIoTest` (before the reinstall cleared the grant) | 2/2 PASS |
+| Device publish/fingerprint/FTS | `…SafPublishTest` | 1/1 PASS |
+| Device playback/analysis/DB/catalog/lyrics | 7 suites incl. `PlaybackFormatMatrixTest`, `FfmpegDescriptorTest`, `AnalysisEngineTest`, `LibraryDatabaseTest`, `LocalLibraryCatalogTest`, `LocalLyricsRepositoryTest`, `LibraryMigrationTest` | 21/21 PASS |
+| Native build | `./gradlew :androidApp:buildCMakeDebug`, `assembleDevDebug` | PASS |

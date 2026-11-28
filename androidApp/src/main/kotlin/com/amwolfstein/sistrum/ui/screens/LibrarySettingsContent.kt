@@ -54,13 +54,24 @@ internal fun LibrarySettingsContent(
     var analyzing by remember { mutableStateOf(false) }
     var analyzedCount by remember { mutableStateOf<Int?>(null) }
     var pendingRemoval by remember { mutableStateOf<LibrarySourceEntity?>(null) }
+    var exclusions by remember { mutableStateOf(emptyMap<String, List<com.amwolfstein.sistrum.library.db.LibraryExclusionEntity>>()) }
+    var legacyUnresolved by remember { mutableStateOf(0) }
+    val scanPreferences = remember { com.amwolfstein.sistrum.library.scan.ScanPreferences(context) }
+    val autoScan by scanPreferences.autoScanEnabled.collectAsState(initial = true)
     val picker = rememberLauncherForActivityResult(ActivityResultContracts.OpenDocumentTree()) { uri ->
         if (uri != null) scope.launch {
             addFailed = runCatching { repository.add(uri) }.isFailure
         }
     }
 
-    LaunchedEffect(Unit) { repository.refreshAvailability() }
+    LaunchedEffect(Unit) {
+        repository.refreshAvailability()
+        legacyUnresolved = com.amwolfstein.sistrum.library.db.LibraryDatabase.get(context)
+            .libraryDao().legacyImportState()?.unresolved ?: 0
+    }
+    LaunchedEffect(sources) {
+        exclusions = sources.associate { source -> source.id to repository.exclusions(source.id) }
+    }
 
     Column(modifier = modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
         Text(
@@ -70,6 +81,13 @@ internal fun LibrarySettingsContent(
         )
         if (sources.isEmpty()) {
             Text(stringResource(R.string.library_no_folders), style = MaterialTheme.typography.bodyMedium)
+        }
+        if (legacyUnresolved > 0) {
+            Text(
+                stringResource(R.string.library_legacy_unresolved, legacyUnresolved),
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
         }
         Button(onClick = onSeparatorsSelected, modifier = Modifier.fillMaxWidth()) {
             Text(stringResource(R.string.separators_title))
@@ -87,6 +105,22 @@ internal fun LibrarySettingsContent(
                 },
             )
         }
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.SpaceBetween,
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            Text(stringResource(R.string.library_auto_scan))
+            Switch(
+                checked = autoScan,
+                onCheckedChange = { enabled -> scope.launch { scanPreferences.setAutoScanEnabled(enabled) } },
+            )
+        }
+        Text(
+            text = stringResource(R.string.library_auto_scan_description),
+            style = MaterialTheme.typography.bodySmall,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+        )
         Text(
             text = stringResource(R.string.analysis_write_tags_description),
             style = MaterialTheme.typography.bodySmall,
@@ -124,6 +158,19 @@ internal fun LibrarySettingsContent(
                 onRemove = { pendingRemoval = source },
                 onScan = { ScanCoordinator.start(context, source.id) },
                 scanning = ScanCoordinator.isRunning && scanProgress.sourceId == source.id,
+                exclusions = exclusions[source.id].orEmpty(),
+                onAddExclusion = { path, folder ->
+                    scope.launch {
+                        repository.addExclusion(source, path, folder)
+                        exclusions = sources.associate { it.id to repository.exclusions(it.id) }
+                    }
+                },
+                onRemoveExclusion = { id ->
+                    scope.launch {
+                        repository.removeExclusion(id)
+                        exclusions = sources.associate { it.id to repository.exclusions(it.id) }
+                    }
+                },
             )
         }
         if (addFailed) {
@@ -215,7 +262,12 @@ private fun SourceCard(
     onRemove: () -> Unit,
     onScan: () -> Unit,
     scanning: Boolean,
+    exclusions: List<com.amwolfstein.sistrum.library.db.LibraryExclusionEntity>,
+    onAddExclusion: (String, Boolean) -> Unit,
+    onRemoveExclusion: (String) -> Unit,
 ) {
+    var exclusionText by remember { mutableStateOf("") }
+    var exclusionIsFolder by remember { mutableStateOf(true) }
     Card(modifier = Modifier.fillMaxWidth()) {
         Column(modifier = Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
             Row(
@@ -253,6 +305,48 @@ private fun SourceCard(
                     onClick = onRemove,
                     modifier = Modifier.semantics { contentDescription = removeLabel },
                 ) { Text(stringResource(R.string.library_remove_folder)) }
+            }
+            HorizontalDivider()
+            Text(stringResource(R.string.library_exclusions_title), style = MaterialTheme.typography.labelLarge)
+            exclusions.forEach { exclusion ->
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.CenterVertically,
+                ) {
+                    Text(
+                        exclusion.relativePath,
+                        style = MaterialTheme.typography.bodySmall,
+                        modifier = Modifier.weight(1f),
+                    )
+                    TextButton(onClick = { onRemoveExclusion(exclusion.id) }) {
+                        Text(stringResource(R.string.library_cancel))
+                    }
+                }
+            }
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                androidx.compose.material3.OutlinedTextField(
+                    value = exclusionText,
+                    onValueChange = { exclusionText = it },
+                    singleLine = true,
+                    placeholder = { Text(stringResource(R.string.library_exclusion_hint)) },
+                    modifier = Modifier.weight(1f),
+                )
+                TextButton(
+                    onClick = {
+                        if (exclusionText.isNotBlank()) {
+                            onAddExclusion(exclusionText, exclusionIsFolder)
+                            exclusionText = ""
+                        }
+                    },
+                ) { Text(stringResource(R.string.library_exclusion_add)) }
+            }
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                androidx.compose.material3.Checkbox(
+                    checked = exclusionIsFolder,
+                    onCheckedChange = { exclusionIsFolder = it },
+                )
+                Text(stringResource(R.string.library_exclusion_folder), style = MaterialTheme.typography.bodySmall)
             }
         }
     }

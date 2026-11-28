@@ -249,6 +249,22 @@ class MainActivity : ComponentActivity() {
         showRationale = Build.VERSION.SDK_INT >= 37 && shouldShowRequestPermissionRationale(Manifest.permission.ACCESS_LOCAL_NETWORK),
     )
 
+    private fun maybeAutoScan() {
+        lifecycleScope.launch {
+            val preferences = com.amwolfstein.sistrum.library.scan.ScanPreferences(applicationContext)
+            if (!preferences.shouldAutoScan() || com.amwolfstein.sistrum.library.scan.ScanCoordinator.isRunning) {
+                return@launch
+            }
+            val sources = com.amwolfstein.sistrum.library.scan.SafSourceRepository(applicationContext)
+                .sources()
+                .filter { it.enabled && it.available }
+                .map { it.id }
+            if (sources.isEmpty()) return@launch
+            preferences.markAutoScan()
+            com.amwolfstein.sistrum.library.scan.ScanCoordinator.startAll(applicationContext, sources)
+        }
+    }
+
     private fun requestLocalNetworkAccess() {
         if (Build.VERSION.SDK_INT < 37) return
         val access = currentLocalNetworkAccess()
@@ -274,10 +290,23 @@ class MainActivity : ComponentActivity() {
         handleLastFmIntent(intent)
         AndroidPlaybackRuntime.initialize(applicationContext, AndroidSyncRuntime.syncStore(), libraryCatalog())
         lifecycleScope.launch {
+            val database = com.amwolfstein.sistrum.library.db.LibraryDatabase.get(applicationContext)
+            // Read-only import of the retired desktop mirror, then recovery of interrupted writes.
+            runCatching {
+                com.amwolfstein.sistrum.library.db.LegacyMirrorImporter(applicationContext, database)
+                    .importIfNeeded()
+            }
             com.amwolfstein.sistrum.library.tags.TagWriter(
                 applicationContext,
-                com.amwolfstein.sistrum.library.db.LibraryDatabase.get(applicationContext).libraryDao(),
+                database.libraryDao(),
             ).recoverIncompleteWrites()
+            // Upgrades from a pre-FTS schema start with an empty index.
+            runCatching {
+                if (database.libraryDao().searchIndexCount() == 0 && database.libraryDao().itemCount() > 0) {
+                    com.amwolfstein.sistrum.library.db.SearchIndexer(database).rebuild()
+                }
+            }
+            maybeAutoScan()
         }
         // Start the service once per app process so it can rebuild the last
         // private playback session before Compose observes its StateFlows.
@@ -350,6 +379,7 @@ class MainActivity : ComponentActivity() {
             val artworkPreferences = remember { com.amwolfstein.sistrum.library.artwork.ArtworkPreferences(applicationContext) }
             val artworkService = remember { com.amwolfstein.sistrum.library.artwork.ArtworkLibraryService(applicationContext) }
             val localLyricsRepository = remember { com.amwolfstein.sistrum.library.lyrics.LocalLyricsRepository(applicationContext) }
+            val lyricsFileWriter = remember { com.amwolfstein.sistrum.library.lyrics.LyricsFileWriter(applicationContext) }
             val lyricsService = remember { AndroidLyricsService(AndroidSyncRuntime.syncStore(), localLyricsRepository) }
             val preferenceScope = rememberCoroutineScope()
             val crossfadeSettings by playbackPreferences.settings.collectAsStateWithLifecycle(
@@ -576,6 +606,11 @@ class MainActivity : ComponentActivity() {
                                 viewModel.dispatch(AppIntent.NavigateBack)
                             }
                         },
+                        onUpdateSmart = { playlistId, name, config ->
+                            playlistsViewModel.updateSmartPlaylist(playlistId, name, config) {
+                                viewModel.dispatch(AppIntent.NavigateBack)
+                            }
+                        },
                         onMembershipChange = playlistsViewModel::changePlaylistMembership,
                     ),
                     search = LibrarySearchModel(
@@ -683,6 +718,12 @@ class MainActivity : ComponentActivity() {
                         )
                     }
                     if (trackId == lyricsTrackId) manualLyricsOverride = ManualLyricsOverride(trackId, lyric.content)
+                },
+                onLyricsSaveAsLrc = { trackId, lyric ->
+                    lyricsFileWriter.saveAsLrc(trackId, lyric.content).exceptionOrNull()?.message
+                },
+                onLyricsEmbed = { trackId, lyric ->
+                    lyricsFileWriter.embed(trackId, lyric.content).exceptionOrNull()?.message
                 },
                 artworkCrossfade = artworkCrossfade,
                 blendArtworkDuringCrossfade = crossfadeSettings.blendArtworkDuringCrossfade,

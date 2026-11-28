@@ -35,6 +35,21 @@ import java.io.ByteArrayOutputStream
  * Single-track tag editor. Writes are crash-safe through [com.amwolfstein.sistrum.library.tags.TagWriter];
  * batch editing reuses this content with a list of items.
  */
+/** Resolves the Room row for a catalog track and opens the tag editor sheet. */
+@Composable
+internal fun EditTagsSheet(trackId: String, onDismiss: () -> Unit) {
+    val context = LocalContext.current
+    var item by remember(trackId) {
+        mutableStateOf<LibraryItemEntity?>(null)
+    }
+    androidx.compose.runtime.LaunchedEffect(trackId) {
+        item = com.amwolfstein.sistrum.library.db.LibraryDatabase.get(context).libraryDao().itemById(trackId)
+    }
+    item?.let { resolved ->
+        MetadataEditorContent(item = resolved, onDismiss = onDismiss, onSaved = onDismiss)
+    }
+}
+
 @Composable
 internal fun MetadataEditorContent(
     item: LibraryItemEntity,
