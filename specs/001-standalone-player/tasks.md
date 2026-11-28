@@ -311,3 +311,5 @@ Rules: each task starts with a full map refresh, records evidence, implements, r
 - [x] M001-T014 Smart playlist rule engine and UI
 
 - [x] M001-T015 Local/embedded/online lyrics and durable save
+
+- [x] M001-T016 Analysis build, JNI and golden fixtures

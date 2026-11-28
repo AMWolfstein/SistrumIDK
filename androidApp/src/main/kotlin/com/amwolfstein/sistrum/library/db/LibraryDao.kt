@@ -358,6 +358,15 @@ interface LibraryDao {
     @Query("SELECT * FROM track_analysis WHERE trackId = :trackId")
     suspend fun analysis(trackId: String): TrackAnalysisEntity?
 
+    @Query(
+        "SELECT library_items.* FROM library_items LEFT JOIN track_analysis " +
+            "ON track_analysis.trackId = library_items.id " +
+            "WHERE library_items.available = 1 AND " +
+            "(track_analysis.trackId IS NULL OR track_analysis.status != 'COMPLETED' " +
+            "OR track_analysis.analyzerVersion != :analyzerVersion) LIMIT :limit",
+    )
+    suspend fun itemsNeedingAnalysis(limit: Int, analyzerVersion: Int = 1): List<LibraryItemEntity>
+
     @Insert(onConflict = OnConflictStrategy.IGNORE)
     suspend fun insertListeningSession(value: LocalListeningSessionEntity)
 

@@ -1,13 +1,13 @@
 {
   "missions": {
     "M001": {
-      "next_task": 16,
+      "next_task": 17,
       "nonce": "45356c82baed4375811369ee33874b57",
       "path": "specs/001-standalone-player",
       "title": "Complete standalone Android music player"
     }
   },
-  "next_completion": 19,
+  "next_completion": 20,
   "next_mission": 2,
   "next_tor": 4,
   "tasks": {
@@ -355,6 +355,29 @@
       "record": "specs/001-standalone-player/tasks.md",
       "status": "complete",
       "title": "Local/embedded/online lyrics and durable save"
+    },
+    "M001-T016": {
+      "completion": 19,
+      "evidence": {
+        "checks": "host 379/379 + sharedLogic 59/59; device analysis 4/4 on CPH2307 Android 15; assembleDevDebug; upstream numeric goldens unavailable, documented",
+        "graph": {
+          "impact": "scripts/build-{ffmpeg,aubio}-android.sh, androidApp/src/main/cpp/{CMakeLists.txt,analysis_bridge.cpp,third_party/aubio/*}, library/analysis/AnalysisEngine.kt, player/AnalysisBridge.kt, library/db/LibraryDao.kt, NOTICES, tests",
+          "queries": 3,
+          "revision": "a6df1a2d7d8620332ee6501ae077fc9f1b8106c2",
+          "status": "PASS",
+          "tool": "0.6.13"
+        },
+        "result": "PASS",
+        "reviewer": "Author review",
+        "round": 3
+      },
+      "final": false,
+      "kind": "T",
+      "mission": "M001",
+      "nonce": "914151d528a24e42b8c99afc46785b26",
+      "record": "specs/001-standalone-player/tasks.md",
+      "status": "complete",
+      "title": "Analysis build, JNI and golden fixtures"
     },
     "TOR001": {
       "completion": 1,

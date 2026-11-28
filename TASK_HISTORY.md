@@ -18,3 +18,4 @@
 - M001-T013 — Manual playlists, favorites and M3U8
 - M001-T014 — Smart playlist rule engine and UI
 - M001-T015 — Local/embedded/online lyrics and durable save
+- M001-T016 — Analysis build, JNI and golden fixtures
