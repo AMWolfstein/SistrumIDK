@@ -20,3 +20,4 @@
 - M001-T015 — Local/embedded/online lyrics and durable save
 - M001-T016 — Analysis build, JNI and golden fixtures
 - M001-T017 — Analysis persistence, tags, reuse and settings
+- M001-T018 — Normalization and album aggregation

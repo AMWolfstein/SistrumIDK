@@ -1,13 +1,13 @@
 {
   "missions": {
     "M001": {
-      "next_task": 18,
+      "next_task": 19,
       "nonce": "45356c82baed4375811369ee33874b57",
       "path": "specs/001-standalone-player",
       "title": "Complete standalone Android music player"
     }
   },
-  "next_completion": 21,
+  "next_completion": 22,
   "next_mission": 2,
   "next_tor": 4,
   "tasks": {
@@ -401,6 +401,29 @@
       "record": "specs/001-standalone-player/tasks.md",
       "status": "complete",
       "title": "Analysis persistence, tags, reuse and settings"
+    },
+    "M001-T018": {
+      "completion": 21,
+      "evidence": {
+        "checks": "host 390/390 + sharedLogic 59/59; album aggregation unit coverage; assembleDevDebug; audible level unverified",
+        "graph": {
+          "impact": "sharedLogic no change; androidApp analysis/AlbumAggregate.kt, sync/LocalLibraryCatalog.kt, player/{PlaybackService,AndroidPlaybackRuntime}.kt, tests",
+          "queries": 3,
+          "revision": "c8f0edbe65ae9e1bd379593de787b88d242c91fc",
+          "status": "PASS",
+          "tool": "0.6.13"
+        },
+        "result": "PASS",
+        "reviewer": "Author review",
+        "round": 3
+      },
+      "final": false,
+      "kind": "T",
+      "mission": "M001",
+      "nonce": "28ab841beffe4e879279425e1c1e9346",
+      "record": "specs/001-standalone-player/tasks.md",
+      "status": "complete",
+      "title": "Normalization and album aggregation"
     },
     "TOR001": {
       "completion": 1,

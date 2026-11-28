@@ -95,6 +95,10 @@ internal object AndroidPlaybackRuntime {
         return resolveSyncedAudioFile(appContext.filesDir, storedPath)?.takeIf(File::isFile)?.absolutePath
     }
 
+    /** Local album analyses for album-mode normalization, computed from current Room rows. */
+    suspend fun albumAnalyses(albumId: String): List<TrackAnalysis> =
+        (catalog as? com.amwolfstein.sistrum.sync.LocalLibraryCatalog)?.albumAnalyses(albumId).orEmpty()
+
     /** Metadata snapshot for the media session: local catalog first, legacy mirror as fallback. */
     suspend fun tracksSnapshot(): List<LibraryTrack> {
         val local = catalog?.tracks?.first().orEmpty()

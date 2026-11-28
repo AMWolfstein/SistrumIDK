@@ -133,3 +133,10 @@
 - Library settings expose the ReplayGain write toggle and an "Analyze library" action with progress/result; analysis results remain local when the toggle is off.
 - Tests: host `AnalysisTagCodecTest` (formats, Opus Q7.8, peak/gain formatting, existing-key protection, extension mapping); device `AnalysisEngineTest` gained ReplayGain write + preserve-existing coverage — 5/5 PASS on OnePlus CPH2307 (Android 15). Host suites: androidApp 383/383, sharedLogic 59/59; `assembleDevDebug` succeeds.
 - Limitations: M4A freeform tags depend on TagLib's MP4 property support (written through the same property map); file-level album aggregation keys are produced by the codec but T18 owns album values.
+
+## M001-T018 — Normalization and album aggregation
+
+- Added `AlbumAggregate`: album loudness is the mean of the track analyses, album peak the loudest track peak, computed from current Room rows on demand (so track add/remove/reanalysis invalidates it automatically). Album-mode gain uses the aggregate, falls back to the track when the album has no aggregate, and clipping prevention caps gain at `-truePeak`.
+- Playback now takes analysis and album aggregates from the local catalog (`LocalLibraryCatalog.albumAnalyses` via `AndroidPlaybackRuntime`) instead of the legacy mirror; disabling normalization when the current track has no analysis is unchanged.
+- Tests: host `AlbumAggregateTest` (mean/peak, track vs album mode, clip cap, fallback, disabled/missing analysis); existing sharedLogic normalization tests stay green. Host suites: androidApp 390/390, sharedLogic 59/59; `assembleDevDebug` succeeds.
+- Limitation: album aggregation is not persisted (fresh on every read), which is the invalidation strategy; no audible level check was possible on the instrumented device.

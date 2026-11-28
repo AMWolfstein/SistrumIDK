@@ -775,18 +775,20 @@ class PlaybackService : Service() {
     }
 
     private suspend fun normalizationGain(item: PlaybackItem, nextId: String?): Float {
-        val analyses = AndroidSyncRuntime.syncStore().activeAnalyses()
-        if (analyses.isEmpty()) {
+        if (item.analysis == null) {
             if (normalizationSettings.enabled) normalizationPreferences.disable()
             return 0f
         }
-        val next = nextId?.let { AndroidPlaybackRuntime.controller().resolve(it) }
-        val continuousAlbum = normalizationSettings.mode == NormalizationMode.Album &&
-            item.albumId.isNotEmpty() && item.albumId == next?.albumId
-        val albumAnalyses = if (continuousAlbum) {
-            AndroidSyncRuntime.syncStore().tracks.first().filter { it.albumId == item.albumId }.mapNotNull { analyses[it.id] }
-        } else emptyList()
-        return normalizationGainDb(normalizationSettings, item.analysis, albumAnalyses, continuousAlbum)
+        val albumAnalyses = if (normalizationSettings.mode == NormalizationMode.Album && item.albumId.isNotEmpty()) {
+            AndroidPlaybackRuntime.albumAnalyses(item.albumId)
+        } else {
+            emptyList()
+        }
+        return com.amwolfstein.sistrum.library.analysis.AlbumAggregate.gainDb(
+            normalizationSettings,
+            item.analysis,
+            albumAnalyses,
+        )
     }
 
     private suspend fun refreshNormalizationGains() {

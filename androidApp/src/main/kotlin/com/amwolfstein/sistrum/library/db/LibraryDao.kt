@@ -359,6 +359,14 @@ interface LibraryDao {
     suspend fun analysis(trackId: String): TrackAnalysisEntity?
 
     @Query(
+        "SELECT track_analysis.* FROM track_analysis " +
+            "INNER JOIN library_items ON library_items.id = track_analysis.trackId " +
+            "WHERE library_items.albumId = :albumId AND track_analysis.status = 'COMPLETED' " +
+            "AND track_analysis.loudnessLufs IS NOT NULL AND track_analysis.truePeak IS NOT NULL",
+    )
+    suspend fun analysesForAlbum(albumId: String): List<TrackAnalysisEntity>
+
+    @Query(
         "SELECT library_items.* FROM library_items LEFT JOIN track_analysis " +
             "ON track_analysis.trackId = library_items.id " +
             "WHERE library_items.available = 1 AND " +

@@ -80,6 +80,14 @@ internal class LocalLibraryCatalog(
         TrackAnalysis(loudness.toFloat(), peak.toFloat())
     }
 
+    suspend fun albumAnalyses(albumId: String): List<TrackAnalysis> = withContext(Dispatchers.IO) {
+        dao.analysesForAlbum(albumId).mapNotNull { row ->
+            val loudness = row.loudnessLufs ?: return@mapNotNull null
+            val peak = row.truePeak ?: return@mapNotNull null
+            TrackAnalysis(loudness.toFloat(), peak.toFloat())
+        }
+    }
+
     override suspend fun setRating(trackId: String, rating: Int?) {
         require(rating == null || rating in 0..5) { "rating must be between 0 and 5" }
         dao.updateRating(trackId, rating)

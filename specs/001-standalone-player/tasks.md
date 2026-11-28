@@ -315,3 +315,5 @@ Rules: each task starts with a full map refresh, records evidence, implements, r
 - [x] M001-T016 Analysis build, JNI and golden fixtures
 
 - [x] M001-T017 Analysis persistence, tags, reuse and settings
+
+- [x] M001-T018 Normalization and album aggregation
