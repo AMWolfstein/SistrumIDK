@@ -124,3 +124,12 @@
 - `AnalysisEngine` opens SAF/file audio by descriptor, maps and versions the result (FFmpeg/aubio/analyzer/mood) and persists it in Room; `itemsNeedingAnalysis` skips completed rows at the current analyzer version. Failures write nothing.
 - Tests: device `AnalysisEngineTest`: fixture fields are finite and in range, result persists, a synthetic 120 BPM click track is detected between 80–160 BPM, reanalysis is stable, `analyzeAll` skips completed rows, missing audio fails without a row — 4/4 PASS on OnePlus CPH2307 (Android 15). Host suites: androidApp 379/379, sharedLogic 59/59; `assembleDevDebug` succeeds.
 - Limitations: no upstream desktop analysis producer was available on this machine, so golden fixtures are the shipped MP3 plus a synthetic 120 BPM click track and range assertions rather than exact upstream numeric tolerances; LUFS is the standard mean-square approximation, not the full K-weighted EBU R128 implementation (avfilter ebur128 is built but not used yet).
+
+## M001-T017 — Analysis persistence, tags, reuse and settings
+
+- Added standard per-format tag mapping (`AnalysisTagCodec`): MP3/FLAC/Vorbis `REPLAYGAIN_TRACK_GAIN/PEAK` (+ album keys), Opus `R128_TRACK_GAIN` in Q7.8 dB units, M4A freeform `----:com.apple.iTunes:REPLAYGAIN_*`; other formats never get tags. Existing gain keys are detected from the file and never overwritten.
+- Added `TagLibBridge.nativeWriteProperties` (arbitrary text properties through the property map, unrelated tags preserved) and use it only when the opt-in setting is on and the document opens read-write.
+- `AnalysisEngine.analyzeIfNeeded` now reuses a completed result when the audio fingerprint and analyzer version match, reanalyzes stale/missing rows, and writes tags after a successful analysis; read-only/denied files keep using the Room result. `analyzeAll` walks only stale rows.
+- Library settings expose the ReplayGain write toggle and an "Analyze library" action with progress/result; analysis results remain local when the toggle is off.
+- Tests: host `AnalysisTagCodecTest` (formats, Opus Q7.8, peak/gain formatting, existing-key protection, extension mapping); device `AnalysisEngineTest` gained ReplayGain write + preserve-existing coverage — 5/5 PASS on OnePlus CPH2307 (Android 15). Host suites: androidApp 383/383, sharedLogic 59/59; `assembleDevDebug` succeeds.
+- Limitations: M4A freeform tags depend on TagLib's MP4 property support (written through the same property map); file-level album aggregation keys are produced by the codec but T18 owns album values.

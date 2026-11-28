@@ -316,6 +316,39 @@ Java_com_amwolfstein_sistrum_library_tags_TagLibBridge_nativeWriteTags(
 }
 
 extern "C" JNIEXPORT jboolean JNICALL
+Java_com_amwolfstein_sistrum_library_tags_TagLibBridge_nativeWriteProperties(
+    JNIEnv *env,
+    jclass,
+    jint fd,
+    jobjectArray keys,
+    jobjectArray values) {
+    try {
+        const std::string path = "/proc/self/fd/" + std::to_string(fd);
+        TagLib::FileStream stream(path.c_str(), false);
+        if (!stream.isOpen()) return JNI_FALSE;
+        TagLib::FileRef ref(&stream, false, TagLib::AudioProperties::Fast);
+        if (ref.isNull() || ref.file()->readOnly()) return JNI_FALSE;
+        TagLib::PropertyMap map = ref.properties();
+        const jsize count = keys == nullptr ? 0 : env->GetArrayLength(keys);
+        for (jsize i = 0; i < count; ++i) {
+            auto key = static_cast<jstring>(env->GetObjectArrayElement(keys, i));
+            auto value = static_cast<jstring>(env->GetObjectArrayElement(values, i));
+            if (key != nullptr && value != nullptr) {
+                const TagLib::String name = jstringToTagLib(env, key);
+                const TagLib::String text = jstringToTagLib(env, value);
+                if (!name.isEmpty()) map.replace(name, TagLib::StringList(text));
+            }
+            if (key != nullptr) env->DeleteLocalRef(key);
+            if (value != nullptr) env->DeleteLocalRef(value);
+        }
+        ref.setProperties(map);
+        return ref.save() ? JNI_TRUE : JNI_FALSE;
+    } catch (...) {
+        return JNI_FALSE;
+    }
+}
+
+extern "C" JNIEXPORT jboolean JNICALL
 Java_com_amwolfstein_sistrum_library_tags_TagLibBridge_nativeWriteArtwork(
     JNIEnv *env,
     jclass,

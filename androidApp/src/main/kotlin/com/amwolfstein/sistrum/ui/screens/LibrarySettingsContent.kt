@@ -47,6 +47,12 @@ internal fun LibrarySettingsContent(
     val scanProgress by ScanCoordinator.progress.collectAsState()
     val scope = rememberCoroutineScope()
     var addFailed by remember { mutableStateOf(false) }
+    val analysisPreferences = remember { com.amwolfstein.sistrum.library.analysis.AnalysisPreferences(context) }
+    val analysisSettings by analysisPreferences.settings.collectAsState(
+        initial = com.amwolfstein.sistrum.library.analysis.AnalysisSettings(),
+    )
+    var analyzing by remember { mutableStateOf(false) }
+    var analyzedCount by remember { mutableStateOf<Int?>(null) }
     var pendingRemoval by remember { mutableStateOf<LibrarySourceEntity?>(null) }
     val picker = rememberLauncherForActivityResult(ActivityResultContracts.OpenDocumentTree()) { uri ->
         if (uri != null) scope.launch {
@@ -67,6 +73,49 @@ internal fun LibrarySettingsContent(
         }
         Button(onClick = onSeparatorsSelected, modifier = Modifier.fillMaxWidth()) {
             Text(stringResource(R.string.separators_title))
+        }
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.SpaceBetween,
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            Text(stringResource(R.string.analysis_settings_title))
+            Switch(
+                checked = analysisSettings.writeReplayGainTags,
+                onCheckedChange = { enabled ->
+                    scope.launch { analysisPreferences.setWriteReplayGainTags(enabled) }
+                },
+            )
+        }
+        Text(
+            text = stringResource(R.string.analysis_write_tags_description),
+            style = MaterialTheme.typography.bodySmall,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+        )
+        Button(
+            onClick = {
+                if (analyzing) return@Button
+                analyzing = true
+                analyzedCount = null
+                scope.launch {
+                    val engine = com.amwolfstein.sistrum.library.analysis.AnalysisEngine(
+                        context,
+                        writeTags = { analysisSettings.writeReplayGainTags },
+                    )
+                    analyzedCount = runCatching { engine.analyzeAll(limit = 25) }.getOrDefault(0)
+                    analyzing = false
+                }
+            },
+            enabled = !analyzing && analysisSettings.analysisEnabled,
+            modifier = Modifier.fillMaxWidth(),
+        ) {
+            Text(
+                when {
+                    analyzing -> stringResource(R.string.analysis_running)
+                    analyzedCount != null -> stringResource(R.string.analysis_done, analyzedCount ?: 0)
+                    else -> stringResource(R.string.analysis_run)
+                },
+            )
         }
         sources.forEach { source ->
             SourceCard(

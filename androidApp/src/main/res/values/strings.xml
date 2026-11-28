@@ -270,6 +270,11 @@
     <string name="smart_playlist_limit_count">Limit</string>
     <string name="smart_playlist_limit_by">Order by</string>
     <string name="smart_playlist_save">Save playlist</string>
+    <string name="analysis_settings_title">Write ReplayGain tags</string>
+    <string name="analysis_write_tags_description">Analysis always stores results locally. Enabling this also writes standard ReplayGain/R128 tags without overwriting existing gain values; read-only files keep using Room.</string>
+    <string name="analysis_run">Analyze library</string>
+    <string name="analysis_running">Analyzing…</string>
+    <string name="analysis_done">Analyzed %1$d tracks</string>
     <string name="lyrics_local_sources">Local lyrics</string>
     <string name="lyrics_prefer_local">Prefer local lyrics</string>
     <string name="lyrics_subfolder_enabled">Look in a lyrics subfolder</string>

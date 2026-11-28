@@ -38,9 +38,15 @@ object TagLibBridge {
 
     external fun nativeWriteArtwork(fd: Int, data: ByteArray, mimeType: String?, description: String?): Boolean
 
+    /** Replaces arbitrary text properties (ReplayGain/R128), preserving unrelated tags. */
+    external fun nativeWriteProperties(fd: Int, keys: Array<String>, values: Array<String>): Boolean
+
     /** Hash of demuxed audio packets only: tag/artwork edits must not change it. */
     external fun nativeAudioFingerprint(fd: Int): String?
 }
+
+fun readRawTags(fd: Int): Map<String, List<String>> =
+    TagMetadataJson.parse(TagLibBridge.nativeReadMetadata(fd)).rawTags
 
 data class ExtractedMetadata(
     val metadata: TagMetadata,

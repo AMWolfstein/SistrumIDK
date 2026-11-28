@@ -1,13 +1,13 @@
 {
   "missions": {
     "M001": {
-      "next_task": 17,
+      "next_task": 18,
       "nonce": "45356c82baed4375811369ee33874b57",
       "path": "specs/001-standalone-player",
       "title": "Complete standalone Android music player"
     }
   },
-  "next_completion": 20,
+  "next_completion": 21,
   "next_mission": 2,
   "next_tor": 4,
   "tasks": {
@@ -378,6 +378,29 @@
       "record": "specs/001-standalone-player/tasks.md",
       "status": "complete",
       "title": "Analysis build, JNI and golden fixtures"
+    },
+    "M001-T017": {
+      "completion": 20,
+      "evidence": {
+        "checks": "host 383/383 + sharedLogic 59/59; device analysis/tag write 5/5 on CPH2307 Android 15; assembleDevDebug; M4A freeform verified by code map only",
+        "graph": {
+          "impact": "androidApp/src/main/kotlin/com/amwolfstein/sistrum/library/analysis/{AnalysisEngine,AnalysisTagCodec,AnalysisPreferences}.kt, library/tags/{MetadataExtractor,TagLibBridge?}.kt, cpp/taglib_bridge.cpp, ui/screens/LibrarySettingsContent.kt, res/values*/strings.xml, tests",
+          "queries": 3,
+          "revision": "700b529c5964fbfaddfaa31ae77f4c2b80fce749",
+          "status": "PASS",
+          "tool": "0.6.13"
+        },
+        "result": "PASS",
+        "reviewer": "Author review",
+        "round": 3
+      },
+      "final": false,
+      "kind": "T",
+      "mission": "M001",
+      "nonce": "d432b4a850fc47d3a218bb297b88fea1",
+      "record": "specs/001-standalone-player/tasks.md",
+      "status": "complete",
+      "title": "Analysis persistence, tags, reuse and settings"
     },
     "TOR001": {
       "completion": 1,

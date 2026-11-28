@@ -25,9 +25,26 @@ object AnalysisVersion {
 class AnalysisEngine(
     context: Context,
     database: LibraryDatabase = LibraryDatabase.get(context),
+    private val writeTags: suspend () -> Boolean = { false },
 ) {
     private val context = context.applicationContext
     private val dao = database.libraryDao()
+
+    /** Reuses a completed result when the audio fingerprint and analyzer version still match. */
+    suspend fun analyzeIfNeeded(trackId: String): Result<TrackAnalysisEntity> = withContext(Dispatchers.IO) {
+        val item = dao.itemById(trackId) ?: return@withContext Result.failure(IllegalArgumentException("Unknown track $trackId"))
+        val fingerprint = item.audioFingerprint ?: item.contentKey ?: item.documentKey
+        val existing = dao.analysis(trackId)
+        if (existing != null && existing.status == "COMPLETED" &&
+            existing.analyzerVersion == AnalysisVersion.ANALYZER &&
+            existing.audioFingerprint == fingerprint
+        ) {
+            return@withContext Result.success(existing)
+        }
+        analyze(trackId).onSuccess { result ->
+            if (writeTags()) runCatching { writeAnalysisTags(item.id, result) }
+        }
+    }
 
     suspend fun analyze(trackId: String): Result<TrackAnalysisEntity> = withContext(Dispatchers.IO) {
         runCatching {
@@ -70,19 +87,46 @@ class AnalysisEngine(
     suspend fun analyzeAll(limit: Int = 50): Int = withContext(Dispatchers.IO) {
         var done = 0
         dao.itemsNeedingAnalysis(limit, AnalysisVersion.ANALYZER).forEach { item ->
-            if (analyze(item.id).isSuccess) done += 1
+            if (analyzeIfNeeded(item.id).isSuccess) done += 1
         }
         done
     }
 
-    private fun openDescriptor(uriValue: String): ParcelFileDescriptor? = runCatching {
+    /** Writes ReplayGain/R128 tags, keeping any gain keys the file already had. */
+    suspend fun writeAnalysisTags(trackId: String, analysis: TrackAnalysisEntity) = withContext(Dispatchers.IO) {
+        val item = dao.itemById(trackId) ?: return@withContext
+        val descriptor = openDescriptor(item.fileUri) ?: return@withContext
+        val existingKeys = descriptor.use { fd ->
+            com.amwolfstein.sistrum.library.tags.readRawTags(fd.fd).keys
+        }
+        descriptor.close()
+        val tags = AnalysisTagCodec.tagsFor(
+            AnalysisTagCodec.formatOf(item.format),
+            analysis.loudnessLufs,
+            analysis.truePeak,
+            existingKeys = existingKeys,
+        )
+        if (tags.isEmpty()) return@withContext
+        val write = openDescriptor(item.fileUri, write = true) ?: return@withContext
+        write.use { fd ->
+            com.amwolfstein.sistrum.library.tags.TagLibBridge.nativeWriteProperties(
+                fd.fd,
+                tags.keys.toTypedArray(),
+                tags.values.toTypedArray(),
+            )
+        }
+    }
+
+    private fun openDescriptor(uriValue: String, write: Boolean = false): ParcelFileDescriptor? = runCatching {
+        val mode = if (write) "rw" else "r"
+        val parcelMode = if (write) ParcelFileDescriptor.MODE_READ_WRITE else ParcelFileDescriptor.MODE_READ_ONLY
         if (uriValue.startsWith("content://")) {
-            context.contentResolver.openFileDescriptor(Uri.parse(uriValue), "r")
+            context.contentResolver.openFileDescriptor(Uri.parse(uriValue), mode)
         } else if (uriValue.startsWith("file://")) {
             val path = Uri.parse(uriValue).path ?: return@runCatching null
-            ParcelFileDescriptor.open(File(path), ParcelFileDescriptor.MODE_READ_ONLY)
+            ParcelFileDescriptor.open(File(path), parcelMode)
         } else {
-            ParcelFileDescriptor.open(File(uriValue), ParcelFileDescriptor.MODE_READ_ONLY)
+            ParcelFileDescriptor.open(File(uriValue), parcelMode)
         }
     }.getOrNull()
 }

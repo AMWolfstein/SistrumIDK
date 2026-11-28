@@ -37,7 +37,7 @@ class AnalysisEngineTest {
         database.libraryDao().upsertItem(
             LibraryItemEntity(
                 id = "track_1", documentKey = "doc_1", fileUri = Uri.fromFile(audio).toString(),
-                sourceId = "s", title = "Fixture", sortTitle = "Fixture", durationSeconds = 3,
+                sourceId = "s", title = "Fixture", sortTitle = "Fixture", durationSeconds = 3, format = "mp3",
             ),
         )
     }
@@ -112,6 +112,27 @@ class AnalysisEngineTest {
         assertEquals(first.tempo, second.tempo)
         assertEquals(first.energy, second.energy)
         assertEquals(0, engine.analyzeAll(limit = 10))
+    }
+
+    @Test
+    fun replayGainTagsAreWrittenAndExistingValuesPreserved() = runBlocking {
+        val tagging = AnalysisEngine(context, database, writeTags = { true })
+        val result = tagging.analyzeIfNeeded("track_1").getOrThrow()
+        val tags = readTags()
+        assertTrue("expected REPLAYGAIN_TRACK_GAIN in $tags", tags.containsKey(AnalysisTagCodec.TRACK_GAIN))
+        assertTrue(tags.containsKey(AnalysisTagCodec.TRACK_PEAK))
+        val writtenGain = tags.getValue(AnalysisTagCodec.TRACK_GAIN)
+
+        // A second pass must keep the existing gain instead of overwriting it.
+        val again = tagging.analyzeIfNeeded("track_1").getOrThrow()
+        assertEquals(writtenGain, readTags()[AnalysisTagCodec.TRACK_GAIN])
+        assertEquals(result.tempo, again.tempo)
+    }
+
+    private suspend fun readTags(): Map<String, List<String>> {
+        val metadata = com.amwolfstein.sistrum.library.tags.MetadataExtractor(context)
+            .read(Uri.fromFile(audio)).getOrThrow().metadata
+        return metadata.rawTags
     }
 
     @Test
