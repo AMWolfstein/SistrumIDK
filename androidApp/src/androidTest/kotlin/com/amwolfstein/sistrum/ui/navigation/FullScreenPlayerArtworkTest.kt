@@ -51,6 +51,8 @@ class FullScreenPlayerArtworkTest {
         }
         compose.mainClock.autoAdvance = false
         fun sample(): Color {
+            // Let the pending composition and draw settle before sampling pixels.
+            compose.waitForIdle()
             val pixels = compose.onNodeWithTag("background_probe").captureToImage().toPixelMap()
             return pixels[pixels.width / 2, pixels.height / 2]
         }
@@ -81,7 +83,8 @@ class FullScreenPlayerArtworkTest {
             assertTrue(distance(main, closing) > 0.02f)
             assertTrue(distance(panel, closing) > 0.02f)
             compose.runOnIdle { showArtwork = false }
-            compose.mainClock.advanceTimeByFrame()
+            // Sample before the next animation frame: the reversal must keep the
+            // current blend instead of snapping back to either endpoint.
             assertTrue("Reversing must retain the current blend", distance(closing, sample()) < 0.02f)
             compose.mainClock.advanceTimeBy(300)
             assertTrue(distance(panel, sample()) < 0.02f)
@@ -108,14 +111,24 @@ class FullScreenPlayerArtworkTest {
         }
         for (mode in listOf(ThemeMode.Light, ThemeMode.Dark)) {
             compose.runOnIdle { theme = mode; living = false }
+            compose.waitForIdle()
             val solid = compose.onNodeWithTag("shadow_probe").captureToImage()
             compose.runOnIdle { living = true }
+            compose.waitForIdle()
             val raised = compose.onNodeWithTag("shadow_probe").captureToImage()
             assertTrue("Living artwork must cast a shadow in $mode", belowCoverBrightness(raised) < belowCoverBrightness(solid) - 0.001f)
             val solidPixels = solid.toPixelMap()
             val raisedPixels = raised.toPixelMap()
-            assertEquals("Shadow must not tint the cover", solidPixels[solid.width / 3, solid.height / 3], raisedPixels[raised.width / 3, raised.height / 3])
+            val solidCover = solidPixels[solid.width / 3, solid.height / 3]
+            val raisedCover = raisedPixels[raised.width / 3, raised.height / 3]
+            // Elevation renders the cover through a shadow layer, so compositing can
+            // round each channel by a couple of steps; that is not a tint.
+            assertEquals("Shadow must not tint the cover (red)", solidCover.red, raisedCover.red, 0.01f)
+            assertEquals("Shadow must not tint the cover (green)", solidCover.green, raisedCover.green, 0.01f)
+            assertEquals("Shadow must not tint the cover (blue)", solidCover.blue, raisedCover.blue, 0.01f)
+            assertEquals("Shadow must not tint the cover (alpha)", solidCover.alpha, raisedCover.alpha, 0.01f)
             compose.runOnIdle { living = false }
+            compose.waitForIdle()
             val restored = compose.onNodeWithTag("shadow_probe").captureToImage()
             assertEquals(belowCoverBrightness(solid), belowCoverBrightness(restored), 0.001f)
         }

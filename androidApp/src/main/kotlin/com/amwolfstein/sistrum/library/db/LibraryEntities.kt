@@ -337,7 +337,11 @@ data class TrackAnalysisEntity(
     val moodVersion: Int = 0,
     val audioFingerprint: String? = null,
     val source: String = "local",
+    /** PENDING / RUNNING / COMPLETED / FAILED / CANCELLED */
     val status: String = "PENDING",
+    val attempts: Int = 0,
+    val lastError: String? = null,
+    val updatedAt: Long? = null,
     val analyzedAt: Long? = null,
 )
 

@@ -70,7 +70,9 @@ internal fun InsightBarChart(points: List<InsightPoint>, description: String, mo
         marker = rememberInsightMarker(markerLabels),
     )
     LaunchedEffect(points) {
-        modelProducer.runTransaction { columnModel { series(points.map { it.value }) } }
+        if (points.isNotEmpty()) {
+            modelProducer.runTransaction { columnModel { series(points.map { it.value }) } }
+        }
     }
     Column(modifier) {
         CartesianChartHost(
@@ -106,7 +108,9 @@ internal fun InsightLineChart(points: List<InsightPoint>, description: String, m
         marker = rememberInsightMarker(markerLabels),
     )
     LaunchedEffect(points) {
-        modelProducer.runTransaction { lineModel { series(points.map { it.value }) } }
+        if (points.isNotEmpty()) {
+            modelProducer.runTransaction { lineModel { series(points.map { it.value }) } }
+        }
     }
     Column(modifier) {
         CartesianChartHost(

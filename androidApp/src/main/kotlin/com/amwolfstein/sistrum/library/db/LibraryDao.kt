@@ -235,6 +235,9 @@ interface LibraryDao {
     @Upsert
     suspend fun upsertArtists(values: List<ArtistEntity>)
 
+    @Query("SELECT * FROM albums WHERE normalizationKey = :normalizationKey LIMIT 1")
+    suspend fun albumByNormalizationKey(normalizationKey: String): AlbumEntity?
+
     @Upsert
     suspend fun upsertAlbums(values: List<AlbumEntity>)
 
@@ -302,6 +305,12 @@ interface LibraryDao {
 
     @Query("SELECT * FROM library_items WHERE artworkKey IS NULL AND available = 1 ORDER BY addedAt LIMIT :limit")
     suspend fun itemsMissingArtwork(limit: Int): List<LibraryItemEntity>
+
+    @Query(
+        "SELECT * FROM library_items WHERE artworkKey IS NULL AND available = 1 " +
+            "AND id > :afterId ORDER BY id LIMIT :limit",
+    )
+    suspend fun itemsMissingArtworkAfter(afterId: String, limit: Int): List<LibraryItemEntity>
 
     @Query(
         "SELECT * FROM library_items WHERE sourceId = :sourceId AND artworkKey IS NULL " +
@@ -399,6 +408,12 @@ interface LibraryDao {
     @Query("SELECT * FROM track_analysis WHERE trackId = :trackId")
     suspend fun analysis(trackId: String): TrackAnalysisEntity?
 
+    @Query("SELECT * FROM track_analysis WHERE status = 'COMPLETED' AND rms IS NOT NULL")
+    suspend fun completedAnalyses(): List<TrackAnalysisEntity>
+
+    @Query("SELECT * FROM track_analysis WHERE status = 'COMPLETED' AND rms IS NOT NULL")
+    fun observeCompletedAnalyses(): kotlinx.coroutines.flow.Flow<List<TrackAnalysisEntity>>
+
     @Query(
         "SELECT track_analysis.* FROM track_analysis " +
             "INNER JOIN library_items ON library_items.id = track_analysis.trackId " +
@@ -406,6 +421,15 @@ interface LibraryDao {
             "AND track_analysis.loudnessLufs IS NOT NULL AND track_analysis.truePeak IS NOT NULL",
     )
     suspend fun analysesForAlbum(albumId: String): List<TrackAnalysisEntity>
+
+    @Query(
+        "SELECT library_items.id FROM library_items INNER JOIN track_analysis " +
+            "ON track_analysis.trackId = library_items.id " +
+            "WHERE library_items.available = 1 AND track_analysis.status = 'COMPLETED' " +
+            "AND track_analysis.energy IS NOT NULL AND track_analysis.danceability IS NOT NULL " +
+            "AND track_analysis.brightness IS NOT NULL AND track_analysis.tempo IS NOT NULL",
+    )
+    fun observeMoodEligibleTrackIds(): kotlinx.coroutines.flow.Flow<List<String>>
 
     @Query(
         "SELECT track_analysis.trackId AS trackId, library_items.albumId AS albumId, " +
@@ -423,11 +447,37 @@ interface LibraryDao {
     @Query(
         "SELECT library_items.* FROM library_items LEFT JOIN track_analysis " +
             "ON track_analysis.trackId = library_items.id " +
-            "WHERE library_items.available = 1 AND " +
-            "(track_analysis.trackId IS NULL OR track_analysis.status != 'COMPLETED' " +
-            "OR track_analysis.analyzerVersion != :analyzerVersion) LIMIT :limit",
+            "WHERE library_items.available = 1 AND (" +
+            "track_analysis.trackId IS NULL " +
+            "OR track_analysis.status IN ('PENDING', 'CANCELLED') " +
+            "OR (track_analysis.status = 'COMPLETED' AND track_analysis.analyzerVersion != :analyzerVersion) " +
+            "OR (track_analysis.status = 'FAILED' AND track_analysis.attempts < :maxAttempts)) " +
+            "ORDER BY library_items.id LIMIT :limit",
     )
-    suspend fun itemsNeedingAnalysis(limit: Int, analyzerVersion: Int = 1): List<LibraryItemEntity>
+    suspend fun itemsNeedingAnalysis(
+        limit: Int,
+        analyzerVersion: Int = 1,
+        maxAttempts: Int = 3,
+    ): List<LibraryItemEntity>
+
+    @Insert(onConflict = OnConflictStrategy.IGNORE)
+    suspend fun insertAnalysisPlaceholder(value: TrackAnalysisEntity)
+
+    @Query("UPDATE track_analysis SET status = 'RUNNING', updatedAt = :now WHERE trackId = :trackId")
+    suspend fun markAnalysisRunning(trackId: String, now: Long)
+
+    @Query(
+        "UPDATE track_analysis SET status = 'FAILED', attempts = attempts + 1, " +
+            "lastError = :error, updatedAt = :now WHERE trackId = :trackId",
+    )
+    suspend fun markAnalysisFailed(trackId: String, error: String, now: Long)
+
+    @Query("UPDATE track_analysis SET status = 'CANCELLED', updatedAt = :now WHERE trackId = :trackId")
+    suspend fun markAnalysisCancelled(trackId: String, now: Long)
+
+    /** Marks analyses interrupted by process death as resumable. */
+    @Query("UPDATE track_analysis SET status = 'PENDING', updatedAt = :now WHERE status = 'RUNNING'")
+    suspend fun resetInterruptedAnalyses(now: Long): Int
 
     @Insert(onConflict = OnConflictStrategy.IGNORE)
     suspend fun insertListeningSession(value: LocalListeningSessionEntity)

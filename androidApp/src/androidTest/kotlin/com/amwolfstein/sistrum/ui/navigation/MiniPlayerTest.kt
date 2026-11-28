@@ -5,6 +5,7 @@ import androidx.compose.ui.test.assertIsNotDisplayed
 import androidx.compose.ui.test.assertCountEquals
 import androidx.compose.ui.test.assertWidthIsEqualTo
 import androidx.compose.ui.test.junit4.v2.createComposeRule
+import com.amwolfstein.sistrum.ui.components.AnchoredPopupMenuHost
 import androidx.compose.ui.test.onNodeWithContentDescription
 import androidx.compose.ui.test.hasContentDescription
 import androidx.compose.ui.test.onAllNodesWithText
@@ -40,10 +41,11 @@ class MiniPlayerTest {
 
     @Test
     fun hidesWhenPlaybackIsIdleOrFailed() {
-        composeTestRule.setContent { NavigationChromeForTest(PlaybackState.Idle) }
+        var state by mutableStateOf<PlaybackState>(PlaybackState.Idle)
+        composeTestRule.setContent { NavigationChromeForTest(state) }
         composeTestRule.onAllNodesWithText(item.title).assertCountEquals(0)
 
-        composeTestRule.setContent { NavigationChromeForTest(PlaybackState.Failed(item.trackId, "unavailable")) }
+        composeTestRule.runOnIdle { state = PlaybackState.Failed(item.trackId, "unavailable") }
         composeTestRule.onAllNodesWithText(item.title).assertCountEquals(0)
     }
 
@@ -78,6 +80,9 @@ class MiniPlayerTest {
         }
 
         playbackState = PlaybackState.Playing(item, positionMs = 0L, durationMs = 120_000L)
+        // The mini player enters through AnimatedVisibility; compose its first
+        // frame explicitly because the test clock no longer auto-advances.
+        composeTestRule.mainClock.advanceTimeByFrame()
         composeTestRule.waitForIdle()
         val startingTop = composeTestRule.onNodeWithText(item.title).fetchSemanticsNode().boundsInRoot.top
 
@@ -92,10 +97,11 @@ class MiniPlayerTest {
 
     @Test
     fun pausedStateUsesPlayAndPreparingDisablesTheTransportToggle() {
-        composeTestRule.setContent { NavigationChromeForTest(PlaybackState.Paused(item, 0L, 120_000L)) }
+        var state by mutableStateOf<PlaybackState>(PlaybackState.Paused(item, 0L, 120_000L))
+        composeTestRule.setContent { NavigationChromeForTest(state) }
         composeTestRule.onNodeWithContentDescription("Play").assertExists()
 
-        composeTestRule.setContent { NavigationChromeForTest(PlaybackState.Preparing(item)) }
+        composeTestRule.runOnIdle { state = PlaybackState.Preparing(item) }
         composeTestRule.onNodeWithContentDescription("Play").assertIsNotEnabled()
     }
 
@@ -116,10 +122,11 @@ class MiniPlayerTest {
     fun draggingMiniPlayerDownDismissesIt() {
         var dismisses = 0
         var opens = 0
+        var state by mutableStateOf<PlaybackState>(PlaybackState.Playing(item, positionMs = 0L, durationMs = 120_000L))
         composeTestRule.setContent {
             NavigationChromeForTest(
-                state = PlaybackState.Playing(item, positionMs = 0L, durationMs = 120_000L),
-                onDismiss = { dismisses += 1 },
+                state = state,
+                onDismiss = { dismisses += 1; state = PlaybackState.Idle },
                 onOpenFullScreenPlayer = { opens += 1 },
             )
         }
@@ -130,6 +137,8 @@ class MiniPlayerTest {
 
         assertEquals(1, dismisses)
         assertEquals(0, opens)
+        // Dismissal drives playback to Idle, so the whole mini player leaves the screen.
+        composeTestRule.onAllNodesWithText(item.title).assertCountEquals(0)
         composeTestRule.onNodeWithText(item.title).assertIsNotDisplayed()
     }
 
@@ -165,10 +174,13 @@ class MiniPlayerTest {
             NavigationChromeForTest(
                 state = PlaybackState.Playing(item, positionMs = 0L, durationMs = 120_000L),
                 onOpenFullScreenPlayer = { opens += 1 },
+                // The host owns the transition: the mini player reports the drag
+                // end and the host opens the fullscreen player.
+                onFullScreenPlayerDragEnd = { open -> if (open) opens += 1 },
             )
         }
 
-        composeTestRule.onNodeWithText(item.title).performTouchInput { swipeUp() }
+        composeTestRule.onNodeWithText(item.title, useUnmergedTree = true).performTouchInput { swipeUp() }
         composeTestRule.waitUntil(timeoutMillis = 2_000) { opens == 1 }
 
         assertEquals(1, opens)
@@ -178,11 +190,13 @@ class MiniPlayerTest {
     fun longPressingMiniPlayerOpensTheCurrentTrackContextMenu() {
         var opens = 0
         composeTestRule.setContent {
-            NavigationChromeForTest(
-                state = PlaybackState.Playing(item, positionMs = 0L, durationMs = 120_000L),
-                contextTrack = LibraryTrack(id = item.trackId, title = item.title, artists = item.artist),
-                onOpenFullScreenPlayer = { opens += 1 },
-            )
+            AnchoredPopupMenuHost(hazeState = null) {
+                NavigationChromeForTest(
+                    state = PlaybackState.Playing(item, positionMs = 0L, durationMs = 120_000L),
+                    contextTrack = LibraryTrack(id = item.trackId, title = item.title, artists = item.artist),
+                    onOpenFullScreenPlayer = { opens += 1 },
+                )
+            }
         }
 
         composeTestRule.onNodeWithText(item.title).performTouchInput { longClick() }
@@ -225,7 +239,7 @@ class MiniPlayerTest {
             )
         }
 
-        composeTestRule.onNodeWithText(item.title).performTouchInput { swipeLeft() }
+        composeTestRule.onNodeWithText(item.title, useUnmergedTree = true).performTouchInput { swipeLeft() }
         composeTestRule.waitUntil(timeoutMillis = 2_000) { calls.isNotEmpty() }
 
         assertEquals(listOf("next"), calls)
@@ -241,7 +255,7 @@ class MiniPlayerTest {
             )
         }
 
-        composeTestRule.onNodeWithText(item.artist).performTouchInput { swipeRight() }
+        composeTestRule.onNodeWithText(item.artist, useUnmergedTree = true).performTouchInput { swipeRight() }
         composeTestRule.waitUntil(timeoutMillis = 2_000) { calls.isNotEmpty() }
 
         assertEquals(listOf("previous"), calls)
@@ -287,7 +301,7 @@ class MiniPlayerTest {
             activeTrackIds = listOf("track-1", "track-2"),
             currentIndex = 0,
         )
-        composeTestRule.onNodeWithText(item.title).performTouchInput { swipeLeft() }
+        composeTestRule.onNodeWithText(item.title, useUnmergedTree = true).performTouchInput { swipeLeft() }
         composeTestRule.waitUntil(timeoutMillis = 2_000) { calls.isNotEmpty() }
 
         assertEquals(listOf("next"), calls)
@@ -336,6 +350,7 @@ class MiniPlayerTest {
         onNext: () -> Unit = {},
         onDismiss: () -> Unit = {},
         onOpenFullScreenPlayer: () -> Unit = {},
+        onFullScreenPlayerDragEnd: (Boolean) -> Unit = {},
         contextTrack: LibraryTrack? = null,
     ) {
         SistrumTheme(themeMode = ThemeMode.Dark) {
@@ -350,6 +365,7 @@ class MiniPlayerTest {
                 onNextClick = onNext,
                 onMiniPlayerDismiss = onDismiss,
                 onOpenFullScreenPlayer = onOpenFullScreenPlayer,
+                onFullScreenPlayerDragEnd = onFullScreenPlayerDragEnd,
                 contextTrack = contextTrack,
             )
         }

@@ -35,6 +35,9 @@ internal class FfmpegDecoder : Closeable {
         return nativePreload(handle, descriptor.detachFd(), normalizationGainDb)
     }
 
+    /** AAudio underrun counter for the active output stream (-1 when unavailable). */
+    fun xRunCount(): Int = nativeXRunCount(requireHandle())
+
     fun setNormalizationGains(activeDb: Float, preloadedDb: Float) {
         nativeSetNormalizationGains(requireHandle(), activeDb, preloadedDb)
     }
@@ -102,6 +105,7 @@ internal class FfmpegDecoder : Closeable {
         @JvmStatic private external fun nativePreloadedPositionMs(handle: Long): Long
         @JvmStatic private external fun nativeIsFinished(handle: Long): Boolean
         @JvmStatic private external fun nativeIsOutputDisconnected(handle: Long): Boolean
+        @JvmStatic private external fun nativeXRunCount(handle: Long): Int
     }
 }
 

@@ -101,6 +101,10 @@ internal object AndroidPlaybackRuntime {
     suspend fun moodRadioReady(): Boolean =
         (catalog as? com.amwolfstein.sistrum.sync.LocalLibraryCatalog)?.moodReady() == true
 
+    /** Album identity of a queued track, used for album-mode continuity look-ahead. */
+    suspend fun albumIdOf(trackId: String): String? =
+        runCatching { resolver.resolve(trackId)?.albumId }.getOrNull()
+
     /** Local album analyses for album-mode normalization, computed from current Room rows. */
     suspend fun albumAnalyses(albumId: String): List<TrackAnalysis> =
         (catalog as? com.amwolfstein.sistrum.sync.LocalLibraryCatalog)?.albumAnalyses(albumId).orEmpty()

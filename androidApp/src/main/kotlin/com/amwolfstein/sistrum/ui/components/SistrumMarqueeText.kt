@@ -1,6 +1,5 @@
 package com.amwolfstein.sistrum.ui.components
 
-import android.animation.ValueAnimator
 import androidx.compose.foundation.MarqueeSpacing
 import androidx.compose.foundation.basicMarquee
 import androidx.compose.foundation.layout.fillMaxWidth
@@ -52,7 +51,7 @@ fun SistrumMarqueeText(
                         if (fade && textWidth > containerWidth) drawRect(mask, blendMode = BlendMode.DstIn)
                     }
                 }.basicMarquee(
-                iterations = if (ValueAnimator.areAnimatorsEnabled()) Int.MAX_VALUE else 0,
+                iterations = Int.MAX_VALUE,
                 repeatDelayMillis = 3_000,
                 initialDelayMillis = 3_000,
                 spacing = MarqueeSpacing(32.dp),

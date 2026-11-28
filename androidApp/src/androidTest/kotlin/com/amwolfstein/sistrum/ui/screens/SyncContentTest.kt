@@ -1,5 +1,6 @@
 package com.amwolfstein.sistrum.ui.screens
 
+import com.amwolfstein.sistrum.ui.createHostedComposeRule
 import androidx.compose.ui.test.assertIsDisplayed
 import androidx.compose.ui.test.assertIsNotEnabled
 import androidx.compose.ui.test.junit4.v2.createComposeRule
@@ -19,7 +20,7 @@ import org.junit.Test
 
 class SyncContentTest {
     @get:Rule
-    val composeTestRule = createComposeRule()
+    val composeTestRule = createHostedComposeRule()
 
     @Test
     fun offlinePairedDesktopShowsReadyToConnectGuidanceAndRevokeActionInDeviceCard() {

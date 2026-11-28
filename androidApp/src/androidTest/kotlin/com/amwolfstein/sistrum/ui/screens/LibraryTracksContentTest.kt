@@ -1,5 +1,6 @@
 package com.amwolfstein.sistrum.ui.screens
 
+import com.amwolfstein.sistrum.ui.createHostedComposeRule
 import androidx.compose.ui.test.hasContentDescription
 import androidx.compose.ui.test.assertCountEquals
 import androidx.compose.ui.test.assertIsFocused
@@ -26,7 +27,7 @@ import org.junit.Test
 
 class LibraryTracksContentTest {
     @get:Rule
-    val composeTestRule = createComposeRule()
+    val composeTestRule = createHostedComposeRule()
 
     @Test
     fun displaysEmptyStateWhenNoTracks() {

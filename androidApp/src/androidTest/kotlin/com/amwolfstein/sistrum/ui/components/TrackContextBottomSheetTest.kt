@@ -1,16 +1,23 @@
 package com.amwolfstein.sistrum.ui.components
 
 import androidx.compose.ui.test.junit4.v2.createComposeRule
+import androidx.compose.ui.semantics.SemanticsProperties
+import androidx.compose.ui.test.SemanticsMatcher
+import androidx.compose.ui.test.assert
 import androidx.compose.ui.test.assertCountEquals
 import androidx.compose.ui.test.assertIsDisplayed
-import androidx.compose.ui.test.assertTextEquals
+import androidx.compose.ui.test.hasScrollAction
+import androidx.compose.ui.test.hasText
+import androidx.compose.ui.test.onFirst
 import androidx.compose.ui.test.onAllNodesWithContentDescription
 import androidx.compose.ui.test.onAllNodesWithText
 import androidx.compose.ui.test.onNodeWithContentDescription
 import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.performClick
+import androidx.compose.ui.test.performScrollToNode
 import androidx.compose.ui.test.performTextClearance
 import androidx.compose.ui.test.performTextInput
+import androidx.compose.ui.text.AnnotatedString
 import com.amwolfstein.sistrum.settings.ThemeMode
 import com.amwolfstein.sistrum.lyrics.LyricsSearchResult
 import com.amwolfstein.sistrum.sync.LibraryPlaylist
@@ -83,8 +90,13 @@ class TrackContextBottomSheetTest {
         }
 
         composeTestRule.onNodeWithText("Track").assertIsDisplayed()
-        composeTestRule.onNodeWithText("Artist").assertIsDisplayed()
+        // "Artist" is the header subtitle plus the detail label and its value.
+        composeTestRule.onAllNodesWithText("Artist").assertCountEquals(3)
+        composeTestRule.onAllNodesWithText("Artist").onFirst().assertIsDisplayed()
+        val scroll = composeTestRule.onNode(hasScrollAction())
+        scroll.performScrollToNode(hasText("4:05"))
         composeTestRule.onNodeWithText("4:05").assertIsDisplayed()
+        scroll.performScrollToNode(hasText("Hi-Res"))
         composeTestRule.onNodeWithText("Hi-Res").assertIsDisplayed()
     }
 
@@ -119,7 +131,8 @@ class TrackContextBottomSheetTest {
         composeTestRule.waitUntil(1_000) {
             composeTestRule.onAllNodesWithContentDescription("Track title").fetchSemanticsNodes().isNotEmpty()
         }
-        composeTestRule.onNodeWithContentDescription("Track title").assertTextEquals("Retained title")
+        composeTestRule.onNodeWithContentDescription("Track title")
+            .assert(SemanticsMatcher.expectValue(SemanticsProperties.EditableText, AnnotatedString("Retained title")))
         composeTestRule.onNodeWithText("Found track").performClick()
         composeTestRule.onNodeWithText("Select").performClick()
 

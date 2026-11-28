@@ -773,19 +773,20 @@ class PlaybackService : Service() {
     }
 
     private suspend fun normalizationGain(item: PlaybackItem, nextId: String?): Float {
-        if (item.analysis == null) {
-            if (normalizationSettings.enabled) normalizationPreferences.disable()
-            return 0f
-        }
+        // Missing analysis plays at normal volume; the user's setting is never turned off for it.
+        if (item.analysis == null) return 0f
         val albumAnalyses = if (normalizationSettings.mode == NormalizationMode.Album && item.albumId.isNotEmpty()) {
             AndroidPlaybackRuntime.albumAnalyses(item.albumId)
         } else {
             emptyList()
         }
+        val continuousAlbum = nextId != null && item.albumId.isNotEmpty() &&
+            AndroidPlaybackRuntime.albumIdOf(nextId) == item.albumId
         return com.amwolfstein.sistrum.library.analysis.AlbumAggregate.gainDb(
             normalizationSettings,
             item.analysis,
             albumAnalyses,
+            continuousAlbum = continuousAlbum,
         )
     }
 

@@ -1,5 +1,6 @@
 package com.amwolfstein.sistrum.ui.screens
 
+import com.amwolfstein.sistrum.ui.createHostedComposeRule
 import android.graphics.Bitmap
 import androidx.compose.ui.test.assertCountEquals
 import androidx.compose.ui.test.assertIsDisplayed
@@ -22,7 +23,7 @@ import org.junit.Test
 
 class IntegrationContentTest {
     @get:Rule
-    val composeTestRule = createComposeRule()
+    val composeTestRule = createHostedComposeRule()
 
     @Test
     fun connectedAccountShowsUsernameAndDisconnects() {

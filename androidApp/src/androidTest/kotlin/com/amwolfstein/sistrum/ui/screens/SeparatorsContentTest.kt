@@ -1,5 +1,6 @@
 package com.amwolfstein.sistrum.ui.screens
 
+import com.amwolfstein.sistrum.ui.createHostedComposeRule
 import androidx.compose.ui.test.assertIsDisplayed
 import androidx.compose.ui.test.junit4.v2.createComposeRule
 import androidx.compose.ui.test.onAllNodesWithTag
@@ -17,7 +18,7 @@ import org.junit.Test
 
 class SeparatorsContentTest {
     @get:Rule
-    val composeTestRule = createComposeRule()
+    val composeTestRule = createHostedComposeRule()
 
     private val dataStoreFile: File
         get() = File(

@@ -11,6 +11,7 @@ import com.amwolfstein.sistrum.library.db.LibrarySourceEntity
 import com.amwolfstein.sistrum.library.db.ScanEntryEntity
 import com.amwolfstein.sistrum.library.db.TrackAlbumArtistEntity
 import com.amwolfstein.sistrum.library.db.TrackArtistEntity
+import com.amwolfstein.sistrum.library.db.TrackAnalysisEntity
 import com.amwolfstein.sistrum.library.db.TrackComposerEntity
 import com.amwolfstein.sistrum.library.db.TrackGenreEntity
 import com.amwolfstein.sistrum.library.metadata.SeparatorConfig
@@ -32,6 +33,7 @@ interface LibraryStore {
     suspend fun itemSources(itemId: String): List<ItemSourceEntity>
     suspend fun itemSourcesForSource(sourceId: String): List<ItemSourceEntity>
     suspend fun itemById(itemId: String): LibraryItemEntity?
+    suspend fun albumByNormalizationKey(normalizationKey: String): AlbumEntity?
     suspend fun deleteItemSource(itemId: String, sourceId: String)
     suspend fun deleteItemSourcesExcept(itemId: String, keepSourceId: String)
     suspend fun deleteOrphanItemsForSource(sourceId: String)
@@ -51,12 +53,16 @@ interface LibraryStore {
     suspend fun deleteTrackAlbumArtists(trackId: String)
     suspend fun deleteTrackGenres(trackId: String)
     suspend fun deleteTrackComposers(trackId: String)
+    suspend fun upsertAnalysis(value: TrackAnalysisEntity)
+    suspend fun setAlbumArtworkIfMissing(albumId: String, key: String, source: String)
 }
 
 /** One scan read: parsed tags plus the optional decoded-PCM identity. */
 data class ScannedMetadata(
     val tag: TagMetadata,
     val fingerprint: String? = null,
+    /** Embedded picture read in the same pass as the tags, cached during publication. */
+    val artwork: ByteArray? = null,
 )
 
 fun interface TrackMetadataProvider {
@@ -87,6 +93,8 @@ class ScanPublisher(
     separators: SeparatorConfig = SeparatorConfig(),
     private val resolver: EntityResolver = EntityResolver(separators),
     private val now: () -> Long = System::currentTimeMillis,
+    /** Stores one embedded picture and returns its cache key. */
+    private val artworkStore: suspend (ByteArray) -> String? = { null },
 ) {
     private val json = Json { encodeDefaults = true }
 
@@ -147,7 +155,9 @@ class ScanPublisher(
             }
 
             val tag = mergeCue(entry, metadata ?: TagMetadata())
-            val resolved = resolver.resolve(tag, entry.relativePath.ifBlank { entry.name }, entry.documentKey)
+            val resolved = adoptAlbumIdentity(
+                resolver.resolve(tag, entry.relativePath.ifBlank { entry.name }, entry.documentKey),
+            )
             val contentKey = contentKey(entry, tag, resolved, fingerprint, existingByDocument)
 
             val moveCandidate = if (existingByDocument == null) {
@@ -160,6 +170,7 @@ class ScanPublisher(
 
             val itemId = base?.id ?: resolved.itemId
             val isMove = existingByDocument == null && moveCandidate != null
+            val scannedArtwork = scanned?.artwork?.let { bytes -> runCatching { artworkStore(bytes) }.getOrNull() }
             val item = buildItem(
                 entry = entry,
                 source = source,
@@ -169,8 +180,16 @@ class ScanPublisher(
                 contentKey = contentKey,
                 existing = base,
                 id = itemId,
+                artworkKey = scannedArtwork,
             )
             writeEntities(item, resolved, tag)
+            if (scannedArtwork != null) {
+                item.albumId?.let { store.setAlbumArtworkIfMissing(it, scannedArtwork, "TRACK") }
+            }
+            // A clean install has no Room rows; recover valid analysis from the audio tags.
+            com.amwolfstein.sistrum.library.analysis.AnalysisTagCodec
+                .fromTags(tag.rawTags, item.audioFingerprint)
+                ?.let { store.upsertAnalysis(it.copy(trackId = item.id)) }
             store.upsertItemSources(
                 listOf(
                     ItemSourceEntity(
@@ -193,6 +212,20 @@ class ScanPublisher(
 
         val missing = if (complete) reconcileMemberships(source, seenItemIds) else 0
         return PublishResult(added, updated, moved, missing, metadataFailures)
+    }
+
+    /**
+     * Album identity is the normalization key, not the hashed id: a row that already owns a key
+     * keeps its id, so a rescan, a rebuild and legacy imports cannot fork or orphan the album.
+     */
+    private suspend fun adoptAlbumIdentity(resolved: ResolvedTrack): ResolvedTrack {
+        val albumId = resolved.albumId ?: return resolved
+        val normalizationKey = TagNormalizer.normalize(
+            resolved.albumTitle + "\u0000" + resolved.albumArtistNames.firstOrNull().orEmpty(),
+        )
+        val existing = store.albumByNormalizationKey(normalizationKey) ?: return resolved
+        if (existing.id == albumId) return resolved
+        return resolved.copy(albumId = existing.id)
     }
 
     private suspend fun uniqueMoveCandidate(
@@ -273,16 +306,21 @@ class ScanPublisher(
         store.upsertArtists((artists + albumArtists).distinctBy { it.id })
 
         resolved.albumId?.let { albumId ->
+            val normalizationKey = TagNormalizer.normalize(
+                resolved.albumTitle + "\u0000" + resolved.albumArtistNames.firstOrNull().orEmpty(),
+            )
+            val existing = store.albumByNormalizationKey(normalizationKey)
             store.upsertAlbums(
                 listOf(
                     AlbumEntity(
                         id = albumId,
                         title = resolved.albumTitle,
                         sortTitle = resolved.albumSortTitle,
-                        normalizationKey = TagNormalizer.normalize(
-                            resolved.albumTitle + "\u0000" + resolved.albumArtistNames.firstOrNull().orEmpty(),
-                        ),
-                        year = metadata.year,
+                        normalizationKey = normalizationKey,
+                        year = metadata.year ?: existing?.year,
+                        copyright = existing?.copyright,
+                        artworkKey = existing?.artworkKey,
+                        artworkSource = existing?.artworkSource,
                         primaryAlbumArtistId = resolved.albumArtistId,
                     ),
                 ),
@@ -333,6 +371,7 @@ class ScanPublisher(
         contentKey: String,
         existing: LibraryItemEntity?,
         id: String,
+        artworkKey: String? = null,
     ): LibraryItemEntity {
         val timestamp = now()
         return LibraryItemEntity(
@@ -380,7 +419,7 @@ class ScanPublisher(
             isFavorite = existing?.isFavorite ?: false,
             rating = existing?.rating,
             playCount = existing?.playCount ?: 0,
-            artworkKey = existing?.artworkKey,
+            artworkKey = artworkKey ?: existing?.artworkKey,
             audioFingerprint = fingerprint ?: existing?.audioFingerprint,
             contentKey = contentKey,
             addedAt = existing?.addedAt ?: timestamp,

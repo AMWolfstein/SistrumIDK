@@ -12,9 +12,11 @@ internal object AnalysisBridge {
     external fun nativeTempoProbe(): Boolean
 
     /**
-     * Decodes [fd] through FFmpeg and returns:
-     * loudness LUFS, loudness range, true peak dBFS, RMS dBFS, crest dB, spectral centroid,
-     * rolloff, flatness, flux, ZCR/s, tempo BPM, onset variance, energy, danceability, brightness.
+     * Decodes [fd] through the Airmedy `d859940c` avfilter graph and returns:
+     * loudness LUFS, loudness range LU, true peak dBFS, RMS dBFS, crest factor,
+     * spectral centroid, rolloff, flatness, flux, ZCR/s, tempo BPM, onset variance
+     * (samples², as upstream). Energy/danceability/brightness are derived in Kotlin
+     * from corpus percentiles, exactly like the desktop producer.
      * [startMs]/[endMs] bound one CUE segment; 0 and -1 analyse the whole file.
      * An empty array means the file could not be decoded.
      */

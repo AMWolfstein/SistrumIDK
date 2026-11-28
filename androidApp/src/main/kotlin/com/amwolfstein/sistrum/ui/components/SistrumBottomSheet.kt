@@ -43,6 +43,8 @@ import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.unit.dp
 import androidx.compose.foundation.interaction.MutableInteractionSource
+import androidx.compose.material3.LocalContentColor
+import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.ui.window.Dialog
 import androidx.compose.ui.window.DialogProperties
 import androidx.compose.ui.window.DialogWindowProvider
@@ -120,72 +122,80 @@ fun SistrumBottomSheet(
     ) {
         val dialogWindow = (LocalView.current.parent as DialogWindowProvider).window
         SideEffect { dialogWindow.setDimAmount(0f) }
-        Box(Modifier.fillMaxSize()) {
-            Box(
-                Modifier.fillMaxSize()
-                    .background(colors.playerBackdrop.copy(alpha = 0.62f * sheetAlpha * (1f - (dragTranslation / dismissDragThreshold).coerceIn(0f, 1f))))
-                    .semantics { contentDescription = dismissLabel }
-                    .clickable(
-                        role = Role.Button,
-                        interactionSource = backdropInteraction,
-                        indication = null,
-                        onClick = { requestDismiss() },
-                    ),
-            )
-            Column(
-                modifier = modifier.align(Alignment.BottomCenter).fillMaxWidth()
-                    .pointerInput(Unit) {
-                        awaitPointerEventScope { while (true) awaitPointerEvent() }
-                    }
-                    .graphicsLayer { alpha = sheetAlpha; translationY = sheetTranslation + dragTranslation }
-                    .clip(RoundedCornerShape(topStart = 30.dp, topEnd = 30.dp))
-                    .background(colors.glassOpaque)
-                    .border(1.dp, colors.borderGlass, RoundedCornerShape(topStart = 30.dp, topEnd = 30.dp))
-                    .navigationBarsPadding()
-                    .imePadding(),
-            ) {
-                Box(Modifier.fillMaxWidth().padding(top = 10.dp), contentAlignment = Alignment.Center) {
-                    Box(
-                        Modifier.width(36.dp)
-                            .height(4.dp)
-                            .clip(RoundedCornerShape(2.dp))
-                            .background(colors.textMain.copy(alpha = colors.foregroundSubtle.alpha)),
-                    )
-                }
-                Row(
-                    modifier = Modifier.fillMaxWidth()
-                        .height(64.dp)
-                        .padding(horizontal = 12.dp)
-                        .testTag("bottom-sheet-header")
-                        .pointerInput(dismissDragThreshold) {
-                            detectVerticalDragGestures(
-                                onDragStart = { isDragging = true },
-                                onDragCancel = {
-                                    isDragging = false
-                                    dragOffset = 0f
-                                },
-                                onDragEnd = {
-                                    isDragging = false
-                                    if (dragOffset >= dismissDragThreshold) {
-                                        requestDismiss(onDragDismiss, immediate = false)
-                                    } else {
-                                        dragOffset = 0f
-                                    }
-                                },
-                                onVerticalDrag = { change, dragAmount ->
-                                    change.consume()
-                                    dragOffset = (dragOffset + dragAmount).coerceAtLeast(0f)
-                                },
-                            )
-                        },
-                    verticalAlignment = Alignment.CenterVertically,
+        // Dialog content is composed in a separate window, so it does not inherit
+        // the caller's locals. Re-provide the app palette so implicit sheet text
+        // follows the active theme instead of the framework defaults.
+        CompositionLocalProvider(
+            LocalSistrumColors provides colors,
+            LocalContentColor provides colors.textMain,
+        ) {
+            Box(Modifier.fillMaxSize()) {
+                Box(
+                    Modifier.fillMaxSize()
+                        .background(colors.playerBackdrop.copy(alpha = 0.62f * sheetAlpha * (1f - (dragTranslation / dismissDragThreshold).coerceIn(0f, 1f))))
+                        .semantics { contentDescription = dismissLabel }
+                        .clickable(
+                            role = Role.Button,
+                            interactionSource = backdropInteraction,
+                            indication = null,
+                            onClick = { requestDismiss() },
+                        ),
+                )
+                Column(
+                    modifier = modifier.align(Alignment.BottomCenter).fillMaxWidth()
+                        .pointerInput(Unit) {
+                            awaitPointerEventScope { while (true) awaitPointerEvent() }
+                        }
+                        .graphicsLayer { alpha = sheetAlpha; translationY = sheetTranslation + dragTranslation }
+                        .clip(RoundedCornerShape(topStart = 30.dp, topEnd = 30.dp))
+                        .background(colors.glassOpaque)
+                        .border(1.dp, colors.borderGlass, RoundedCornerShape(topStart = 30.dp, topEnd = 30.dp))
+                        .navigationBarsPadding()
+                        .imePadding(),
                 ) {
-                    Box(Modifier.width(48.dp), contentAlignment = Alignment.Center) { leadingAction { requestDismiss() } }
-                    Box(Modifier.weight(1f), contentAlignment = Alignment.Center) { title() }
-                    Box(Modifier.width(48.dp), contentAlignment = Alignment.Center) { trailingAction() }
+                    Box(Modifier.fillMaxWidth().padding(top = 10.dp), contentAlignment = Alignment.Center) {
+                        Box(
+                            Modifier.width(36.dp)
+                                .height(4.dp)
+                                .clip(RoundedCornerShape(2.dp))
+                                .background(colors.textMain.copy(alpha = colors.foregroundSubtle.alpha)),
+                        )
+                    }
+                    Row(
+                        modifier = Modifier.fillMaxWidth()
+                            .height(64.dp)
+                            .padding(horizontal = 12.dp)
+                            .testTag("bottom-sheet-header")
+                            .pointerInput(dismissDragThreshold) {
+                                detectVerticalDragGestures(
+                                    onDragStart = { isDragging = true },
+                                    onDragCancel = {
+                                        isDragging = false
+                                        dragOffset = 0f
+                                    },
+                                    onDragEnd = {
+                                        isDragging = false
+                                        if (dragOffset >= dismissDragThreshold) {
+                                            requestDismiss(onDragDismiss, immediate = false)
+                                        } else {
+                                            dragOffset = 0f
+                                        }
+                                    },
+                                    onVerticalDrag = { change, dragAmount ->
+                                        change.consume()
+                                        dragOffset = (dragOffset + dragAmount).coerceAtLeast(0f)
+                                    },
+                                )
+                            },
+                        verticalAlignment = Alignment.CenterVertically,
+                    ) {
+                        Box(Modifier.width(48.dp), contentAlignment = Alignment.Center) { leadingAction { requestDismiss() } }
+                        Box(Modifier.weight(1f), contentAlignment = Alignment.Center) { title() }
+                        Box(Modifier.width(48.dp), contentAlignment = Alignment.Center) { trailingAction() }
+                    }
+                    content()
+                    Spacer(Modifier.height(12.dp))
                 }
-                content()
-                Spacer(Modifier.height(12.dp))
             }
         }
     }

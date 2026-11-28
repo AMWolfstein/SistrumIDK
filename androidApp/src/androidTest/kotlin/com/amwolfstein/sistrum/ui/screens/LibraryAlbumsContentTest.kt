@@ -1,5 +1,6 @@
 package com.amwolfstein.sistrum.ui.screens
 
+import com.amwolfstein.sistrum.ui.createHostedComposeRule
 import androidx.compose.foundation.lazy.LazyListState
 import androidx.compose.foundation.layout.requiredSize
 import androidx.compose.runtime.mutableStateOf
@@ -26,7 +27,7 @@ import org.junit.Rule
 import org.junit.Test
 
 class LibraryAlbumsContentTest {
-    @get:Rule val composeTestRule = createComposeRule()
+    @get:Rule val composeTestRule = createHostedComposeRule()
 
     @Test
     fun displaysEmptyStateWhenNoAlbums() {

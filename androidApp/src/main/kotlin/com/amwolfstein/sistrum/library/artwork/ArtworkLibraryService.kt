@@ -56,6 +56,26 @@ internal class ArtworkLibraryService(
     }
 
     /**
+     * Reads embedded artwork for the whole library in bounded pages. Successful items leave the
+     * "missing" set, so repeated pages advance; a per-run budget protects long scans.
+     */
+    suspend fun populateAllMissingArtwork(budget: Int = 5_000, page: Int = 64): Int = withContext(Dispatchers.IO) {
+        var imported = 0
+        var scanned = 0
+        var cursor = ""
+        while (scanned < budget) {
+            val batch = dao.itemsMissingArtworkAfter(cursor, minOf(page, budget - scanned))
+            if (batch.isEmpty()) break
+            batch.forEach { item ->
+                scanned += 1
+                if (refreshItemArtwork(item.id) != null) imported += 1
+            }
+            cursor = batch.last().id
+        }
+        imported
+    }
+
+    /**
      * Applies cover images found by the scanner to items in that folder that still have no
      * artwork. Reading a cover is bounded and a broken image never fails the scan.
      */
@@ -149,7 +169,7 @@ internal class ArtworkLibraryService(
 
     /** Called after a scan publication: bounded embedded/folder population plus cleanup. */
     suspend fun onLibraryChanged(sourceId: String, covers: List<FolderCover>): ArtworkCacheSummary {
-        populateMissingArtwork(limit = 64)
+        populateAllMissingArtwork()
         applyFolderCovers(sourceId, covers)
         refreshArtistFallbacks(limit = 100)
         if (settingsProvider().deezerEnabled) resolveArtistsOnline(limit = 5)

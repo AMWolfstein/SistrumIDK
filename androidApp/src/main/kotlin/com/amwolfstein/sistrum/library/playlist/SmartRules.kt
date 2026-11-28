@@ -154,7 +154,8 @@ object SmartRules {
                 "year" -> metadata?.get("year")?.asDouble()
                 "bpm" -> metadata?.get("tempo")?.asDouble()
                 "play_count" -> track.playCount.toDouble()
-                "duration" -> (metadata?.get("duration")?.asDouble() ?: track.durationSeconds()) / 1000.0
+                // Duration rules are in seconds, like the upstream smart-rule column and M3U8.
+                "duration" -> metadata?.get("duration")?.asDouble() ?: track.durationSeconds()
                 "bitrate" -> metadata?.get("bitrate")?.asDouble()
                 "energy" -> metadata?.get("energy")?.asDouble()
                 "danceability" -> metadata?.get("danceability")?.asDouble()

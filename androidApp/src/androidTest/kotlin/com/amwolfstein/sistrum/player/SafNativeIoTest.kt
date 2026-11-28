@@ -31,7 +31,7 @@ class SafNativeIoTest {
             assertTrue("metadata was empty for ${item.fileUri}", metadata.durationMs > 0L)
             assertTrue("audio fingerprint missing", TagLibBridge.nativeAudioFingerprint(descriptor.fd, 0, -1)?.startsWith("pcm-sha256-v1:") == true)
             val analysis = AnalysisBridge.nativeAnalyzeFd(descriptor.fd, 0, -1)
-            assertTrue("analysis returned ${analysis.size} fields", analysis.size == 15)
+            assertTrue("analysis returned ${analysis.size} fields", analysis.size == 12)
         }
 
         context.contentResolver.openFileDescriptor(uri, "r")!!.use { descriptor ->

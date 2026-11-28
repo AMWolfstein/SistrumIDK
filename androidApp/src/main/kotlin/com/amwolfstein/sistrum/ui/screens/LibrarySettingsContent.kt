@@ -99,9 +99,35 @@ internal fun LibrarySettingsContent(
         ) {
             Text(stringResource(R.string.analysis_settings_title))
             Switch(
-                checked = analysisSettings.writeReplayGainTags,
+                checked = analysisSettings.writeAnalysisToFiles,
                 onCheckedChange = { enabled ->
-                    scope.launch { analysisPreferences.setWriteReplayGainTags(enabled) }
+                    scope.launch { analysisPreferences.setWriteAnalysisToFiles(enabled) }
+                },
+            )
+        }
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.SpaceBetween,
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            Text(stringResource(R.string.analysis_reuse_title))
+            Switch(
+                checked = analysisSettings.reuseExisting,
+                onCheckedChange = { enabled ->
+                    scope.launch { analysisPreferences.setReuseExisting(enabled) }
+                },
+            )
+        }
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.SpaceBetween,
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            Text(stringResource(R.string.analysis_preserve_replaygain_title))
+            Switch(
+                checked = analysisSettings.preserveReplayGain,
+                onCheckedChange = { enabled ->
+                    scope.launch { analysisPreferences.setPreserveReplayGain(enabled) }
                 },
             )
         }
@@ -134,7 +160,9 @@ internal fun LibrarySettingsContent(
                 scope.launch {
                     val engine = com.amwolfstein.sistrum.library.analysis.AnalysisEngine(
                         context,
-                        writeTags = { analysisSettings.writeReplayGainTags },
+                        writeTags = { analysisSettings.writeAnalysisToFiles },
+                        reuseExisting = analysisSettings.reuseExisting,
+                        preserveReplayGain = analysisSettings.preserveReplayGain,
                     )
                     analyzedCount = runCatching { engine.analyzeAll(limit = 25) }.getOrDefault(0)
                     analyzing = false

@@ -1,5 +1,6 @@
 package com.amwolfstein.sistrum.ui.screens
 
+import com.amwolfstein.sistrum.ui.createHostedComposeRule
 import androidx.compose.foundation.layout.width
 import androidx.compose.ui.test.junit4.v2.createComposeRule
 import androidx.compose.ui.test.click
@@ -15,7 +16,7 @@ import org.junit.Test
 
 class CrossfadeDurationSliderTest {
     @get:Rule
-    val composeTestRule = createComposeRule()
+    val composeTestRule = createHostedComposeRule()
 
     @Test
     fun boundsAreBelowTheSliderTrack() {

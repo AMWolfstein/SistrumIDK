@@ -34,6 +34,7 @@ import com.amwolfstein.sistrum.player.PlaybackQueueSnapshot
 import com.amwolfstein.sistrum.player.PlaybackState
 import com.amwolfstein.sistrum.settings.ThemeMode
 import com.amwolfstein.sistrum.sync.LibraryTrack
+import com.amwolfstein.sistrum.ui.components.AnchoredPopupMenuHost
 import com.amwolfstein.sistrum.ui.theme.SistrumTheme
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertTrue
@@ -205,6 +206,8 @@ class WidePlayerSwipeTest {
         val verticalInsets = with(LocalDensity.current) { (insets.getTop(this) + insets.getBottom(this)).toDp() }
         val ids = (1..40).map { "track-$it" }
         SistrumTheme(themeMode = ThemeMode.Dark) {
+            // The more-options menu renders through the app-level popup host.
+            AnchoredPopupMenuHost(hazeState = null) {
             FullScreenPlayer(
                 modifier = Modifier.requiredSize(width + horizontalInsets, height + verticalInsets),
                 visible = visible, dragProgress = 0f, isDragging = false, openingFromMiniPlayerSwipe = false,
@@ -217,6 +220,7 @@ class WidePlayerSwipeTest {
                 onFavoriteToggle = { _, _ -> onFavorite() }, onOpenMediaOutputSwitcher = onOutput,
                 onQueueReordered = onReorder, onDismiss = onDismiss,
             )
+            }
         }
     }
 }

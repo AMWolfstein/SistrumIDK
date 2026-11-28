@@ -42,7 +42,7 @@ import androidx.room.migration.Migration
         LibrarySearchEntity::class,
         LibrarySearchFtsEntity::class,
     ],
-    version = 4,
+    version = 5,
     exportSchema = true,
 )
 abstract class LibraryDatabase : RoomDatabase() {
@@ -60,7 +60,7 @@ abstract class LibraryDatabase : RoomDatabase() {
 
         fun create(context: Context): LibraryDatabase =
             Room.databaseBuilder(context.applicationContext, LibraryDatabase::class.java, NAME)
-                .addMigrations(MIGRATION_1_2, MIGRATION_2_3, MIGRATION_3_4)
+                .addMigrations(MIGRATION_1_2, MIGRATION_2_3, MIGRATION_3_4, MIGRATION_4_5)
                 .addCallback(ratingCheck())
                 .build()
 
@@ -101,6 +101,15 @@ abstract class LibraryDatabase : RoomDatabase() {
             override fun migrate(db: SupportSQLiteDatabase) {
                 SearchIndexSql.createFts(db)
                 SearchIndexSql.createTriggers(db)
+            }
+        }
+
+        /** Adds the analysis job lifecycle columns (status timestamps, attempts, error). */
+        val MIGRATION_4_5: Migration = object : Migration(4, 5) {
+            override fun migrate(db: SupportSQLiteDatabase) {
+                db.execSQL("ALTER TABLE track_analysis ADD COLUMN attempts INTEGER NOT NULL DEFAULT 0")
+                db.execSQL("ALTER TABLE track_analysis ADD COLUMN lastError TEXT")
+                db.execSQL("ALTER TABLE track_analysis ADD COLUMN updatedAt INTEGER")
             }
         }
 

@@ -50,6 +50,8 @@ class RelationshipRebuilder(private val database: LibraryDatabase) {
             val genres = linkedMapOf<String, GenreEntity>()
             val composers = linkedMapOf<String, ComposerEntity>()
             val existingAlbums = dao.allAlbums()
+            val existingAlbumById = existingAlbums.associateBy { it.id }
+            val claimedAlbumIds = mutableSetOf<String>()
             // Regrouping re-keys an album id; keep artwork reachable by the title it belonged to.
             val artworkByTitle = existingAlbums
                 .filter { it.artworkKey != null }
@@ -65,7 +67,20 @@ class RelationshipRebuilder(private val database: LibraryDatabase) {
                 val genreNames = split(original.rawGenreNames, config.genre)
                 val composerNames = split(original.rawComposerNames, config.composer)
 
-                val item = regroup(original, albumArtistNames, albumBuilders, artworkByTitle)
+                // Album FKs need their artist rows before the album row is inserted.
+                val itemArtists = (artistNames + albumArtistNames).distinct().map { name ->
+                    artists.getValue(artistId(artists, name))
+                }
+                if (itemArtists.isNotEmpty()) dao.upsertArtists(itemArtists)
+
+                val item = regroup(
+                    original,
+                    albumArtistNames,
+                    albumBuilders,
+                    artworkByTitle,
+                    existingAlbumById,
+                    claimedAlbumIds,
+                )
                 if (item.albumId != original.albumId) regrouped += 1
 
                 val trackArtists = artistNames.mapIndexed { index, name ->
@@ -91,10 +106,6 @@ class RelationshipRebuilder(private val database: LibraryDatabase) {
                 }
 
                 // Entities must exist before the junctions that reference them.
-                val itemArtists = (artistNames + albumArtistNames).distinct().map { name ->
-                    artists.getValue(TagNormalizer.key("artist", name))
-                }
-                if (itemArtists.isNotEmpty()) dao.upsertArtists(itemArtists)
                 val itemGenres = genreNames.map { genres.getValue(TagNormalizer.key("genre", it)) }
                 if (itemGenres.isNotEmpty()) dao.upsertGenres(itemGenres)
                 val itemComposers = composerNames.map { composers.getValue(TagNormalizer.key("composer", it)) }
@@ -112,7 +123,10 @@ class RelationshipRebuilder(private val database: LibraryDatabase) {
 
             // Albums are derived from the regrouped items, not from their previous ids.
             albumBuilders.values.forEach { builder ->
-                val artwork = builder.artworkKey ?: artworkByTitle[TagNormalizer.normalize(builder.title)]?.first
+                val previous = existingAlbumById[builder.id]
+                val artwork = builder.artworkKey
+                    ?: previous?.artworkKey
+                    ?: artworkByTitle[TagNormalizer.normalize(builder.title)]?.first
                 dao.upsertAlbums(
                     listOf(
                         AlbumEntity(
@@ -122,10 +136,13 @@ class RelationshipRebuilder(private val database: LibraryDatabase) {
                             normalizationKey = TagNormalizer.normalize(
                                 builder.title + "\u0000" + builder.albumArtistNames.firstOrNull().orEmpty(),
                             ),
-                            year = builder.year,
+                            year = builder.year ?: previous?.year,
+                            copyright = previous?.copyright,
+                            artworkKey = artwork,
+                            artworkSource = previous?.artworkSource
+                                ?: artworkByTitle[TagNormalizer.normalize(builder.title)]?.second,
                             primaryAlbumArtistId = builder.albumArtistNames.firstOrNull()
                                 ?.let { TagNormalizer.key("artist", it) },
-                            artworkKey = artwork,
                         ),
                     ),
                 )
@@ -170,25 +187,38 @@ class RelationshipRebuilder(private val database: LibraryDatabase) {
         albumArtistNames: List<String>,
         builders: MutableMap<String, AlbumBuilder>,
         artworkByTitle: Map<String, Pair<String?, String?>>,
+        existingAlbumById: Map<String, AlbumEntity>,
+        claimedAlbumIds: MutableSet<String>,
     ): LibraryItemEntity {
         val dao = database.libraryDao()
         val albumTitle = item.albumTitle
+        val title = albumTitle.ifBlank { "Unknown Album" }
+        val firstArtist = albumArtistNames.firstOrNull().orEmpty()
+        val normalizationKey = TagNormalizer.normalize(title + "\u0000" + firstArtist)
+        val derivedId = TagNormalizer.key("album", "$title\u0000$firstArtist")
+        val primaryArtistId = albumArtistNames.firstOrNull()?.let { TagNormalizer.key("artist", it) }
+        // Keep the id of a row that already owns this identity, so a rebuild and a rescan agree.
+        val adoptable = existingAlbumById.values.firstOrNull { album ->
+            album.id !in claimedAlbumIds && album.normalizationKey == normalizationKey
+        } ?: existingAlbumById.values.firstOrNull { album ->
+            album.id !in claimedAlbumIds && album.id == item.albumId &&
+                TagNormalizer.normalize(album.title) == TagNormalizer.normalize(title) &&
+                (album.primaryAlbumArtistId == null || album.primaryAlbumArtistId == primaryArtistId)
+        }
         val albumId = if (albumTitle.isBlank() && albumArtistNames.isEmpty()) {
             null
         } else {
-            TagNormalizer.key(
-                "album",
-                "${albumTitle.ifBlank { "Unknown Album" }}\u0000${albumArtistNames.firstOrNull().orEmpty()}",
-            )
+            (adoptable?.id ?: derivedId).also { claimedAlbumIds += it }
         }
         albumId?.let { id ->
             val builder = builders.getOrPut(id) {
                 AlbumBuilder(
                     id = id,
-                    title = albumTitle.ifBlank { "Unknown Album" },
+                    title = title,
                     albumArtistNames = albumArtistNames,
                     year = item.year,
-                    artworkKey = artworkByTitle[TagNormalizer.normalize(albumTitle.ifBlank { "Unknown Album" })]?.first,
+                    artworkKey = existingAlbumById[id]?.artworkKey
+                        ?: artworkByTitle[TagNormalizer.normalize(title)]?.first,
                 )
             }
             if (builder.year == null) builder.year = item.year

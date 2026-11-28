@@ -30,19 +30,18 @@ object AlbumAggregate {
         settings: NormalizationSettings,
         track: TrackAnalysis?,
         albumAnalyses: List<TrackAnalysis>,
+        continuousAlbum: Boolean = true,
     ): Float {
         if (!settings.enabled || track == null) return 0f
-        val source = if (settings.mode == NormalizationMode.Album) {
+        // Airmedy (normalization/service.go, sameAlbumChain) applies the album mean only while the
+        // queue stays on one album; at an album seam playback falls back to track gain.
+        val albumLoudness = if (settings.mode == NormalizationMode.Album && continuousAlbum) {
             aggregate(albumAnalyses)?.loudnessLufs ?: track.loudnessLufs
         } else {
             track.loudnessLufs
         }
-        val peak = if (settings.mode == NormalizationMode.Album) {
-            aggregate(albumAnalyses)?.truePeak ?: track.truePeak
-        } else {
-            track.truePeak
-        }
-        val gain = settings.targetLufs - source
-        return if (settings.preventClip) min(gain, -peak) else gain
+        val gain = settings.targetLufs - albumLoudness
+        // Clipping guard always uses the playing track's own true peak, as upstream does.
+        return if (settings.preventClip) min(gain, -track.truePeak) else gain
     }
 }

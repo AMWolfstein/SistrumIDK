@@ -270,8 +270,10 @@
     <string name="smart_playlist_limit_count">Limit</string>
     <string name="smart_playlist_limit_by">Order by</string>
     <string name="smart_playlist_save">Save playlist</string>
-    <string name="analysis_settings_title">Write ReplayGain tags</string>
-    <string name="analysis_write_tags_description">Analysis always stores results locally. Enabling this also writes standard ReplayGain/R128 tags without overwriting existing gain values; read-only files keep using Room.</string>
+    <string name="analysis_settings_title">Save analysis to audio files</string>
+    <string name="analysis_reuse_title">Reuse existing analysis</string>
+    <string name="analysis_preserve_replaygain_title">Preserve existing ReplayGain tags</string>
+    <string name="analysis_write_tags_description">Analysis always stores results locally. Enabling this also writes the versioned analysis tags and standard ReplayGain/R128 values; read-only files keep using Room. “Preserve existing ReplayGain tags” keeps gain values already on the file.</string>
     <string name="analysis_run">Analyze library</string>
     <string name="analysis_running">Analyzing…</string>
     <string name="analysis_done">Analyzed %1$d tracks</string>

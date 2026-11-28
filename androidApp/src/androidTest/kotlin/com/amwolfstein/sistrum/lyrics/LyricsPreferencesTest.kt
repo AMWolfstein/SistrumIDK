@@ -11,17 +11,17 @@ import org.junit.Test
 
 class LyricsPreferencesTest {
     @Test
-    fun glowDefaultsOnAndPersists() = runBlocking {
+    fun glowDefaultsOffAndPersists() = runBlocking {
         val context = InstrumentationRegistry.getInstrumentation().targetContext
         val key = booleanPreferencesKey("lyrics_glow")
         val original = context.lyricsDataStore.data.first()[key]
         try {
             context.lyricsDataStore.edit { it.remove(key) }
-            assertTrue(LyricsPreferences(context).settings.first().glowEnabled)
-            LyricsPreferences(context).setGlowEnabled(false)
             assertFalse(LyricsPreferences(context).settings.first().glowEnabled)
             LyricsPreferences(context).setGlowEnabled(true)
             assertTrue(LyricsPreferences(context).settings.first().glowEnabled)
+            LyricsPreferences(context).setGlowEnabled(false)
+            assertFalse(LyricsPreferences(context).settings.first().glowEnabled)
         } finally {
             context.lyricsDataStore.edit { preferences ->
                 if (original == null) preferences.remove(key) else preferences[key] = original

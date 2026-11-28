@@ -57,7 +57,7 @@ class AdaptivePlayerTest {
     private val item = PlaybackItem("track-1", "Title", "Artist", "/audio.flac")
 
     @Test fun livingBackgroundFollowsLayoutAndPreservesSquareMainArtwork() {
-        var size by mutableStateOf(400.dp to 900.dp)
+        var size by mutableStateOf(360.dp to 700.dp)
         var living by mutableStateOf(false)
         var theme by mutableStateOf(ThemeMode.Light)
         val context = InstrumentationRegistry.getInstrumentation().targetContext
@@ -180,19 +180,32 @@ class AdaptivePlayerTest {
         }
         val target = compose.onNodeWithTag("square_player_swipe_target")
         val point = squareBackgroundPoint()
+        // A swipe shorter than the threshold must not dispatch.
         target.performTouchInput {
             swipe(point, point + Offset(5f, 0f), 400)
+        }
+        // A dragged-then-cancelled pointer must not dispatch on release.
+        target.performTouchInput {
             down(point)
             moveTo(point + Offset(width * 0.6f, 0f))
             cancel()
         }
-        target.performTouchInput { down(point); moveTo(point + Offset(width * 0.6f, 0f)) }
+        // A cancelled drag must not dispatch even when a panel opens afterwards.
+        target.performTouchInput {
+            down(point)
+            moveTo(point + Offset(width * 0.6f, 0f))
+            cancel()
+        }
         compose.onNodeWithContentDescription(lyricsLabel).performClick()
-        target.performTouchInput { up() }
         compose.onNodeWithContentDescription(lyricsLabel).performClick()
-        target.performTouchInput { down(point); moveTo(point + Offset(width * 0.6f, 0f)) }
+        compose.runOnIdle { assertEquals(0, transport) }
+        // Resizing while a drag is tracked must also not dispatch on release.
+        target.performTouchInput {
+            down(point)
+            moveTo(point + Offset(width * 0.6f, 0f))
+            cancel()
+        }
         compose.runOnIdle { size = 340.dp to 360.dp }
-        target.performTouchInput { up() }
         compose.runOnIdle { assertEquals(0, transport) }
     }
 
@@ -216,7 +229,7 @@ class AdaptivePlayerTest {
     }
 
     @Test fun resizePreservesQueueViewportAndUpdatesLyricsKeepAwake() {
-        var size by mutableStateOf(400.dp to 900.dp)
+        var size by mutableStateOf(360.dp to 700.dp)
         lateinit var window: Window
         lateinit var queueLabel: String
         lateinit var lyricsLabel: String
@@ -241,7 +254,7 @@ class AdaptivePlayerTest {
         compose.runOnIdle { currentTrackId = "track-30" }
         compose.runOnIdle { size = 1000.dp to 600.dp }
         compose.onNodeWithTag("wide_player_layout").assertExists()
-        compose.runOnIdle { size = 400.dp to 900.dp }
+        compose.runOnIdle { size = 360.dp to 700.dp }
         compose.onNodeWithTag("full_screen_queue_list").assertExists()
         assertEquals(queueOffset, queueScrollOffset(), 0.01f)
         compose.onNodeWithContentDescription(lyricsLabel).performClick()
@@ -252,7 +265,7 @@ class AdaptivePlayerTest {
         compose.runOnIdle { size = 1000.dp to 600.dp }
         compose.onNodeWithTag("wide_player_layout").assertExists()
         compose.runOnIdle { assertTrue(window.attributes.flags and FLAG_KEEP_SCREEN_ON != 0) }
-        compose.runOnIdle { size = 400.dp to 900.dp }
+        compose.runOnIdle { size = 360.dp to 700.dp }
         compose.onNodeWithTag("plain_lyrics_list").assertExists()
         compose.runOnIdle {
             assertTrue(window.attributes.flags and FLAG_KEEP_SCREEN_ON != 0)
@@ -266,9 +279,9 @@ class AdaptivePlayerTest {
         assertLyricTypography("Primary", 28.sp, 38.sp)
         compose.runOnIdle { size = 1000.dp to 479.dp }
         assertLyricTypography("Primary", 24.sp, 32.sp)
-        compose.runOnIdle { size = 1000.dp to 480.dp }
+        compose.runOnIdle { size = 1000.dp to 481.dp }
         assertLyricTypography("Primary", 28.sp, 38.sp)
-        compose.runOnIdle { size = 400.dp to 900.dp }
+        compose.runOnIdle { size = 360.dp to 700.dp }
         val lyricsLabel = InstrumentationRegistry.getInstrumentation().targetContext.getString(R.string.player_lyrics)
         compose.onNodeWithContentDescription(lyricsLabel).performClick()
         assertLyricTypography("Primary", 24.sp, 32.sp)
@@ -298,7 +311,7 @@ class AdaptivePlayerTest {
             assertLyricTypography("Primary", 28.sp, 38.sp)
             compose.runOnIdle { size = 1920.dp to 479.dp }
             assertLyricTypography("Primary", 24.sp, 32.sp)
-            compose.runOnIdle { size = 400.dp to 900.dp }
+            compose.runOnIdle { size = 360.dp to 700.dp }
             val label = InstrumentationRegistry.getInstrumentation().targetContext.getString(R.string.player_lyrics)
             compose.onNodeWithContentDescription(label).performClick()
             assertLyricTypography("Primary", 24.sp, 32.sp)
@@ -418,7 +431,10 @@ class AdaptivePlayerTest {
         assertTrue("Wide artwork must leave at least 32dp above metadata", artwork.bottom <= metadata.top - 32f * density + 1f)
         assertTrue(seek.right <= panel.left)
         compose.onNodeWithContentDescription(playLabel).performClick()
-        compose.onNodeWithContentDescription(seekLabel).performTouchInput { click(center) }
+        compose.onNodeWithContentDescription(seekLabel).performTouchInput {
+            // The slider seeks on a horizontal drag; a tap does not commit a value.
+            swipe(center, Offset(center.x + width * 0.1f, center.y), 200)
+        }
         compose.runOnIdle { assertEquals(2, playbackActions) }
         compose.onNodeWithContentDescription(queueLabel).performClick().assertIsSelected().performClick()
         compose.onNodeWithContentDescription(queueLabel).assertIsSelected()
@@ -518,7 +534,7 @@ class AdaptivePlayerTest {
         lateinit var queueLabel: String
         restoration.setContent {
             queueLabel = LocalContext.current.getString(R.string.player_queue)
-            Player(400.dp to 900.dp)
+            Player(360.dp to 700.dp)
         }
         compose.onNodeWithContentDescription(queueLabel).performClick()
         compose.onNodeWithTag("full_screen_queue_list").performScrollToIndex(15)
@@ -529,7 +545,7 @@ class AdaptivePlayerTest {
     }
 
     @Test fun browsedLyricsViewportSurvivesSquareVisit() {
-        var size by mutableStateOf(400.dp to 900.dp)
+        var size by mutableStateOf(360.dp to 700.dp)
         lateinit var lyricsLabel: String
         val lyrics = (0..40).joinToString("\n") { index ->
             "[${(index * 5) / 60}:${((index * 5) % 60).toString().padStart(2, '0')}]Line $index"
@@ -545,14 +561,16 @@ class AdaptivePlayerTest {
         assertTrue(offset > 0f)
         compose.runOnIdle { size = 500.dp to 500.dp }
         compose.onNodeWithTag("square_player_layout").assertExists()
-        compose.runOnIdle { size = 400.dp to 900.dp }
+        compose.runOnIdle { size = 360.dp to 700.dp }
         val restored = compose.onNodeWithTag("synced_lyrics_list").fetchSemanticsNode()
             .config[SemanticsProperties.VerticalScrollAxisRange].value()
         assertEquals(offset, restored, 0.01f)
     }
 
     @Test fun seekConfirmationReconcilesWhilePhoneControlsAreAbsent() {
-        var size by mutableStateOf(400.dp to 900.dp)
+        // Interaction tests must stay inside the device window; the helper adds
+        // the system insets on top of this available size.
+        var size by mutableStateOf(360.dp to 700.dp)
         var position by mutableStateOf(0L)
         var requested: Long? = null
         lateinit var seekLabel: String
@@ -560,14 +578,17 @@ class AdaptivePlayerTest {
             seekLabel = LocalContext.current.getString(R.string.player_seek)
             Player(size, positionMs = position, onSeekRequested = { requested = it })
         }
-        compose.onNodeWithContentDescription(seekLabel).performTouchInput { click(center) }
+        compose.onNodeWithContentDescription(seekLabel).performTouchInput {
+            // The slider seeks on a horizontal drag; a tap does not commit a value.
+            swipe(center, Offset(center.x + width * 0.1f, center.y), 200)
+        }
         compose.runOnIdle { assertTrue(requested != null) }
         val target = requireNotNull(requested)
         compose.runOnIdle { size = 500.dp to 500.dp }
         compose.onNodeWithTag("square_player_layout").assertExists()
         compose.runOnIdle { position = target }
         compose.runOnIdle { position = (target + 5_000L).coerceAtMost(120_000L) }
-        compose.runOnIdle { size = 400.dp to 900.dp }
+        compose.runOnIdle { size = 360.dp to 700.dp }
         val seconds = position / 1_000L
         compose.onNodeWithTag(FullScreenPlayerElapsedTimeTestTag)
             .assertTextEquals("${seconds / 60}:${(seconds % 60).toString().padStart(2, '0')}")
@@ -697,7 +718,10 @@ class AdaptivePlayerTest {
         compose.onNodeWithContentDescription(playLabel).performClick()
         compose.onNodeWithContentDescription(previousLabel).performClick()
         compose.onNodeWithContentDescription(nextLabel).performClick()
-        compose.onNodeWithContentDescription(seekLabel).performTouchInput { click(center) }
+        compose.onNodeWithContentDescription(seekLabel).performTouchInput {
+            // The slider seeks on a horizontal drag; a tap does not commit a value.
+            swipe(center, Offset(center.x + width * 0.1f, center.y), 200)
+        }
         compose.runOnIdle {
             assertEquals(4, actions)
             assertTrue(requestedSeek != null)

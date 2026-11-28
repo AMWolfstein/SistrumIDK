@@ -9,6 +9,10 @@ import androidx.compose.ui.graphics.luminance
 import androidx.compose.ui.semantics.SemanticsActions
 import androidx.compose.ui.test.performSemanticsAction
 import androidx.compose.ui.text.TextLayoutResult
+import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.width
+import androidx.compose.ui.test.onFirst
+import androidx.compose.ui.test.performScrollToNode
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.test.assertCountEquals
 import androidx.compose.ui.test.assertIsDisplayed
@@ -404,11 +408,11 @@ class AppNavigationTest {
         }
 
         composeTestRule.onNodeWithContentDescription(string(R.string.settings_playback)).performClick()
-        composeTestRule.onNodeWithContentDescription(string(R.string.equalizer_title)).performClick()
-        composeTestRule.onNodeWithContentDescription(string(R.string.equalizer_enable)).performClick()
+        composeTestRule.onNodeWithContentDescription(string(R.string.equalizer_title)).performScrollTo().performClick()
+        composeTestRule.onNodeWithContentDescription(string(R.string.equalizer_enable)).performScrollTo().performClick()
         assertEquals(true, enabled)
-        composeTestRule.onNodeWithText("Flat").performClick()
-        composeTestRule.onNodeWithText("Rock").performClick()
+        composeTestRule.onNodeWithText("Flat").performScrollTo().performClick()
+        composeTestRule.onNodeWithText("Rock").performScrollTo().performClick()
         assertEquals("rock", preset)
     }
 
@@ -669,6 +673,7 @@ class AppNavigationTest {
         assertEquals(listOf(true), visibilityChanges)
 
         InstrumentationRegistry.getInstrumentation().sendKeyDownUpSync(KeyEvent.KEYCODE_BACK)
+        composeTestRule.waitUntil(timeoutMillis = 3_000) { visibilityChanges.size == 2 }
         assertEquals(listOf(true, false), visibilityChanges)
     }
 
@@ -819,7 +824,8 @@ class AppNavigationTest {
             )
         }
 
-        composeTestRule.onNodeWithTag("insight-top-tracks-toggle").performScrollTo()
+        composeTestRule.onAllNodes(androidx.compose.ui.test.hasScrollAction()).onFirst()
+            .performScrollToNode(androidx.compose.ui.test.hasTestTag("insight-top-tracks-toggle"))
         composeTestRule.onNodeWithTag("insight-library-size").assertIsNotDisplayed()
         composeTestRule.onNodeWithContentDescription(string(R.string.destination_insight)).performClick()
         composeTestRule.onNodeWithTag("insight-library-size").assertIsDisplayed()
@@ -867,7 +873,15 @@ class AppNavigationTest {
     @Test
     fun changingStackPageKeepsCompactNavigationAndMiniPlayer() {
         val harness = AppHarness(AppUiState(selectedDestination = AppDestination.Library))
-        composeTestRule.setContent { harness.Render(playbackState = playingState) }
+        // A short viewport makes the library page scrollable on every supported device size,
+        // so the compact-navigation gesture is deterministic instead of depending on phone height.
+        composeTestRule.setContent {
+            androidx.compose.foundation.layout.Box(
+                androidx.compose.ui.Modifier
+                    .width(360.dp)
+                    .height(520.dp),
+            ) { harness.Render(playbackState = playingState) }
+        }
 
         composeTestRule.onNodeWithText(string(R.string.library_artists)).performTouchInput {
             swipeUp(endY = center.y - 80f)

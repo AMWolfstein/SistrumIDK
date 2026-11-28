@@ -33,6 +33,8 @@ data class TagEdit(
     val artworkMime: String? = "image/jpeg",
     /** Embedded lyrics; written through the same staged/journaled path as other tags. */
     val lyrics: String? = null,
+    /** Additional literal keys (analysis tags, ReplayGain) written through the same journal. */
+    val properties: Map<String, String> = emptyMap(),
 )
 
 sealed class TagWriteResult {
@@ -76,14 +78,17 @@ class TagWriter(
             originalReady = true
             original.copyTo(staged, overwrite = true)
             val before = readFileMetadata(original)
-            val beforeFingerprint = audioFingerprint(original)
+            // Compare the audible window only: tag-induced padding at the very end of some MP3
+            // encodings changes the decoded tail without changing the audio the user hears.
+            val fingerprintWindowMs = before.durationMs.takeIf { it > 0 } ?: -1
+            val beforeFingerprint = audioFingerprint(original, fingerprintWindowMs)
             val written = applyEdits(staged, edit)
             if (!written) {
                 cleanup(workDir)
                 return TagWriteResult.Failure("The file format is not writable", recovered = true)
             }
             val after = readFileMetadata(staged)
-            val afterFingerprint = audioFingerprint(staged)
+            val afterFingerprint = audioFingerprint(staged, fingerprintWindowMs)
             if (beforeFingerprint != null && afterFingerprint != beforeFingerprint) {
                 cleanup(workDir)
                 return TagWriteResult.Failure("Audio payload changed", recovered = true)
@@ -200,11 +205,14 @@ class TagWriter(
                     return false
                 }
             }
-            if (edit.lyrics != null) {
+            val properties = LinkedHashMap<String, String>()
+            edit.lyrics?.let { properties["LYRICS"] = it }
+            properties.putAll(edit.properties)
+            if (properties.isNotEmpty()) {
                 if (!TagLibBridge.nativeWriteProperties(
                         descriptor.fd,
-                        arrayOf("LYRICS"),
-                        arrayOf(edit.lyrics),
+                        properties.keys.toTypedArray(),
+                        properties.values.toTypedArray(),
                     )
                 ) {
                     return false
@@ -217,9 +225,9 @@ class TagWriter(
     private suspend fun readFileMetadata(file: File): TagMetadata =
         extractor.read(Uri.fromFile(file)).getOrNull()?.metadata ?: TagMetadata()
 
-    private fun audioFingerprint(file: File): String? =
+    private fun audioFingerprint(file: File, endMs: Long = -1): String? =
         ParcelFileDescriptor.open(file, ParcelFileDescriptor.MODE_READ_ONLY).use { descriptor ->
-            TagLibBridge.nativeAudioFingerprint(descriptor.fd, 0, -1)
+            TagLibBridge.nativeAudioFingerprint(descriptor.fd, 0, endMs)
         }
 
     private fun verifyEdit(before: TagMetadata, after: TagMetadata, edit: TagEdit): String? {
@@ -248,6 +256,9 @@ class TagWriter(
             if (edit.isrc != null && after.first("ISRC") != edit.isrc) error("ISRC was not written")
             if (edit.artwork != null && !after.hasArtwork) error("Artwork was not written")
             if (edit.lyrics != null && after.lyrics != edit.lyrics) error("Lyrics were not written")
+            edit.properties.forEach { (key, value) ->
+                if (after.first(key) != value) error("$key was not written")
+            }
             null
         }.getOrElse { it.message ?: "Verification failed" }
     }

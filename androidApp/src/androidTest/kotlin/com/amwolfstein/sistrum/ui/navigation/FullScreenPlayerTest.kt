@@ -5,9 +5,11 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
 import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.SideEffect
+import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.width
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.hapticfeedback.HapticFeedback
 import androidx.compose.ui.hapticfeedback.HapticFeedbackType
 import androidx.compose.ui.platform.LocalHapticFeedback
@@ -24,12 +26,14 @@ import androidx.compose.ui.test.onAllNodesWithTag
 import androidx.compose.ui.test.onNodeWithContentDescription
 import androidx.compose.ui.test.onNodeWithTag
 import androidx.compose.ui.test.onNodeWithText
+import androidx.compose.ui.test.onRoot
 import androidx.compose.ui.test.performClick
 import androidx.compose.ui.test.performTouchInput
 import androidx.compose.ui.test.swipeDown
 import androidx.compose.ui.test.swipeLeft
 import androidx.compose.ui.test.longClick
 import androidx.compose.ui.unit.dp
+import com.amwolfstein.sistrum.ui.components.AnchoredPopupMenuHost
 import com.amwolfstein.sistrum.player.PlaybackItem
 import com.amwolfstein.sistrum.player.PlaybackQueueSnapshot
 import com.amwolfstein.sistrum.player.PlaybackState
@@ -64,7 +68,7 @@ class FullScreenPlayerTest {
             window = checkNotNull(LocalActivity.current).window
             SistrumTheme(themeMode = ThemeMode.Dark) {
                 FullScreenPlayer(
-                    modifier = Modifier.width(400.dp).height(900.dp),
+                    modifier = Modifier.fillMaxSize(),
                     visible = visible,
                     dragProgress = 0f,
                     isDragging = false,
@@ -257,7 +261,7 @@ class FullScreenPlayerTest {
         composeTestRule.setContent {
             SistrumTheme(themeMode = ThemeMode.Dark) {
                 FullScreenPlayer(
-                    modifier = Modifier.width(400.dp).height(900.dp),
+                    modifier = Modifier.fillMaxSize(),
                     visible = true,
                     dragProgress = 0f,
                     isDragging = false,
@@ -315,7 +319,7 @@ class FullScreenPlayerTest {
         composeTestRule.setContent {
             SistrumTheme(themeMode = ThemeMode.Dark) {
                 FullScreenPlayer(
-                    modifier = Modifier.width(400.dp).height(900.dp),
+                    modifier = Modifier.fillMaxSize(),
                     visible = true,
                     dragProgress = 0f,
                     isDragging = false,
@@ -391,7 +395,7 @@ class FullScreenPlayerTest {
                     override fun performHapticFeedback(hapticFeedbackType: HapticFeedbackType) { haptics += hapticFeedbackType }
                 }) {
                     FullScreenPlayer(
-                    modifier = Modifier.width(400.dp).height(900.dp),
+                        modifier = Modifier.fillMaxSize(),
                         visible = true,
                         dragProgress = 0f,
                         isDragging = false,
@@ -423,7 +427,7 @@ class FullScreenPlayerTest {
                     override fun performHapticFeedback(hapticFeedbackType: HapticFeedbackType) { haptics += hapticFeedbackType }
                 }) {
                     FullScreenPlayer(
-                    modifier = Modifier.width(400.dp).height(900.dp),
+                        modifier = Modifier.fillMaxSize(),
                         visible = true,
                         dragProgress = 0f,
                         isDragging = false,
@@ -499,11 +503,10 @@ class FullScreenPlayerTest {
 
     @Test
     fun queueStatusBadgeWaitsForQueueButtonBackgroundToFadeOut() {
-        composeTestRule.mainClock.autoAdvance = false
         composeTestRule.setContent {
             SistrumTheme(themeMode = ThemeMode.Dark) {
                 FullScreenPlayer(
-                    modifier = Modifier.width(400.dp).height(900.dp),
+                    modifier = Modifier.fillMaxSize(),
                     visible = true,
                     dragProgress = 0f,
                     isDragging = false,
@@ -522,15 +525,26 @@ class FullScreenPlayerTest {
             }
         }
 
+        // Let the entrance expansion finish before freezing the clock: the panel
+        // stays out of composition while its expansion animates from zero.
+        composeTestRule.waitForIdle()
+        composeTestRule.mainClock.autoAdvance = false
+
         composeTestRule.onNodeWithTag(FullScreenQueueStatusBadgeTestTag).assertExists()
         composeTestRule.onNodeWithContentDescription("Queue").performClick()
+        composeTestRule.mainClock.advanceTimeBy(100)
+        composeTestRule.onNodeWithTag("full_screen_queue_panel_header").assertExists()
         composeTestRule.onAllNodesWithTag(FullScreenQueueStatusBadgeTestTag).assertCountEquals(0)
 
+        // Closing the panel starts the reveal delay. One frame applies the state
+        // change; the remaining budget stays under the reveal delay.
         composeTestRule.onNodeWithContentDescription("Queue").performClick()
-        composeTestRule.mainClock.advanceTimeBy(QueueStatusBadgeRevealDelayMs.toLong() - 1L)
+        composeTestRule.mainClock.advanceTimeByFrame()
+        val frameMs = 16L // Compose test clock frame duration
+        composeTestRule.mainClock.advanceTimeBy(QueueStatusBadgeRevealDelayMs.toLong() - 1L - frameMs)
         composeTestRule.onAllNodesWithTag(FullScreenQueueStatusBadgeTestTag).assertCountEquals(0)
 
-        composeTestRule.mainClock.advanceTimeBy(1L)
+        composeTestRule.mainClock.advanceTimeBy(frameMs)
         composeTestRule.onNodeWithTag(FullScreenQueueStatusBadgeTestTag).assertExists()
     }
 
@@ -540,7 +554,7 @@ class FullScreenPlayerTest {
         composeTestRule.setContent {
             SistrumTheme(themeMode = ThemeMode.Dark) {
                 FullScreenPlayer(
-                    modifier = Modifier.width(400.dp).height(900.dp),
+                    modifier = Modifier.fillMaxSize(),
                     visible = true,
                     dragProgress = 0f,
                     isDragging = false,
@@ -577,7 +591,7 @@ class FullScreenPlayerTest {
             }
             SistrumTheme(themeMode = ThemeMode.Dark) {
                 FullScreenPlayer(
-                    modifier = Modifier.width(400.dp).height(900.dp),
+                    modifier = Modifier.fillMaxSize(),
                     visible = true,
                     dragProgress = 0f,
                     isDragging = false,
@@ -614,24 +628,26 @@ class FullScreenPlayerTest {
     fun moreOptionsUsesTheTrackContextMenuForTheCurrentTrack() {
         composeTestRule.setContent {
             SistrumTheme(themeMode = ThemeMode.Dark) {
-                FullScreenPlayer(
-                    modifier = Modifier.width(400.dp).height(900.dp),
-                    visible = true,
-                    dragProgress = 0f,
-                    isDragging = false,
-                    openingFromMiniPlayerSwipe = false,
-                    playbackState = PlaybackState.Playing(item, 0L, 120_000L),
-                    queue = PlaybackQueueSnapshot(activeTrackIds = listOf(item.trackId), currentIndex = 0),
-                    queueTracks = listOf(LibraryTrack(id = item.trackId, title = item.title, artists = item.artist)),
-                    volume = 0.5f,
-                    onSeek = {},
-                    onVolumeChange = {},
-                    onPrevious = {},
-                    onPlayPause = {},
-                    onNext = {},
-                    onOpenMediaOutputSwitcher = {},
-                    onDismiss = {},
-                )
+                AnchoredPopupMenuHost(hazeState = null) {
+                        FullScreenPlayer(
+                            modifier = Modifier.fillMaxSize(),
+                            visible = true,
+                            dragProgress = 0f,
+                            isDragging = false,
+                            openingFromMiniPlayerSwipe = false,
+                            playbackState = PlaybackState.Playing(item, 0L, 120_000L),
+                            queue = PlaybackQueueSnapshot(activeTrackIds = listOf(item.trackId), currentIndex = 0),
+                            queueTracks = listOf(LibraryTrack(id = item.trackId, title = item.title, artists = item.artist)),
+                            volume = 0.5f,
+                            onSeek = {},
+                            onVolumeChange = {},
+                            onPrevious = {},
+                            onPlayPause = {},
+                            onNext = {},
+                            onOpenMediaOutputSwitcher = {},
+                            onDismiss = {},
+                    )
+                }
             }
         }
 
@@ -645,28 +661,47 @@ class FullScreenPlayerTest {
         var removedTrackId: String? = null
         composeTestRule.setContent {
             SistrumTheme(themeMode = ThemeMode.Dark) {
-                FullScreenQueuePanel(
-                    queue = PlaybackQueueSnapshot(activeTrackIds = listOf("track-1"), currentIndex = 0),
-                    tracks = listOf(LibraryTrack(id = "track-1", title = "Track 1", artists = "Artist")),
-                    currentTrackId = "track-1",
-                    isPlaying = true,
-                    onTrackSelected = {},
-                    onTrackRemoved = { removedTrackId = it },
-                    onReorder = {},
-                    onShuffleChange = {},
-                    onRepeatModeChange = {},
-                    modifier = Modifier.height(160.dp),
-                )
+                AnchoredPopupMenuHost(hazeState = null) {
+                    FullScreenQueuePanel(
+                        queue = PlaybackQueueSnapshot(
+                            activeTrackIds = listOf("track-1", "track-2"),
+                            currentIndex = 0,
+                        ),
+                        tracks = listOf(
+                            LibraryTrack(id = "track-1", title = "Track 1", artists = "Artist"),
+                            LibraryTrack(id = "track-2", title = "Track 2", artists = "Artist"),
+                        ),
+                        currentTrackId = "track-1",
+                        isPlaying = true,
+                        onTrackSelected = {},
+                        onTrackRemoved = { removedTrackId = it },
+                        onReorder = {},
+                        onShuffleChange = {},
+                        onRepeatModeChange = {},
+                        modifier = Modifier.height(400.dp),
+                    )
+                }
             }
         }
 
+        // The playing track cannot be removed from its own queue menu, and queue
+        // navigation actions stay hidden for it.
         composeTestRule.onNodeWithText("Track 1").performTouchInput { longClick() }
-
-        composeTestRule.onNodeWithText("Remove from queue").assertExists()
+        composeTestRule.onAllNodesWithText("Remove from queue").assertCountEquals(0)
         composeTestRule.onAllNodesWithText("Add to queue").assertCountEquals(0)
         composeTestRule.onAllNodesWithText("Play next").assertCountEquals(0)
+
+        // Dismiss through the popup backdrop, then open an eligible row's menu.
+        composeTestRule.onRoot().performTouchInput { click(Offset(4f, 4f)) }
+        composeTestRule.onAllNodesWithText("Remove from queue").assertCountEquals(0)
+
+        composeTestRule.onNodeWithText("Track 2").performTouchInput { longClick() }
+        composeTestRule.onNodeWithText("Remove from queue").assertExists()
+        // Already queued, so adding again stays hidden; play-next is available.
+        composeTestRule.onAllNodesWithText("Add to queue").assertCountEquals(0)
+        composeTestRule.onAllNodesWithText("Play next").assertCountEquals(1)
         composeTestRule.onNodeWithText("Remove from queue").performClick()
-        composeTestRule.runOnIdle { assertEquals("track-1", removedTrackId) }
+        composeTestRule.runOnIdle { assertEquals("track-2", removedTrackId) }
     }
 
     @Test
@@ -674,31 +709,33 @@ class FullScreenPlayerTest {
         var bottomSheetRequest: TrackContextBottomSheetRequest? = null
         composeTestRule.setContent {
             SistrumTheme(themeMode = ThemeMode.Dark) {
-                FullScreenPlayer(
-                    modifier = Modifier.width(400.dp).height(900.dp),
-                    visible = true,
-                    dragProgress = 0f,
-                    isDragging = false,
-                    openingFromMiniPlayerSwipe = false,
-                    playbackState = PlaybackState.Playing(item, 0L, 120_000L),
-                    queueTracks = listOf(
-                        LibraryTrack(
-                            id = item.trackId,
-                            title = item.title,
-                            artists = "Artist A, Artist B",
-                            metadataJson = """{\"artists\":[{\"id\":\"artist-a\",\"name\":\"Artist A\"},{\"id\":\"artist-b\",\"name\":\"Artist B\"}]}""",
-                        ),
-                    ),
-                    volume = 0.5f,
-                    onSeek = {},
-                    onVolumeChange = {},
-                    onPrevious = {},
-                    onPlayPause = {},
-                    onNext = {},
-                    onTrackContextBottomSheet = { bottomSheetRequest = it },
-                    onOpenMediaOutputSwitcher = {},
-                    onDismiss = {},
-                )
+                AnchoredPopupMenuHost(hazeState = null) {
+                        FullScreenPlayer(
+                            modifier = Modifier.fillMaxSize(),
+                            visible = true,
+                            dragProgress = 0f,
+                            isDragging = false,
+                            openingFromMiniPlayerSwipe = false,
+                            playbackState = PlaybackState.Playing(item, 0L, 120_000L),
+                            queueTracks = listOf(
+                                LibraryTrack(
+                                    id = item.trackId,
+                                    title = item.title,
+                                    artists = "Artist A, Artist B",
+                                    metadataJson = """{"artists":[{"id":"artist-a","name":"Artist A"},{"id":"artist-b","name":"Artist B"}]}""",
+                                ),
+                            ),
+                            volume = 0.5f,
+                            onSeek = {},
+                            onVolumeChange = {},
+                            onPrevious = {},
+                            onPlayPause = {},
+                            onNext = {},
+                            onTrackContextBottomSheet = { bottomSheetRequest = it },
+                            onOpenMediaOutputSwitcher = {},
+                            onDismiss = {},
+                    )
+                }
             }
         }
 
@@ -722,7 +759,7 @@ class FullScreenPlayerTest {
         composeTestRule.setContent {
             SistrumTheme(themeMode = ThemeMode.Dark) {
                 FullScreenPlayer(
-                    modifier = Modifier.width(400.dp).height(900.dp),
+                    modifier = Modifier.fillMaxSize(),
                     visible = true,
                     dragProgress = 0f,
                     isDragging = false,
@@ -814,7 +851,7 @@ class FullScreenPlayerTest {
         composeTestRule.setContent {
             SistrumTheme(themeMode = ThemeMode.Dark) {
                 FullScreenPlayer(
-                    modifier = Modifier.width(400.dp).height(900.dp),
+                    modifier = Modifier.fillMaxSize(),
                     visible = true,
                     dragProgress = 0f,
                     isDragging = false,
@@ -842,7 +879,7 @@ class FullScreenPlayerTest {
         composeTestRule.setContent {
             SistrumTheme(themeMode = ThemeMode.Dark) {
                 FullScreenPlayer(
-                    modifier = Modifier.width(400.dp).height(900.dp),
+                    modifier = Modifier.fillMaxSize(),
                     visible = true,
                     dragProgress = 0f,
                     isDragging = false,
@@ -1048,7 +1085,7 @@ class FullScreenPlayerTest {
         composeTestRule.setContent {
             SistrumTheme(themeMode = ThemeMode.Dark) {
                 FullScreenPlayer(
-                    modifier = Modifier.width(400.dp).height(900.dp),
+                    modifier = Modifier.fillMaxSize(),
                     visible = true,
                     dragProgress = 0f,
                     isDragging = false,

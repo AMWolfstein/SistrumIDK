@@ -35,8 +35,14 @@ internal class LocalLibraryCatalog(
     override val artworkPaths: Flow<Map<String, String>> = artworkPathsFlow
 
     override val tracks: Flow<List<LibraryTrack>> =
-        combine(dao.observeLocalTracks(), artworkPathsFlow) { rows, paths ->
-            rows.map { row -> row.toLibraryTrack(row.item.artworkKey?.let(paths::get)) }
+        combine(dao.observeLocalTracks(), artworkPathsFlow, dao.observeCompletedAnalyses()) { rows, paths, analyses ->
+            val byTrack = analyses.associateBy { it.trackId }
+            rows.map { row ->
+                row.toLibraryTrack(
+                    row.item.artworkKey?.let(paths::get),
+                    byTrack[row.item.id],
+                )
+            }
         }
 
     override val albums: Flow<List<LibraryAlbum>> =
@@ -100,6 +106,10 @@ internal class LocalLibraryCatalog(
             TrackAnalysis(loudness.toFloat(), peak.toFloat())
         }
     }
+
+    /** Local Mood Radio readiness gate: tracks with a complete local analysis. */
+    val moodEligibleTrackIds: Flow<Set<String>> = dao.observeMoodEligibleTrackIds()
+        .map { ids -> ids.toSet() }
 
     private val moodRepository = com.amwolfstein.sistrum.library.mood.MoodRepository(database)
 

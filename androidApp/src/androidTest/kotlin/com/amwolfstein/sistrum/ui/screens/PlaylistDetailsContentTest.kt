@@ -1,5 +1,6 @@
 package com.amwolfstein.sistrum.ui.screens
 
+import com.amwolfstein.sistrum.ui.createHostedComposeRule
 import androidx.compose.ui.test.assertCountEquals
 import androidx.compose.ui.test.assertHeightIsEqualTo
 import androidx.compose.ui.test.junit4.v2.createComposeRule
@@ -21,7 +22,7 @@ import org.junit.Test
 import org.junit.Assert.assertEquals
 
 class PlaylistDetailsContentTest {
-    @get:Rule val composeTestRule = createComposeRule()
+    @get:Rule val composeTestRule = createHostedComposeRule()
 
     @Test
     fun heroArtworkMatchesAlbumDetailsSize() {

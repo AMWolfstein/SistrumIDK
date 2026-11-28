@@ -296,6 +296,65 @@ class ScanPublisherTest {
     }
 
     @Test
+    fun embeddedArtworkIsCachedAndAppliedDuringPublication() = runTest {
+        val store = FakeStore()
+        store.entries += entry("authority:a.mp3", "Music/a.mp3", size = 100)
+        var stored: ByteArray? = null
+        ScanPublisher(
+            store = store,
+            metadataProvider = { ScannedMetadata(metadata(), fingerprint = null, artwork = byteArrayOf(1, 2, 3)) },
+            now = { 5_000L },
+            artworkStore = { bytes -> stored = bytes; "art_key" },
+        ).publish(sourceA, "run1", complete = true)
+
+        val item = store.items.values.single()
+        assertTrue("embedded bytes were not cached", stored?.contentEquals(byteArrayOf(1, 2, 3)) == true)
+        assertEquals("art_key", item.artworkKey)
+        item.albumId?.let { assertEquals("art_key", store.albumArtwork[it]) }
+    }
+
+    @Test
+    fun embeddedAnalysisIsRestoredOnACleanInstall() = runTest {
+        val store = FakeStore()
+        store.entries += entry("authority:a.mp3", "Music/a.mp3", size = 100)
+        val analysis = com.amwolfstein.sistrum.library.db.TrackAnalysisEntity(
+            trackId = "",
+            loudnessLufs = -14.0,
+            loudnessRange = 6.0,
+            truePeak = -0.5,
+            rms = -18.0,
+            crest = 1.4,
+            spectralCentroid = 900.0,
+            spectralRolloff = 1800.0,
+            spectralFlatness = 0.2,
+            spectralFlux = 0.03,
+            zcr = 0.04,
+            tempo = 122.0,
+            onsetVariance = 8.0,
+            energy = 0.7,
+            danceability = 0.6,
+            brightness = 0.5,
+            ffmpegVersion = com.amwolfstein.sistrum.library.analysis.AnalysisVersion.FFMPEG,
+            aubioVersion = com.amwolfstein.sistrum.library.analysis.AnalysisVersion.AUBIO,
+            analyzerVersion = com.amwolfstein.sistrum.library.analysis.AnalysisVersion.ANALYZER,
+            moodVersion = com.amwolfstein.sistrum.library.analysis.AnalysisVersion.MOOD,
+            audioFingerprint = "pcm-sha256-v1:abc",
+            status = "COMPLETED",
+        )
+        val tags = com.amwolfstein.sistrum.library.analysis.AnalysisTagCodec
+            .embeddedAnalysis(analysis)
+            .mapValues { listOf(it.value) }
+
+        publish(store, sourceA, complete = true, metadata = metadata().copy(rawTags = tags))
+
+        val restored = store.analyses.values.single()
+        assertEquals(store.items.values.single().id, restored.trackId)
+        assertEquals(-14.0, restored.loudnessLufs!!, 1e-9)
+        assertEquals(122.0, restored.tempo!!, 1e-9)
+        assertEquals("embedded", restored.source)
+    }
+
+    @Test
     fun missingMetadataStillPublishesFilenameFallback() = runTest {
         val store = FakeStore()
         store.entries += entry("authority:a.mp3", "Music/07 - Unknown.mp3", size = 100)
@@ -344,6 +403,18 @@ class ScanPublisherTest {
     )
 
     private class FakeStore : LibraryStore {
+        val albumsByKey = mutableMapOf<String, com.amwolfstein.sistrum.library.db.AlbumEntity>()
+        override suspend fun albumByNormalizationKey(
+            normalizationKey: String,
+        ): com.amwolfstein.sistrum.library.db.AlbumEntity? = albumsByKey[normalizationKey]
+        val analyses = mutableMapOf<String, com.amwolfstein.sistrum.library.db.TrackAnalysisEntity>()
+        val albumArtwork = mutableMapOf<String, String>()
+        override suspend fun setAlbumArtworkIfMissing(albumId: String, key: String, source: String) {
+            albumArtwork.putIfAbsent(albumId, key)
+        }
+        override suspend fun upsertAnalysis(value: com.amwolfstein.sistrum.library.db.TrackAnalysisEntity) {
+            analyses[value.trackId] = value
+        }
         val sources = mutableMapOf("sourceA" to sourceEntity("sourceA"), "sourceB" to sourceEntity("sourceB"))
         val items = linkedMapOf<String, LibraryItemEntity>()
         val itemSources = mutableListOf<ItemSourceEntity>()
@@ -386,7 +457,10 @@ class ScanPublisherTest {
             values.forEach { artists[it.id] = it }
         }
         override suspend fun upsertAlbums(values: List<AlbumEntity>) {
-            values.forEach { albums[it.id] = it }
+            values.forEach {
+                albums[it.id] = it
+                albumsByKey[it.normalizationKey] = it
+            }
         }
         override suspend fun upsertGenres(values: List<GenreEntity>) {
             values.forEach { genres[it.id] = it }

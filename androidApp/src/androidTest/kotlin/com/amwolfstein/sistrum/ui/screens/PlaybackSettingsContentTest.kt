@@ -1,5 +1,6 @@
 package com.amwolfstein.sistrum.ui.screens
 
+import com.amwolfstein.sistrum.ui.createHostedComposeRule
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.fillMaxSize
@@ -36,7 +37,7 @@ import org.junit.Rule
 import org.junit.Test
 
 class PlaybackSettingsContentTest {
-    @get:Rule val compose = createComposeRule()
+    @get:Rule val compose = createHostedComposeRule()
 
     @Test fun playbackCardStaysDistinctFromThePaddedScrollablePageInBothThemes() {
         var theme by mutableStateOf(ThemeMode.Light)

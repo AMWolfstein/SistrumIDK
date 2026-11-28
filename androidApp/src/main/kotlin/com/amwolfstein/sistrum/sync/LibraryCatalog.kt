@@ -55,7 +55,10 @@ internal fun splitCatalogNames(value: String?): List<String> =
  * Builds the desktop-compatible metadata JSON that list/detail screens and the player already
  * read, from local Room values.
  */
-internal fun localTrackMetadataJson(row: LocalTrackRow): String {
+internal fun localTrackMetadataJson(
+    row: LocalTrackRow,
+    analysis: com.amwolfstein.sistrum.library.db.TrackAnalysisEntity? = null,
+): String {
     val item = row.item
     val artists = splitCatalogNames(row.artistNames)
     val albumArtists = splitCatalogNames(row.albumArtistNames)
@@ -77,6 +80,10 @@ internal fun localTrackMetadataJson(row: LocalTrackRow): String {
         item.codec?.let { put("codec", it) }
         item.format?.let { put("format", it) }
         item.year?.let { put("year", it) }
+        analysis?.tempo?.let { put("tempo", it) }
+        analysis?.energy?.let { put("energy", it) }
+        analysis?.danceability?.let { put("danceability", it) }
+        analysis?.brightness?.let { put("brightness", it) }
         item.releaseDate?.let { put("release_date", it) }
         item.label?.let { put("label", it) }
         item.isrc?.let { put("isrc", it) }
@@ -102,7 +109,10 @@ internal fun localTrackMetadataJson(row: LocalTrackRow): String {
     }.toString()
 }
 
-internal fun LocalTrackRow.toLibraryTrack(artworkPath: String?): LibraryTrack = LibraryTrack(
+internal fun LocalTrackRow.toLibraryTrack(
+    artworkPath: String?,
+    analysis: com.amwolfstein.sistrum.library.db.TrackAnalysisEntity? = null,
+): LibraryTrack = LibraryTrack(
     id = item.id,
     title = trackDisplayTitle(item.title),
     sortTitle = item.sortTitle,
@@ -116,7 +126,7 @@ internal fun LocalTrackRow.toLibraryTrack(artworkPath: String?): LibraryTrack = 
     updatedAt = item.updatedAt.toString(),
     discNumber = item.discNumber ?: 0,
     trackNumber = item.trackNumber ?: 0,
-    metadataJson = localTrackMetadataJson(this),
+    metadataJson = localTrackMetadataJson(this, analysis),
     artworkPath = artworkPath,
     // SAF documents are opened through ContentResolver by the playback service.
     audioPath = item.fileUri,

@@ -16,6 +16,7 @@ import com.amwolfstein.sistrum.library.db.LibrarySourceEntity
 import com.amwolfstein.sistrum.library.db.SearchIndexer
 import com.amwolfstein.sistrum.library.db.ScanEntryEntity
 import com.amwolfstein.sistrum.library.db.TrackAlbumArtistEntity
+import com.amwolfstein.sistrum.library.db.TrackAnalysisEntity
 import com.amwolfstein.sistrum.library.db.TrackArtistEntity
 import com.amwolfstein.sistrum.library.db.TrackComposerEntity
 import com.amwolfstein.sistrum.library.db.TrackGenreEntity
@@ -39,6 +40,8 @@ class RoomLibraryStore(private val dao: LibraryDao) : LibraryStore {
     override suspend fun itemSourcesForSource(sourceId: String): List<ItemSourceEntity> =
         dao.itemSourcesForSource(sourceId)
     override suspend fun itemById(itemId: String): LibraryItemEntity? = dao.itemById(itemId)
+    override suspend fun albumByNormalizationKey(normalizationKey: String): AlbumEntity? =
+        dao.albumByNormalizationKey(normalizationKey)
     override suspend fun deleteItemSource(itemId: String, sourceId: String) =
         dao.deleteItemSource(itemId, sourceId)
     override suspend fun deleteItemSourcesExcept(itemId: String, keepSourceId: String) =
@@ -64,6 +67,11 @@ class RoomLibraryStore(private val dao: LibraryDao) : LibraryStore {
     override suspend fun deleteTrackAlbumArtists(trackId: String) = dao.deleteTrackAlbumArtists(trackId)
     override suspend fun deleteTrackGenres(trackId: String) = dao.deleteTrackGenres(trackId)
     override suspend fun deleteTrackComposers(trackId: String) = dao.deleteTrackComposers(trackId)
+    override suspend fun upsertAnalysis(value: TrackAnalysisEntity) = dao.upsertAnalysis(value)
+    override suspend fun setAlbumArtworkIfMissing(albumId: String, key: String, source: String) {
+        val album = dao.album(albumId) ?: return
+        if (album.artworkKey == null) dao.updateAlbumArtwork(albumId, key, source)
+    }
 }
 
 /** Publishes scans transactionally; the whole run is atomic, so a failure keeps the previous index. */
@@ -81,10 +89,14 @@ class LibraryRepository(
         val entries = dao.scanEntries(runId).filter { it.state == "SEEN" }
         val prepared = prepareMetadata(entries)
         return database.withTransaction {
+            val artworkCache = com.amwolfstein.sistrum.library.artwork.ArtworkCache(context, dao)
             ScanPublisher(
                 store = RoomLibraryStore(dao),
                 metadataProvider = { entry -> prepared[entry.documentKey] },
                 separators = separators.settings.first(),
+                artworkStore = { bytes ->
+                    artworkCache.store(bytes, kind = "EMBEDDED", origin = "TAG")?.key
+                },
             ).publish(source, runId, complete)
         }
     }
@@ -99,9 +111,10 @@ class LibraryRepository(
                 entry.documentKey to extractor.read(
                     uri = Uri.parse(entry.fileUri),
                     includeFingerprint = true,
+                    includeArtwork = true,
                     startMs = entry.cueStartMs ?: 0,
                     endMs = entry.cueEndMs ?: -1,
-                ).getOrNull()?.let { ScannedMetadata(it.metadata, it.fingerprint) }
+                ).getOrNull()?.let { ScannedMetadata(it.metadata, it.fingerprint, it.artwork) }
             }
 
     suspend fun publishEntry(
@@ -110,10 +123,14 @@ class LibraryRepository(
     ): PublishResult {
         val prepared = prepareMetadata(listOf(entry))
         val result = database.withTransaction {
+            val artworkCache = com.amwolfstein.sistrum.library.artwork.ArtworkCache(context, dao)
             ScanPublisher(
                 store = RoomLibraryStore(dao),
                 metadataProvider = { prepared[it.documentKey] },
                 separators = separators.settings.first(),
+                artworkStore = { bytes ->
+                    artworkCache.store(bytes, kind = "EMBEDDED", origin = "TAG")?.key
+                },
             ).publishEntry(source, entry)
         }
         // A tag edit changes searchable text; refresh just this row.

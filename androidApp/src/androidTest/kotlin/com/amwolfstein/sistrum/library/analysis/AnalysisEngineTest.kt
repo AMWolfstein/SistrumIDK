@@ -30,7 +30,7 @@ class AnalysisEngineTest {
             .build()
         engine = AnalysisEngine(context, database)
         audio = File(context.cacheDir, "analysis-fixture.mp3")
-        InstrumentationRegistry.getInstrumentation().context.assets.open("taglib/fixture.mp3").use { input ->
+        InstrumentationRegistry.getInstrumentation().context.assets.open("analysis/tone.mp3").use { input ->
             audio.outputStream().use { output -> input.copyTo(output) }
         }
         database.libraryDao().upsertSource(LibrarySourceEntity("s", "content://s", "Music", createdAt = 1L))
@@ -144,6 +144,9 @@ class AnalysisEngineTest {
             ),
         )
         assertTrue(engine.analyze("track_missing").isFailure)
-        assertEquals(null, database.libraryDao().analysis("track_missing"))
+        val failed = database.libraryDao().analysis("track_missing")
+        assertEquals("FAILED", failed?.status)
+        assertEquals(1, failed?.attempts)
+        assertTrue("failure must stay visible and retryable", !failed?.lastError.isNullOrBlank())
     }
 }

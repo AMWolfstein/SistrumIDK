@@ -20,6 +20,7 @@ import androidx.compose.ui.test.onNodeWithTag
 import androidx.compose.ui.test.performTouchInput
 import androidx.compose.ui.test.swipeDown
 import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.unit.dp
 import androidx.test.platform.app.InstrumentationRegistry
 import com.amwolfstein.sistrum.settings.ThemeMode
 import com.amwolfstein.sistrum.ui.theme.SistrumTheme
@@ -47,6 +48,8 @@ class SistrumBottomSheetTest {
         }
         for (mode in listOf(ThemeMode.Dark, ThemeMode.Light, ThemeMode.Dark)) {
             composeTestRule.runOnIdle { theme = mode }
+            // The captured palette updates with the theme recomposition.
+            composeTestRule.waitForIdle()
             assertEquals("Sheet title must use $mode foreground", colors.textMain, textColor("Sheet title"))
             assertEquals(colors.textMain, textColor("Default body"))
             assertNotEquals("Title must remain distinct from the sheet surface", colors.glassOpaque, textColor("Sheet title"))
@@ -111,7 +114,12 @@ class SistrumBottomSheetTest {
             }
         }
 
-        composeTestRule.onNodeWithTag("bottom-sheet-header").performTouchInput { swipeDown() }
+        composeTestRule.onNodeWithTag("bottom-sheet-header").performTouchInput {
+            down(center)
+            // The header is 64dp tall; drag past the 96dp dismissal threshold.
+            moveBy(Offset(0f, 120.dp.toPx()))
+            up()
+        }
         composeTestRule.waitUntil(1_000) { dismissed }
 
         assertTrue(dismissed)

@@ -1,5 +1,6 @@
 package com.amwolfstein.sistrum.ui.screens
 
+import com.amwolfstein.sistrum.ui.createHostedComposeRule
 import androidx.compose.foundation.lazy.LazyListState
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.test.assertHeightIsEqualTo
@@ -27,7 +28,7 @@ import org.junit.Test
 import org.junit.Assert.assertEquals
 
 class LibraryPlaylistsContentTest {
-    @get:Rule val composeTestRule = createComposeRule()
+    @get:Rule val composeTestRule = createHostedComposeRule()
 
     @Test
     fun displaysFavoritesWhenTheSyncManifestHasNoPlaylists() {

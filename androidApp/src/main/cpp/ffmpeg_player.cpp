@@ -667,6 +667,12 @@ extern "C" JNIEXPORT jlong JNICALL Java_com_amwolfstein_sistrum_player_FfmpegDec
     auto &s = e->slots[i];
     return (s.position_base_us.load() + av_rescale(s.rendered_frames.load(), AV_TIME_BASE, s.output_rate)) / 1000;
 }
+extern "C" JNIEXPORT jint JNICALL Java_com_amwolfstein_sistrum_player_FfmpegDecoder_nativeXRunCount(JNIEnv *, jclass, jlong value) {
+    auto *e = reinterpret_cast<PlaybackEngine *>(value);
+    if (e == nullptr || e->stream == nullptr) return -1;
+    return AAudioStream_getXRunCount(e->stream);
+}
+
 extern "C" JNIEXPORT jlong JNICALL Java_com_amwolfstein_sistrum_player_FfmpegDecoder_nativePreloadedDurationMs(JNIEnv *, jclass, jlong value) {
     auto *e = reinterpret_cast<PlaybackEngine *>(value);
     const int i = e == nullptr ? kNoSlot : e->preloaded_slot.load();
