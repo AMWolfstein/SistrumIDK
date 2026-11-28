@@ -349,6 +349,9 @@ interface LibraryDao {
     @Query("SELECT * FROM lyrics WHERE trackId = :trackId")
     suspend fun lyrics(trackId: String): LyricsEntity?
 
+    @Query("SELECT * FROM lyrics WHERE trackId = :trackId")
+    fun observeLyrics(trackId: String): Flow<LyricsEntity?>
+
     @Upsert
     suspend fun upsertAnalysis(value: TrackAnalysisEntity)
 

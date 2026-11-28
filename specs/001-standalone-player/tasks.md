@@ -309,3 +309,5 @@ Rules: each task starts with a full map refresh, records evidence, implements, r
 - [x] M001-T013 Manual playlists, favorites and M3U8
 
 - [x] M001-T014 Smart playlist rule engine and UI
+
+- [x] M001-T015 Local/embedded/online lyrics and durable save

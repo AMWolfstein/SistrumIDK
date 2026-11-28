@@ -13,6 +13,10 @@ private val KugouKey = booleanPreferencesKey("enable_kugou")
 private val RomanizationKey = booleanPreferencesKey("enable_romanization")
 private val GlowKey = booleanPreferencesKey("lyrics_glow")
 private val PreferredSourceKey = stringPreferencesKey("preferred_source")
+private val PreferLocalKey = booleanPreferencesKey("prefer_local_lyrics")
+private val SubfolderEnabledKey = booleanPreferencesKey("lyrics_subfolder_enabled")
+private val SubfolderNameKey = stringPreferencesKey("lyrics_subfolder_name")
+private val DedicatedFolderKey = stringPreferencesKey("lyrics_folder_uri")
 
 internal enum class LyricsSource(val storageValue: String) {
     Desktop("desktop"),
@@ -30,6 +34,10 @@ internal data class LyricsSettings(
     val kugou: Boolean = true,
     val romanizationEnabled: Boolean = false,
     val glowEnabled: Boolean = false,
+    val preferLocalLyrics: Boolean = true,
+    val subfolderEnabled: Boolean = false,
+    val subfolderName: String = "Lyrics",
+    val dedicatedFolderUri: String? = null,
 )
 
 internal fun preferredLyrics(source: LyricsSource, desktop: String?, provider: String?): String? = when (source) {
@@ -45,6 +53,10 @@ internal class LyricsPreferences(private val context: Context) {
             kugou = it[KugouKey] ?: true,
             romanizationEnabled = it[RomanizationKey] ?: false,
             glowEnabled = it[GlowKey] ?: false,
+            preferLocalLyrics = it[PreferLocalKey] ?: true,
+            subfolderEnabled = it[SubfolderEnabledKey] ?: false,
+            subfolderName = it[SubfolderNameKey] ?: "Lyrics",
+            dedicatedFolderUri = it[DedicatedFolderKey],
         )
     }
     suspend fun setPreferredSource(source: LyricsSource) = context.lyricsDataStore.edit { it[PreferredSourceKey] = source.storageValue }
@@ -52,4 +64,10 @@ internal class LyricsPreferences(private val context: Context) {
     suspend fun setKugou(enabled: Boolean) = context.lyricsDataStore.edit { it[KugouKey] = enabled }
     suspend fun setRomanizationEnabled(enabled: Boolean) = context.lyricsDataStore.edit { it[RomanizationKey] = enabled }
     suspend fun setGlowEnabled(enabled: Boolean) = context.lyricsDataStore.edit { it[GlowKey] = enabled }
+    suspend fun setPreferLocalLyrics(enabled: Boolean) = context.lyricsDataStore.edit { it[PreferLocalKey] = enabled }
+    suspend fun setSubfolderEnabled(enabled: Boolean) = context.lyricsDataStore.edit { it[SubfolderEnabledKey] = enabled }
+    suspend fun setSubfolderName(name: String) = context.lyricsDataStore.edit { it[SubfolderNameKey] = name.trim().ifBlank { "Lyrics" } }
+    suspend fun setDedicatedFolder(uri: String?) = context.lyricsDataStore.edit {
+        if (uri.isNullOrBlank()) it.remove(DedicatedFolderKey) else it[DedicatedFolderKey] = uri
+    }
 }

@@ -44,6 +44,7 @@ internal abstract class LyricsProvider {
 
 internal class AndroidLyricsService(
     private val library: AndroidLibrarySyncStore,
+    private val localLyrics: com.amwolfstein.sistrum.library.lyrics.LocalLyricsRepository? = null,
     private val providers: List<LyricsProvider> = listOf(
         LrclibLyricsProvider(),
         KugouLyricsProvider()
@@ -52,7 +53,7 @@ internal class AndroidLyricsService(
     suspend fun fetch(trackId: String, settings: LyricsSettings) {
         val active = providers.filter { it.enabled(settings) }
         if (active.isEmpty()) return
-        val track = library.lyricsTrack(trackId) ?: run {
+        val track = localLyrics?.track(trackId) ?: library.lyricsTrack(trackId) ?: run {
             Log.w("SistrumLyrics", "Cannot fetch lyrics: track $trackId is unavailable")
             return
         }
@@ -72,14 +73,19 @@ internal class AndroidLyricsService(
             null
         }
         lyric?.let {
-            library.saveProviderLyrics(trackId, it.content, it.source)
+            val local = localLyrics
+            if (local != null) {
+                local.saveOnline(trackId, it.content, it.source, local.fingerprint(trackId))
+            } else {
+                library.saveProviderLyrics(trackId, it.content, it.source)
+            }
             Log.d("SistrumLyrics", "Fetched lyrics from ${it.source}")
         } ?: Log.d("SistrumLyrics", "No lyrics found for ${track.title}")
     }
 
     suspend fun search(trackId: String, title: String, artist: String, settings: LyricsSettings): List<LyricsSearchResult> {
         if (title.isBlank()) return emptyList()
-        val duration = library.lyricsTrack(trackId)?.duration ?: 0
+        val duration = (localLyrics?.track(trackId) ?: library.lyricsTrack(trackId))?.duration ?: 0
         return coroutineScope {
             providers.filter { it.enabled(settings) }.map { provider ->
                 async {

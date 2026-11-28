@@ -10,6 +10,8 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.material3.Switch
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.layout.ContentScale
@@ -124,8 +126,29 @@ internal fun LyricsContent(
     onKugouChanged: (Boolean) -> Unit,
     onRomanizationEnabledChanged: (Boolean) -> Unit,
     onGlowChanged: (Boolean) -> Unit,
+    onPreferLocalChanged: (Boolean) -> Unit = {},
+    onSubfolderChanged: (Boolean) -> Unit = {},
+    onSubfolderNameChanged: (String) -> Unit = {},
+    onFolderChanged: (String?) -> Unit = {},
     modifier: Modifier = Modifier,
 ) {
+    val context = androidx.compose.ui.platform.LocalContext.current
+    val folderPicker = androidx.activity.compose.rememberLauncherForActivityResult(
+        androidx.activity.result.contract.ActivityResultContracts.OpenDocumentTree(),
+    ) { uri ->
+        uri?.let {
+            runCatching {
+                context.contentResolver.takePersistableUriPermission(
+                    it,
+                    android.content.Intent.FLAG_GRANT_READ_URI_PERMISSION,
+                )
+            }
+            onFolderChanged(it.toString())
+        }
+    }
+    var subfolderName by androidx.compose.runtime.remember(settings.subfolderName) {
+        androidx.compose.runtime.mutableStateOf(settings.subfolderName)
+    }
     Column(modifier = modifier, verticalArrangement = Arrangement.spacedBy(12.dp)) {
         LabeledCard(label = stringResource(R.string.lyrics_data_sources)) {
             Selection(
@@ -158,6 +181,46 @@ internal fun LyricsContent(
                     ),
                 ),
                 containerStyle = ActionListContainerStyle.Plain,
+            )
+        }
+        LabeledCard(label = stringResource(R.string.lyrics_local_sources)) {
+            ActionList(
+                items = listOf(
+                    ActionListItem(
+                        R.string.lyrics_prefer_local,
+                        trailingContent = { Switch(checked = settings.preferLocalLyrics, onCheckedChange = onPreferLocalChanged) },
+                        onClick = { onPreferLocalChanged(!settings.preferLocalLyrics) },
+                    ),
+                    ActionListItem(
+                        R.string.lyrics_subfolder_enabled,
+                        trailingContent = { Switch(checked = settings.subfolderEnabled, onCheckedChange = onSubfolderChanged) },
+                        onClick = { onSubfolderChanged(!settings.subfolderEnabled) },
+                    ),
+                ),
+                containerStyle = ActionListContainerStyle.Plain,
+            )
+            androidx.compose.material3.OutlinedTextField(
+                value = subfolderName,
+                onValueChange = {
+                    subfolderName = it
+                    onSubfolderNameChanged(it)
+                },
+                label = { androidx.compose.material3.Text(stringResource(R.string.lyrics_subfolder_name)) },
+                singleLine = true,
+                enabled = settings.subfolderEnabled,
+                modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp).testTag("lyrics-subfolder-name"),
+            )
+            SistrumPillButton(
+                label = stringResource(R.string.lyrics_folder_pick),
+                onClick = { folderPicker.launch(null) },
+                variant = SistrumPillButtonVariant.Secondary,
+                modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp).testTag("lyrics-folder-pick"),
+            )
+            Text(
+                text = settings.dedicatedFolderUri ?: stringResource(R.string.lyrics_folder_none),
+                modifier = Modifier.padding(horizontal = 16.dp, vertical = 4.dp),
+                style = MaterialTheme.typography.bodySmall,
+                color = LocalSistrumColors.current.textMuted,
             )
         }
     }

@@ -480,7 +480,19 @@ internal fun AppDestinationContent(
                                 onDisconnect = onLastFmDisconnect,
                                 modifier = settingsPageModifier,
                             )
-                            AppStackPage.SettingsLyrics -> LyricsContent(lyricsSettings, onLyricsSourceChanged, onLrclibChanged, onKugouChanged, onRomanizationEnabledChanged, onLyricsGlowChanged, settingsPageModifier)
+                            AppStackPage.SettingsLyrics -> LyricsContent(
+                                settings = lyricsSettings,
+                                onSourceChanged = onLyricsSourceChanged,
+                                onLrclibChanged = onLrclibChanged,
+                                onKugouChanged = onKugouChanged,
+                                onRomanizationEnabledChanged = onRomanizationEnabledChanged,
+                                onGlowChanged = onLyricsGlowChanged,
+                                onPreferLocalChanged = settings.onPreferLocalLyricsChanged,
+                                onSubfolderChanged = settings.onLyricsSubfolderChanged,
+                                onSubfolderNameChanged = settings.onLyricsSubfolderNameChanged,
+                                onFolderChanged = settings.onLyricsFolderChanged,
+                                modifier = settingsPageModifier,
+                            )
                             AppStackPage.SettingsOnlineArtwork -> OnlineArtworkContent(
                                 settings = settings.onlineArtworkSettings,
                                 cacheBytes = settings.artworkCacheBytes,

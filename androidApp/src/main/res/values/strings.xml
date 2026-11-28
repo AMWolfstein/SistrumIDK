@@ -270,6 +270,12 @@
     <string name="smart_playlist_limit_count">Limit</string>
     <string name="smart_playlist_limit_by">Order by</string>
     <string name="smart_playlist_save">Save playlist</string>
+    <string name="lyrics_local_sources">Local lyrics</string>
+    <string name="lyrics_prefer_local">Prefer local lyrics</string>
+    <string name="lyrics_subfolder_enabled">Look in a lyrics subfolder</string>
+    <string name="lyrics_subfolder_name">Subfolder name</string>
+    <string name="lyrics_folder_pick">Choose lyrics folder</string>
+    <string name="lyrics_folder_none">No dedicated folder selected</string>
     <string name="playlists_import_m3u8">Import M3U8</string>
     <string name="playlists_export_m3u8">Export M3U8</string>
     <string name="rating_filter_label">Rating</string>

@@ -349,7 +349,8 @@ class MainActivity : ComponentActivity() {
             val lyricsPreferences = remember { LyricsPreferences(applicationContext) }
             val artworkPreferences = remember { com.amwolfstein.sistrum.library.artwork.ArtworkPreferences(applicationContext) }
             val artworkService = remember { com.amwolfstein.sistrum.library.artwork.ArtworkLibraryService(applicationContext) }
-            val lyricsService = remember { AndroidLyricsService(AndroidSyncRuntime.syncStore()) }
+            val localLyricsRepository = remember { com.amwolfstein.sistrum.library.lyrics.LocalLyricsRepository(applicationContext) }
+            val lyricsService = remember { AndroidLyricsService(AndroidSyncRuntime.syncStore(), localLyricsRepository) }
             val preferenceScope = rememberCoroutineScope()
             val crossfadeSettings by playbackPreferences.settings.collectAsStateWithLifecycle(
                 initialValue = com.amwolfstein.sistrum.player.CrossfadeSettings(0, 4, true),
@@ -407,11 +408,37 @@ class MainActivity : ComponentActivity() {
             LaunchedEffect(lyricsTrackId) {
                 if (manualLyricsOverride?.trackId != lyricsTrackId) manualLyricsOverride = null
             }
+            val localLyricsFlow = remember(lyricsTrackId) {
+                lyricsTrackId?.let(localLyricsRepository::observe) ?: flowOf(null)
+            }
+            val localLyricsEntity by localLyricsFlow.collectAsStateWithLifecycle(initialValue = null)
+            val localLyrics = localLyricsEntity?.content
+            LaunchedEffect(
+                lyricsTrackId,
+                lyricsSettings.preferLocalLyrics,
+                lyricsSettings.subfolderEnabled,
+                lyricsSettings.subfolderName,
+                lyricsSettings.dedicatedFolderUri,
+            ) {
+                val trackId = lyricsTrackId ?: return@LaunchedEffect
+                runCatching {
+                    localLyricsRepository.resolve(
+                        trackId,
+                        com.amwolfstein.sistrum.library.lyrics.LyricsLocalSettings(
+                            preferLocalLyrics = lyricsSettings.preferLocalLyrics,
+                            subfolderEnabled = lyricsSettings.subfolderEnabled,
+                            subfolderName = lyricsSettings.subfolderName,
+                            dedicatedFolderUri = lyricsSettings.dedicatedFolderUri,
+                        ),
+                    )
+                }
+            }
             val lyrics = manualLyricsOverride?.takeIf { it.trackId == lyricsTrackId }?.content
+                ?: localLyrics
                 ?: com.amwolfstein.sistrum.lyrics.preferredLyrics(lyricsSettings.preferredSource, desktopLyrics, providerLyrics)
             var lyricsLoadingTrackId by remember { mutableStateOf<String?>(null) }
             LaunchedEffect(lyricsTrackId, desktopLyrics, providerLyrics, lyricsSettings, manualLyricsOverride) {
-                if (lyricsTrackId == null || manualLyricsOverride?.trackId == lyricsTrackId || !providerLyrics.isNullOrBlank() ||
+                if (lyricsTrackId == null || manualLyricsOverride?.trackId == lyricsTrackId || localLyrics != null || !providerLyrics.isNullOrBlank() ||
                     (lyricsSettings.preferredSource == com.amwolfstein.sistrum.lyrics.LyricsSource.Desktop && !desktopLyrics.isNullOrBlank())
                 ) return@LaunchedEffect
                 lyricsLoadingTrackId = lyricsTrackId
@@ -590,6 +617,10 @@ class MainActivity : ComponentActivity() {
                     onKugouChanged = { enabled -> preferenceScope.launch { lyricsPreferences.setKugou(enabled) } },
                     onRomanizationEnabledChanged = { enabled -> preferenceScope.launch { lyricsPreferences.setRomanizationEnabled(enabled) } },
                     onLyricsGlowChanged = { enabled -> preferenceScope.launch { lyricsPreferences.setGlowEnabled(enabled) } },
+                    onPreferLocalLyricsChanged = { enabled -> preferenceScope.launch { lyricsPreferences.setPreferLocalLyrics(enabled) } },
+                    onLyricsSubfolderChanged = { enabled -> preferenceScope.launch { lyricsPreferences.setSubfolderEnabled(enabled) } },
+                    onLyricsSubfolderNameChanged = { name -> preferenceScope.launch { lyricsPreferences.setSubfolderName(name) } },
+                    onLyricsFolderChanged = { uri -> preferenceScope.launch { lyricsPreferences.setDedicatedFolder(uri) } },
                     onlineArtworkSettings = artworkSettings,
                     artworkCacheBytes = artworkSummary.bytes,
                     artworkAssetCount = artworkSummary.assetCount,
@@ -643,7 +674,14 @@ class MainActivity : ComponentActivity() {
                 onRomanizationToggle = romanizationViewModel::toggle,
                 onSearchLyrics = { track, title, artist -> lyricsService.search(track.id, title, artist, lyricsSettings) },
                 onLyricsSelected = { trackId, lyric ->
-                    AndroidSyncRuntime.syncStore().saveProviderLyrics(trackId, lyric.content, lyric.source)
+                    preferenceScope.launch {
+                        localLyricsRepository.saveOnline(
+                            trackId,
+                            lyric.content,
+                            lyric.source,
+                            localLyricsRepository.fingerprint(trackId),
+                        )
+                    }
                     if (trackId == lyricsTrackId) manualLyricsOverride = ManualLyricsOverride(trackId, lyric.content)
                 },
                 artworkCrossfade = artworkCrossfade,

@@ -171,6 +171,10 @@ internal data class SettingsDestinationModel(
     val onKugouChanged: (Boolean) -> Unit = {},
     val onRomanizationEnabledChanged: (Boolean) -> Unit = {},
     val onLyricsGlowChanged: (Boolean) -> Unit = {},
+    val onPreferLocalLyricsChanged: (Boolean) -> Unit = {},
+    val onLyricsSubfolderChanged: (Boolean) -> Unit = {},
+    val onLyricsSubfolderNameChanged: (String) -> Unit = {},
+    val onLyricsFolderChanged: (String?) -> Unit = {},
     val onlineArtworkSettings: com.amwolfstein.sistrum.library.artwork.ArtworkSettings =
         com.amwolfstein.sistrum.library.artwork.ArtworkSettings(),
     val artworkCacheBytes: Long = 0L,
