@@ -554,3 +554,15 @@ data class LocalComposerRow(
 )
 
 data class LocalListeningRow(val trackId: String, val lastListenedAt: Long)
+
+
+/** One mood-analysis row joined with the owning item, for Mood Radio candidates. */
+data class MoodRadioRow(
+    val trackId: String,
+    val albumId: String?,
+    val primaryArtistId: String?,
+    val energy: Double?,
+    val danceability: Double?,
+    val brightness: Double?,
+    val tempo: Double?,
+)

@@ -88,6 +88,12 @@ internal class LocalLibraryCatalog(
         }
     }
 
+    private val moodRepository = com.amwolfstein.sistrum.library.mood.MoodRepository(database)
+
+    suspend fun moodTracks(): List<com.amwolfstein.sistrum.mood.MoodRadioTrack> = moodRepository.tracks()
+
+    suspend fun moodReady(): Boolean = moodRepository.ready()
+
     override suspend fun setRating(trackId: String, rating: Int?) {
         require(rating == null || rating in 0..5) { "rating must be between 0 and 5" }
         dao.updateRating(trackId, rating)

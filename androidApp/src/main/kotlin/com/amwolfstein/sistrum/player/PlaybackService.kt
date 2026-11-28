@@ -359,12 +359,11 @@ class PlaybackService : Service() {
     }
 
     private suspend fun startMoodRadio(seedId: String) {
-        val store = AndroidSyncRuntime.syncStore()
-        if (!store.libraryAnalysisEnabled.first()) {
-            Log.d(PlaybackLogTag, "Mood Radio ignored: library analysis is disabled")
+        if (!AndroidPlaybackRuntime.moodRadioReady()) {
+            Log.d(PlaybackLogTag, "Mood Radio ignored: local analysis is not ready")
             return
         }
-        val tracks = store.moodRadioTracks()
+        val tracks = AndroidPlaybackRuntime.moodRadioTracks()
         val selected = selectMoodRadio(seedId, tracks, emptySet(), MoodRadioBatchSize)
         if (selected.isEmpty()) {
             Log.d(PlaybackLogTag, "Mood Radio has no candidates seed=$seedId analyzed=${tracks.count { it.energy != null && it.danceability != null && it.brightness != null && it.tempo != null }}")
@@ -385,9 +384,8 @@ class PlaybackService : Service() {
         val attempt = snapshot.currentTrackId to snapshot.activeTrackIds.size
         if (attempt == moodRadioLastRefillAttempt) return false
         moodRadioLastRefillAttempt = attempt
-        val store = AndroidSyncRuntime.syncStore()
-        if (!store.libraryAnalysisEnabled.first()) return false
-        val selected = selectMoodRadio(seedId, store.moodRadioTracks(), snapshot.activeTrackIds.toSet(), MoodRadioBatchSize)
+        if (!AndroidPlaybackRuntime.moodRadioReady()) return false
+        val selected = selectMoodRadio(seedId, AndroidPlaybackRuntime.moodRadioTracks(), snapshot.activeTrackIds.toSet(), MoodRadioBatchSize)
         if (selected.isEmpty()) return false
         queue.append(selected.map { it.id })
         Log.d(PlaybackLogTag, "Mood Radio refilled seed=$seedId added=${selected.size} queueSize=${queue.snapshot().activeTrackIds.size}")

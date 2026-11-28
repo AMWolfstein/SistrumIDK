@@ -140,3 +140,10 @@
 - Playback now takes analysis and album aggregates from the local catalog (`LocalLibraryCatalog.albumAnalyses` via `AndroidPlaybackRuntime`) instead of the legacy mirror; disabling normalization when the current track has no analysis is unchanged.
 - Tests: host `AlbumAggregateTest` (mean/peak, track vs album mode, clip cap, fallback, disabled/missing analysis); existing sharedLogic normalization tests stay green. Host suites: androidApp 390/390, sharedLogic 59/59; `assembleDevDebug` succeeds.
 - Limitation: album aggregation is not persisted (fresh on every read), which is the invalidation strategy; no audible level check was possible on the instrumented device.
+
+## M001-T019 — Local Mood Radio
+
+- Added `MoodRepository`: candidates come from Room items joined with completed analyses that have energy, danceability, brightness and tempo; readiness needs at least two candidates. The legacy desktop analysis flag is no longer consulted.
+- `LocalLibraryCatalog`/`AndroidPlaybackRuntime` expose local mood candidates and readiness; Mood Radio start, refill and the 80/15/3 selection now use local data. The smart-playlist builder already exposes the same mood fields, which start returning matches once analyses exist.
+- Tests: device `MoodRepositoryTest` (only completed mood analyses become candidates, pending excluded, two-candidate gate) — 2/2 PASS on OnePlus CPH2307 (Android 15); existing sharedLogic Mood Radio weighting/selection tests remain green. Host suites: androidApp 390/390, sharedLogic 59/59; `assembleDevDebug` succeeds.
+- Limitation: selection quality was not listened to on the device; no audible check was possible.

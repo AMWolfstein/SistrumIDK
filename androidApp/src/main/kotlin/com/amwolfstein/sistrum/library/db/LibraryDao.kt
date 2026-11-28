@@ -367,6 +367,19 @@ interface LibraryDao {
     suspend fun analysesForAlbum(albumId: String): List<TrackAnalysisEntity>
 
     @Query(
+        "SELECT track_analysis.trackId AS trackId, library_items.albumId AS albumId, " +
+            "albums.primaryAlbumArtistId AS primaryArtistId, track_analysis.energy AS energy, " +
+            "track_analysis.danceability AS danceability, track_analysis.brightness AS brightness, " +
+            "track_analysis.tempo AS tempo FROM track_analysis " +
+            "INNER JOIN library_items ON library_items.id = track_analysis.trackId " +
+            "LEFT JOIN albums ON albums.id = library_items.albumId " +
+            "WHERE library_items.available = 1 AND track_analysis.status = 'COMPLETED' " +
+            "AND track_analysis.energy IS NOT NULL AND track_analysis.danceability IS NOT NULL " +
+            "AND track_analysis.brightness IS NOT NULL AND track_analysis.tempo IS NOT NULL",
+    )
+    suspend fun moodRadioRows(): List<MoodRadioRow>
+
+    @Query(
         "SELECT library_items.* FROM library_items LEFT JOIN track_analysis " +
             "ON track_analysis.trackId = library_items.id " +
             "WHERE library_items.available = 1 AND " +

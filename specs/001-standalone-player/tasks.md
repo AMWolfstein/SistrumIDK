@@ -317,3 +317,5 @@ Rules: each task starts with a full map refresh, records evidence, implements, r
 - [x] M001-T017 Analysis persistence, tags, reuse and settings
 
 - [x] M001-T018 Normalization and album aggregation
+
+- [x] M001-T019 Local Mood Radio

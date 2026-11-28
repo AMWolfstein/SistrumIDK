@@ -95,6 +95,12 @@ internal object AndroidPlaybackRuntime {
         return resolveSyncedAudioFile(appContext.filesDir, storedPath)?.takeIf(File::isFile)?.absolutePath
     }
 
+    suspend fun moodRadioTracks(): List<com.amwolfstein.sistrum.mood.MoodRadioTrack> =
+        (catalog as? com.amwolfstein.sistrum.sync.LocalLibraryCatalog)?.moodTracks().orEmpty()
+
+    suspend fun moodRadioReady(): Boolean =
+        (catalog as? com.amwolfstein.sistrum.sync.LocalLibraryCatalog)?.moodReady() == true
+
     /** Local album analyses for album-mode normalization, computed from current Room rows. */
     suspend fun albumAnalyses(albumId: String): List<TrackAnalysis> =
         (catalog as? com.amwolfstein.sistrum.sync.LocalLibraryCatalog)?.albumAnalyses(albumId).orEmpty()
