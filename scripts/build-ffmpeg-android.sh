@@ -76,16 +76,17 @@ echo "==> Building FFmpeg ${FFMPEG_VERSION} for ${ABI}..."
         --ar="${TOOLCHAIN}/bin/llvm-ar" --ranlib="${TOOLCHAIN}/bin/llvm-ranlib" --strip="${TOOLCHAIN}/bin/llvm-strip" \
         --disable-everything --disable-autodetect --disable-programs --disable-doc --disable-debug --disable-network \
         --enable-shared --disable-static --enable-small --enable-pic \
-        --enable-avutil --enable-avcodec --enable-avformat --enable-swresample \
+        --enable-avutil --enable-avcodec --enable-avformat --enable-swresample --enable-avfilter \
         --enable-protocol=file --enable-decoders --enable-demuxers --enable-parsers \
-        --disable-avdevice --disable-avfilter --disable-swscale \
+        --enable-filter=ebur128,aspectralstats,astats,aresample,aformat,anull,abuffer,abuffersink \
+        --disable-avdevice --disable-swscale \
         --extra-cflags="-Oz -ffunction-sections -fdata-sections" \
         --extra-ldflags="-Wl,--gc-sections -Wl,-z,max-page-size=16384"
     make -j"${JOBS}"
     make install
 )
 
-LIBRARIES=(libavutil libswresample libavcodec libavformat)
+LIBRARIES=(libavutil libswresample libavcodec libavformat libavfilter)
 for lib in "${LIBRARIES[@]}"; do
     test -f "${INSTALL}/lib/${lib}.so"
 done
